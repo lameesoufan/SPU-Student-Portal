@@ -1,0 +1,19 @@
+from django.urls import path
+from rest_framework_simplejwt.views import TokenRefreshView
+from .views import (
+    import_users, change_password, list_doctors, list_departments,
+    assign_hod_view, logout, student_self_register,
+)
+from .serializers import CustomTokenObtainPairView
+
+urlpatterns = [
+    path('api/token/',           CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/',   TokenRefreshView.as_view(),          name='token_refresh'),
+    path('api/logout/',          logout,                               name='logout'),
+    path('api/change-password/', change_password,                      name='change_password'),
+    path('api/import-users/',    import_users,                         name='import_users'),
+    path('api/doctors/',         list_doctors,                         name='list_doctors'),
+    path('api/departments/',     list_departments,                     name='list_departments'),
+    path('api/assign-hod/',      assign_hod_view,                      name='assign_hod'),
+    path('api/register/',        student_self_register,                name='student_self_register'),
+]

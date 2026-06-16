@@ -1,0 +1,185 @@
+/* ═══════════════════════════════════════════════════════
+   ApplyWorkflow — Professional workflow assignment layout
+   ═══════════════════════════════════════════════════════ */
+
+.aw-container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.aw-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.aw-page-header h2 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.04em;
+}
+
+.aw-subtitle {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 620px;
+}
+
+.aw-back-btn {
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.aw-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.aw-panel-card {
+  min-height: 360px;
+}
+
+.aw-panel-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.aw-panel-note {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.aw-summary-card {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.aw-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.aw-summary-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.aw-summary-text {
+  color: var(--text-secondary);
+  line-height: 1.7;
+  font-size: 14px;
+}
+
+.aw-summary-list {
+  display: grid;
+  gap: 12px;
+}
+
+.aw-summary-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+}
+
+.aw-summary-item strong {
+  color: var(--text);
+  min-width: 24px;
+}
+
+.aw-summary-item small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.aw-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--text-secondary);
+}
+
+.aw-badge-neutral {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.aw-badge-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--text);
+}
+
+.aw-empty-state {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.aw-note-box {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(245, 158, 11, 0.20);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.aw-actions-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.aw-apply-btn {
+  width: 280px;
+}
+
+.aw-loading-panel {
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 930px) {
+  .aw-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .aw-apply-btn {
+    width: 100%;
+  }
+}

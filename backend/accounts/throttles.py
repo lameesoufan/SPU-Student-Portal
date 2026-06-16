@@ -1,0 +1,21 @@
+from rest_framework.throttling import SimpleRateThrottle
+
+
+class LoginRateThrottle(SimpleRateThrottle):
+    scope = 'accounts_login'
+
+    def get_cache_key(self, request, view):
+        ident = self.get_ident(request)
+        username = str(request.data.get('username', '')).strip().lower()
+        key = f"{ident}:{username}" if username else ident
+        return self.cache_format % {'scope': self.scope, 'ident': key}
+
+
+class RegisterRateThrottle(SimpleRateThrottle):
+    scope = 'accounts_register'
+
+    def get_cache_key(self, request, view):
+        ident = self.get_ident(request)
+        university_id = str(request.data.get('university_id', '')).strip().lower()
+        key = f"{ident}:{university_id}" if university_id else ident
+        return self.cache_format % {'scope': self.scope, 'ident': key}
