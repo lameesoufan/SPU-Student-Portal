@@ -1,269 +1,201 @@
 import React, { useState, useEffect } from 'react';
-import { fetchSupervisorBoards } from '../api';
-import KanbanBoard, { COLUMNS } from './KanbanBoard';
-import GitLabPanel from './GitLabPanel';
-import {
-  FolderKanban, ListTodo, CheckCircle2, TrendingUp,
-  ArrowLeft, Users, ArrowRight, GitBranch, Loader2, FolderOpen,
-} from 'lucide-react';
+import { fetchSupervisorPending, supervisorReview, fetchResponseByProposal } from '../api';
 
-const COL_COLORS = {
-  todo: '#6366f1',
-  in_progress: '#f59e0b',
-  review: '#8b5cf6',
-  done: '#22c55e',
-};
-
-export default function SupervisorProjects({ onBack }) {
-  const [boards, setBoards]       = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState('');
-  const [selected, setSelected]   = useState(null);
-  const [viewMode, setViewMode]   = useState('board');
-
-  useEffect(() => {
-    fetchSupervisorBoards()
-      .then((res) => setBoards(res.data))
-      .catch(() => setError('Failed to load projects.'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const selectedBoard = boards.find((b) => b.id === selected);
-
-  const setSelectedBoard = (updater) => {
-    setBoards((prev) => prev.map((b) => b.id === selected ? updater(b) : b));
-  };
-
-  const totalTasks     = boards.reduce((s, b) => s + b.tasks.length, 0);
-  const completedTasks = boards.reduce((s, b) => s + b.tasks.filter(t => t.status === 'done').length, 0);
-  const avgProgress    = boards.length > 0
-    ? Math.round(boards.reduce((s, b) => {
-        const done = b.tasks.filter(t => t.status === 'done').length;
-        return s + (b.tasks.length > 0 ? (done / b.tasks.length) * 100 : 0);
-      }, 0) / boards.length)
-    : 0;
-
-  /* ── Selected Board Detail View ── */
-  if (selected && selectedBoard) {
+const renderResponseValue = (value, fieldType) => {
+  if (fieldType === 'file' && value && typeof value === 'object' && value.url) {
     return (
-      <div className="max-w-4xl mx-auto py-8 px-6 flex flex-col gap-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <button
-            className="inline-flex items-center gap-1.5 bg-[var(--card)] border border-[var(--border)] rounded-[var(--radius-sm)] px-3.5 py-2 text-[13px] font-medium text-[var(--text-muted)] cursor-pointer transition-colors hover:bg-[var(--bg-tertiary)] hover:text-[var(--text)]"
-            onClick={() => { setSelected(null); setViewMode('board'); }}
-          >
-            <ArrowLeft size={16} />
-            All Projects
-          </button>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold tracking-tight text-[var(--text)] m-0">{selectedBoard.title}</h1>
-            <p className="text-[13px] font-medium text-[var(--text-muted)] m-0">
-              {selectedBoard.members.map(m => m.name || m.username).join(', ')}
-            </p>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-0 bg-[var(--card)] border border-[var(--border)] rounded-[var(--radius-sm)] p-1.5 shadow-[var(--shadow)]">
-          <button
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-semibold transition-all border-[1.5px] ${
-              viewMode === 'board'
-                ? 'bg-[var(--primary)] text-white border-[var(--primary)] shadow-md shadow-[var(--primary)]/25'
-                : 'bg-transparent text-[var(--text-muted)] border-transparent hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]'
-            }`}
-            onClick={() => setViewMode('board')}
-          >
-            <ListTodo size={14} className="inline mr-1.5 -mt-px" />
-            Board
-          </button>
-          <button
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-semibold transition-all border-[1.5px] ${
-              viewMode === 'gitlab'
-                ? 'bg-[var(--primary)] text-white border-[var(--primary)] shadow-md shadow-[var(--primary)]/25'
-                : 'bg-transparent text-[var(--text-muted)] border-transparent hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]'
-            }`}
-            onClick={() => setViewMode('gitlab')}
-          >
-            <GitBranch size={14} className="inline mr-1.5 -mt-px" />
-            GitLab
-          </button>
-        </div>
-
-        <div className="mt-0">
-          {viewMode === 'board' ? (
-            <KanbanBoard board={selectedBoard} setBoard={setSelectedBoard} canEdit={true} />
-          ) : (
-            <GitLabPanel boardId={selectedBoard.id} canManage={true} />
-          )}
-        </div>
-      </div>
+      <a href={value.url} target="_blank" rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-[var(--primary)] hover:underline font-medium">
+        📎 {value.name || 'Download file'}
+      </a>
     );
   }
+  if (Array.isArray(value)) return value.length ? <div className="sv-choice-pills">{value.map((item) => <span key={item}>{item}</span>)}</div> : null;
+  return value || null;
+};
 
-  /* ── Project List View ── */
+export default function SupervisorReview({ onBack }) {
+  const [proposals, setProposals]     = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState('');
+  const [reviewing, setReviewing]     = useState(null);
+  const [reason, setReason]           = useState('');
+  const [actionError, setActionError] = useState('');
+  const [confirming, setConfirming]   = useState(false);
+  const [formResponses, setFormResponses] = useState({});
+  const [expandedForm, setExpandedForm]   = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchSupervisorPending()
+      .then(async (res) => {
+        if (!active) return;
+        setProposals(res.data);
+        const responses = await Promise.allSettled(
+          res.data.map((p) => fetchResponseByProposal(p.id).then((r) => [p.id, r.data]))
+        );
+        if (!active) return;
+        const next = {};
+        responses.forEach((result) => {
+          if (result.status === 'fulfilled') next[result.value[0]] = result.value[1];
+        });
+        setFormResponses(next);
+      })
+      .catch(() => { if (active) setError('Failed to load proposals.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const openReview = (id, action) => {
+    setReviewing({ id, action });
+    setReason('');
+    setActionError('');
+  };
+
+  const handleConfirm = async () => {
+    if (!reviewing || confirming) return;
+    setActionError('');
+    setConfirming(true);
+    try {
+      await supervisorReview(reviewing.id, {
+        action: reviewing.action,
+        rejection_reason: reason,
+      });
+      setProposals((prev) => prev.filter((p) => p.id !== reviewing.id));
+      setReviewing(null);
+    } catch (err) {
+      const data = err.response?.data;
+      if (data?.rejection_reason) setActionError(data.rejection_reason[0]);
+      else if (data?.error) setActionError(data.error);
+      else setActionError('Something went wrong.');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   return (
-    <div className="max-w-4xl mx-auto py-8 px-6 flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
-          <FolderKanban size={20} />
-        </div>
-        <div>
-          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">Supervised Projects</h1>
-          <p className="text-sm text-[var(--text-muted)]">Track and manage all projects you are supervising.</p>
-        </div>
+    <div className="sv-wrap">
+      <div className="page-header">
+        <button className="back-btn" onClick={onBack}>← Back</button>
+        <h2>Student Proposals — Pending Your Review</h2>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-[var(--radius)] p-5 flex items-center gap-4 shadow-[var(--shadow)] transition-all hover:border-[var(--primary)]/30 hover:shadow-md">
-          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-violet-500/10 text-violet-500 flex-shrink-0">
-            <FolderKanban size={20} />
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[22px] font-bold text-[var(--text)] leading-none">{loading ? '—' : boards.length}</span>
-            <span className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wide">Total Projects</span>
-          </div>
-        </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-[var(--radius)] p-5 flex items-center gap-4 shadow-[var(--shadow)] transition-all hover:border-[var(--primary)]/30 hover:shadow-md">
-          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex-shrink-0">
-            <ListTodo size={20} />
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[22px] font-bold text-[var(--text)] leading-none">{loading ? '—' : totalTasks}</span>
-            <span className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wide">Total Tasks</span>
-          </div>
-        </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-[var(--radius)] p-5 flex items-center gap-4 shadow-[var(--shadow)] transition-all hover:border-[var(--primary)]/30 hover:shadow-md">
-          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex-shrink-0">
-            <CheckCircle2 size={20} />
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[22px] font-bold text-[var(--text)] leading-none">{loading ? '—' : completedTasks}</span>
-            <span className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wide">Completed</span>
-          </div>
-        </div>
-        <div className="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-[var(--radius)] p-5 flex items-center gap-4 shadow-[var(--shadow)] transition-all hover:border-[var(--primary)] hover:shadow-md">
-          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-purple-500/10 text-purple-500 flex-shrink-0">
-            <TrendingUp size={20} />
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[22px] font-bold text-[var(--text)] leading-none">{loading ? '—' : `${avgProgress}%`}</span>
-            <span className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wide">Avg. Progress</span>
-          </div>
-        </div>
-      </div>
+      {error && <div className="alert">{error}</div>}
+      {loading && <div className="spinner spinner-dark"></div>}
 
-      {/* Error */}
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-[var(--radius-sm)] bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
-          {error}
+      {!loading && proposals.length === 0 && !error && (
+        <div className="empty-state">
+          <span aria-hidden="true">✅</span>
+          <p>No pending proposals at the moment.</p>
         </div>
       )}
 
-      {/* Loading */}
-      {loading && (
-        <div className="flex justify-center py-16">
-          <Loader2 size={32} className="animate-spin text-[var(--primary)]" />
-        </div>
-      )}
+      <div className="sv-list">
+        {proposals.map((p) => {
+          const resp = formResponses[p.id];
+          const isExpanded = expandedForm === p.id;
 
-      {/* Empty State */}
-      {!loading && boards.length === 0 && !error && (
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
-            <FolderOpen size={32} />
-          </div>
-          <h3 className="text-lg font-bold text-[var(--text)]">No active projects</h3>
-          <p className="text-sm text-[var(--text-muted)] max-w-sm leading-relaxed">
-            Projects will appear here once student proposals or applications are registered and approved.
-          </p>
-        </div>
-      )}
-
-      {/* Projects Grid */}
-      {!loading && boards.length > 0 && (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
-          {boards.map((board) => {
-            const done  = board.tasks.filter((t) => t.status === 'done').length;
-            const total = board.tasks.length;
-            const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
-
-            return (
-              <div
-                key={board.id}
-                className="bg-[var(--card)] border border-[var(--border)] rounded-[var(--radius)] cursor-pointer transition-all hover:shadow-lg hover:border-[var(--primary)] hover:-translate-y-0.5 overflow-hidden"
-                onClick={() => setSelected(board.id)}
-              >
-                <div className="p-5 pb-0">
-                  {/* Title + Badge */}
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-[15px] font-bold text-[var(--text)] m-0 leading-snug">{board.title}</h3>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[var(--bg-tertiary)] text-[var(--text-muted)] whitespace-nowrap flex-shrink-0">
-                      {total} tasks
-                    </span>
+          return (
+            <div key={p.id} className="card">
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="sv-card-top">
+                  <div>
+                    <h3 className="sv-card-title">{p.title}</h3>
+                    <span className="sv-card-student">👤 {p.student_name}</span>
                   </div>
-
-                  {/* Members */}
-                  <div className="flex items-center gap-2 mt-3 flex-wrap">
-                    <Users size={14} className="text-[var(--text-muted)] flex-shrink-0" />
-                    <div className="flex">
-                      {board.members.slice(0, 4).map((m, idx) => (
-                        <div
-                          key={m.id}
-                          title={m.name || m.username}
-                          className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-white text-[11px] font-bold flex items-center justify-center border-2 border-[var(--card)] shadow-sm -ml-1 first:ml-0"
-                          style={{ zIndex: board.members.length - idx }}
-                        >
-                          {(m.name || m.username)[0].toUpperCase()}
-                        </div>
-                      ))}
-                    </div>
-                    <span className="text-[13px] text-[var(--text-muted)]">
-                      {board.members.map((m) => m.name || m.username).join(', ')}
-                    </span>
-                  </div>
-
-                  {/* Column Stats */}
-                  <div className="flex gap-3 mt-4 flex-wrap">
-                    {COLUMNS.map((col) => {
-                      const count = board.tasks.filter((t) => t.status === col.key).length;
-                      return (
-                        <div key={col.key} className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full" style={{ background: COL_COLORS[col.key] || col.color }} />
-                          <span className="text-xs text-[var(--text-muted)]">{col.label}</span>
-                          <span className="text-xs font-semibold text-[var(--text)]">{count}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <span className="badge badge-neutral">🏛 {p.department.replace(/_/g, ' ')}</span>
                 </div>
+                <p className="sv-card-desc">{p.description}</p>
 
-                {/* Progress Footer */}
-                <div className="px-5 py-4 mt-4 border-t border-[var(--border-light)]">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[13px] font-semibold text-[var(--text-muted)]">Progress</span>
-                    <span className={`text-[13px] font-bold ${pct === 100 ? 'text-emerald-500' : 'text-[var(--text)]'}`}>{pct}%</span>
+                {p.invitations && p.invitations.length > 0 && (
+                  <div className="sv-team-row">
+                    <span className="sv-team-label">Team:</span>
+                    {p.invitations.map((inv) => (
+                      <span key={inv.id} className={`sv-team-member sv-team-member--${inv.status}`}>
+                        {inv.invitee_name}
+                      </span>
+                    ))}
                   </div>
-                  <div className="w-full h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-[width] duration-500 ease-out"
-                      style={{
-                        width: `${pct}%`,
-                        background: pct === 100 ? '#22c55e' : 'linear-gradient(90deg, #6366f1, #818cf8)',
-                      }}
-                    />
+                )}
+
+                {resp && resp.field_responses && resp.field_responses.length > 0 && (
+                  <div className="sv-form-section">
+                    <button
+                      className="sv-form-toggle"
+                      onClick={() => setExpandedForm(isExpanded ? null : p.id)}
+                      aria-expanded={isExpanded}
+                    >
+                      📋 Department Form Responses
+                      <span className="sv-form-toggle-arrow">{isExpanded ? '▲' : '▼'}</span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="sv-form-responses">
+                        {resp.field_responses.map((fr, idx) => (
+                          <div key={idx} className="sv-form-field">
+                            <span className="sv-form-field-label">{fr.field_label}</span>
+                            <span className="sv-form-field-value">
+                              {renderResponseValue(fr.value, fr.field_type) || <em className="sv-form-empty">—</em>}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex justify-end mt-3">
-                    <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--primary)] cursor-pointer hover:underline">
-                      View Board <ArrowRight size={14} />
-                    </span>
-                  </div>
-                </div>
+                )}
               </div>
-            );
-          })}
+
+              <div className="card-footer" style={{ display: 'flex', gap: 12 }}>
+                <button className="btn btn-primary btn-sm" onClick={() => openReview(p.id, 'approve')}>
+                  ✅ Approve
+                </button>
+                <button className="btn btn-danger btn-sm" onClick={() => openReview(p.id, 'reject')}>
+                  ❌ Reject
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {reviewing && (
+        <div className="sv-modal-overlay" role="dialog" aria-modal="true">
+          <div className="sv-modal">
+            <h3>{reviewing.action === 'approve' ? '✅ Approve Proposal' : '❌ Reject Proposal'}</h3>
+
+            {reviewing.action === 'reject' && (
+              <div className="form-group" style={{ marginTop: 16 }}>
+                <label htmlFor="sv-reason">Rejection Reason <span aria-hidden="true">*</span></label>
+                <textarea
+                  id="sv-reason"
+                  className="form-control"
+                  rows={3}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Explain why this proposal is being rejected…"
+                />
+              </div>
+            )}
+
+            {reviewing.action === 'approve' && (
+              <p className="sv-modal-note">
+                This will forward the proposal to the HoD for final review.
+              </p>
+            )}
+
+            {actionError && <div className="alert">{actionError}</div>}
+
+            <div className="sv-modal-actions">
+              <button
+                className={`btn ${reviewing.action === 'approve' ? 'btn-primary' : 'btn-danger'}`}
+                onClick={handleConfirm}
+                disabled={confirming}
+              >
+                {confirming ? 'Processing...' : 'Confirm'}
+              </button>
+              <button className="btn btn-outline" onClick={() => setReviewing(null)} disabled={confirming}>Cancel</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
