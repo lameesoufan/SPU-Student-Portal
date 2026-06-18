@@ -11,7 +11,38 @@ from .permissions import IsHod, IsStudent
 from .validators import validate_context, validate_form_fields
 
 
-MAX_RESPONSE_LIST_SIZE = 100
+import os
+import mimetypes
+
+MAX_FORM_FILE_SIZE = 10 * 1024 * 1024   # 10 MB
+ALLOWED_FORM_FILE_EXTENSIONS = {
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx',
+    '.ppt', '.pptx', '.txt', '.csv',
+    '.jpg', '.jpeg', '.png', '.gif',
+    '.zip', '.rar',
+}
+FORM_MIME_WHITELIST = {
+    'application/pdf', 'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain', 'text/csv',
+    'image/jpeg', 'image/png', 'image/gif',
+    'application/zip', 'application/x-rar-compressed',
+}
+
+
+def _validate_form_file(file):
+    """فحص حجم ونوع ملف النموذج الديناميكي."""
+    if file.size > MAX_FORM_FILE_SIZE:
+        raise ValueError(f'File too large. Max {MAX_FORM_FILE_SIZE // (1024*1024)} MB.')
+    extension = os.path.splitext(file.name or '')[1].lower()
+    if extension not in ALLOWED_FORM_FILE_EXTENSIONS:
+        raise ValueError(f'Unsupported file type: {extension}')
+    mime_type, _ = mimetypes.guess_type(file.name or '')
+    content_type = getattr(file, 'content_type', None) or mime_type
+    if content_type and content_type not in FORM_MIME_WHITELIST:
+        raise ValueError('Unsupported file type (MIME mismatch).')
 
 
 def _validation_error(error):
@@ -132,6 +163,11 @@ def student_get_form(request, department, context):
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 def submit_form_response(request):
     """POST a student's filled form response."""
+    for key, file in request.FILES.items():
+        try:
+            _validate_form_file(file)
+        except ValueError as e:
+            return _validation_error({key: str(e)})
     data = request.data
     # When sent as multipart/form-data, field_responses arrives as a JSON string
     if isinstance(data.get('field_responses'), str):

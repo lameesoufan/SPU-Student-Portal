@@ -1087,7 +1087,7 @@ def check_gitlab_health() -> dict:
         return {
             'status': False,
             'version': None,
-            'message': f'خطأ غير متوقع: {str(e)}',
+            'message': 'خطأ غير متوقع أثناء الاتصال بـ GitLab',
         }
 def check_gitlab_project_exists(board) -> dict:
     """
@@ -1122,7 +1122,7 @@ def check_gitlab_project_exists(board) -> dict:
     except Exception as e:
         return {
             'exists': False,
-            'reason': f'خطأ غير متوقع: {str(e)}',
+            'reason': 'خطأ غير متوقع أثناء الاتصال بـ GitLab',
         }
 
 

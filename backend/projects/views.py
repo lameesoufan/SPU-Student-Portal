@@ -27,6 +27,7 @@ from .services import (
 )
 from .models import StudentIdeaProposal, ProjectIdea, IdeaApplication, TeamInvitation, ProposalInvitation
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+import json
 
 MAX_STUDENT_SEARCH_RESULTS = 20
 MIN_STUDENT_SEARCH_CHARS = 2
@@ -82,6 +83,7 @@ def my_ideas(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsStudent])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def propose_idea(request):
     serializer = StudentIdeaProposalSerializer(data=request.data)
     if not serializer.is_valid():
@@ -91,10 +93,12 @@ def propose_idea(request):
     team_size_reason = request.data.get('team_size_reason', '').strip()
     member_ids       = request.data.get('member_ids', [])
     form_id          = request.data.get('form_id')
-    import json
     field_responses_raw = request.data.get('field_responses', [])
     if isinstance(field_responses_raw, str):
-        field_responses = json.loads(field_responses_raw)
+        try:
+            field_responses = json.loads(field_responses_raw)
+        except (json.JSONDecodeError, ValueError):
+            return Response({'error': 'Invalid field_responses JSON.'}, status=400)
     else:
         field_responses = field_responses_raw
 
@@ -304,11 +308,12 @@ def apply_idea(request, idea_id):
     team_size       = int(request.data.get('team_size', 1))
     member_ids      = request.data.get('member_ids', [])
     form_id         = request.data.get('form_id')
-    # field_responses ممكن تيجي كـ JSON string من FormData
-    import json
     field_responses_raw = request.data.get('field_responses', [])
     if isinstance(field_responses_raw, str):
-        field_responses = json.loads(field_responses_raw)
+        try:
+            field_responses = json.loads(field_responses_raw)
+        except (json.JSONDecodeError, ValueError):
+            return Response({'error': 'Invalid field_responses JSON.'}, status=400)
     else:
         field_responses = field_responses_raw
     team_size_reason = request.data.get('team_size_reason', '').strip()

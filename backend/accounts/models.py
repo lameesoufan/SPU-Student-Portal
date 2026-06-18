@@ -30,7 +30,7 @@ class User(AbstractUser):
         constraints = [
             models.UniqueConstraint(
                 fields=['department'],
-                condition=Q(role='hod'),
+                condition=Q(role='hod', department__isnull=False),
                 name='unique_hod_per_department',
             ),
         ]

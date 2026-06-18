@@ -91,18 +91,13 @@ def is_empty_value(value):
 def normalize_field_value(field, raw_value, *, allow_legacy_checkbox_string=False):
     field_type = field.field_type
 
-    # 'file' fields are special: the actual uploaded file travels separately
-    # via request.FILES (multipart), never inside the field_responses JSON.
-    # Whatever arrives here as `raw_value` for a file field is, at best, a
-    # placeholder (filename) and at worst `None`/`{}` (the result of
-    # JSON.stringify(File) on the frontend). It must NEVER raise here —
-    # required-ness for file fields is validated separately in
-    # FormResponseSerializer.validate(), where request.FILES is available.
+
     if field_type == 'file':
         if isinstance(raw_value, (list, dict)):
             return ''
         return str(raw_value) if raw_value else ''
-
+    if field_type == 'file':
+        return ''
     if is_empty_value(raw_value):
         if field.required:
             raise serializers.ValidationError('This field is required.')

@@ -622,7 +622,13 @@ def cleanup_duplicate_stages(request):
     results = {'merged': [], 'deleted': [], 'errors': []}
 
     with transaction.atomic():
-        templates = WorkflowTemplate.objects.all()
+     
+        # ✅ لو HOD/Doctor: بس قوالب قسمو
+        if request.user.role in ('hod', 'doctor') and request.user.department:
+            templates = WorkflowTemplate.objects.filter(department=request.user.department)
+        else:
+            # Dean/Admin: كل القوالب
+            templates = WorkflowTemplate.objects.all()
 
         for template in templates:
             duplicate_groups = (

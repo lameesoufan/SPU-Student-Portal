@@ -76,6 +76,16 @@ class TaskSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_by', 'created_at', 'updated_at']
 
+    def validate_assignee(self, value):
+        """التأكد إنو المعيّن عضو بنفس الـ board."""
+        if value is None:
+            return value
+        # بنوصل للـ board عن طريق الـ context
+        board = self.context.get('board')
+        if board and not board.members.filter(pk=value.pk).exists():
+            raise serializers.ValidationError('Assignee must be a member of this board.')
+        return value
+
     def get_assignee_name(self, obj):
         return obj.assignee.get_full_name() or obj.assignee.username if obj.assignee else None
 

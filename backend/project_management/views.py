@@ -10,6 +10,8 @@ from .serializers import (
     TaskCommentSerializer, TaskAttachmentSerializer, ActivityLogSerializer,
 )
 import mimetypes
+from rest_framework.decorators import api_view, permission_classes, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -180,7 +182,7 @@ def create_task(request, board_id):
     if not board:
         return Response({'error': 'Not found or not a member.'}, status=404)
 
-    serializer = TaskSerializer(data=request.data)
+    serializer = TaskSerializer(data=request.data, context={'board': board})
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
@@ -205,7 +207,7 @@ def update_task(request, board_id, task_id):
     old_priority = task.priority
     old_assignee = task.assignee_id
 
-    serializer = TaskSerializer(task, data=request.data, partial=True)
+    serializer = TaskSerializer(task, data=request.data, partial=True, context={'board': board})
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
     serializer.save()
@@ -294,7 +296,9 @@ def delete_comment(request, board_id, task_id, comment_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
 def upload_attachment(request, board_id, task_id):
+
     board = _get_board_for_member(request.user, board_id)
     if not board:
         return Response({'error': 'Not found or not a member.'}, status=404)
@@ -345,8 +349,8 @@ def delete_attachment(request, board_id, task_id, attachment_id):
     except TaskAttachment.DoesNotExist:
         return Response({'error': 'Attachment not found.'}, status=404)
 
-        if attachment.uploaded_by_id != request.user.id and request.user.role == 'student':
-            return Response({'error': 'Not allowed.'}, status=403)
+    if attachment.uploaded_by_id != request.user.id and request.user.role == 'student':
+        return Response({'error': 'Not allowed.'}, status=403)
 
     _log(board, request.user, 'attachment_removed', attachment.filename, task=attachment.task)
     attachment.file.delete(save=False)

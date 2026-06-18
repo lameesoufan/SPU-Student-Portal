@@ -28,7 +28,6 @@ class WorkflowStageCreateSerializer(serializers.Serializer):
     trigger_date = serializers.DateField(required=False, allow_null=True)
     notify_before_days = serializers.IntegerField(default=3)
     is_required = serializers.BooleanField(default=True)
-        # حقول التكرار
     is_recurring = serializers.BooleanField(default=False)
     recurrence_unit = serializers.ChoiceField(
         choices=['daily', 'weekly', 'biweekly', 'monthly'],
@@ -140,6 +139,6 @@ class ProjectWorkflowSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectWorkflow
         fields = [
-            'id', 'project_board_id', 'template', 'template_details',
-            'stage_instances', 'started_at', 'completed_at', 'is_active'
-        ]
+    'id', 'project_board', 'template', 'template_details',
+    'stage_instances', 'started_at', 'completed_at', 'is_active'
+        ]  

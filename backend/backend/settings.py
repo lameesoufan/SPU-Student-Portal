@@ -131,8 +131,7 @@ if DATABASE_ENGINE in ('postgres', 'postgresql') or os.getenv('DB_NAME'):
             'OPTIONS': {
                 'sslmode': os.getenv('DB_SSLMODE', 'prefer'),
             },
-            # في كتلة DATABASES → default، أضف:
-            'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '60')),
+
         }
     }
 else:
@@ -199,7 +198,7 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True, # يبلاكليست القديم تلقائياً
 }
 # M-12 Fix: إعدادات JWT Cookies
-JWT_COOKIE_SECURE = False          # True لما تستخدمي HTTPS
+JWT_COOKIE_SECURE = _env_bool('JWT_COOKIE_SECURE', not DEBUG)        # True لما تستخدمي HTTPS
 JWT_COOKIE_HTTPONLY = True         # لا يقدر JavaScript يقرأه
 JWT_COOKIE_SAMESITE = 'Lax'        # حماية من CSRF
 JWT_COOKIE_ACCESS_MAX_AGE = 60 * 60 * 24    # يوم واحد (بالثواني)
@@ -228,8 +227,6 @@ GITLAB_WEBHOOK_BASE_URL = os.getenv('GITLAB_WEBHOOK_BASE_URL', 'http://localhost
 GITLAB_EXTERNAL_URL = os.getenv('GITLAB_EXTERNAL_URL', 'http://localhost:8080')
 
 # Celery Beat Schedule
-
-# Celery Configuration (optional - needs celery + redis installed)
 # Celery Configuration (optional - needs celery + redis installed)
 try:
     from celery.schedules import crontab
@@ -258,17 +255,6 @@ try:
     }
 except ImportError:
     pass
-# ===== Production Security Settings =====
-# تتفعل تلقائياً لما DEBUG=False (إنتاج)، وتتنفصل لما DEBUG=True (تطوير)
-SECURE_SSL_REDIRECT = _env_bool('SECURE_SSL_REDIRECT', not DEBUG)
-SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', not DEBUG)
-CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', not DEBUG)
-SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '31536000' if not DEBUG else '0'))
-SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', not DEBUG)
-SECURE_HSTS_PRELOAD = _env_bool('SECURE_HSTS_PRELOAD', not DEBUG)
-if _env_bool('USE_X_FORWARDED_PROTO', not DEBUG):
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# CORS Settings
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+
+
