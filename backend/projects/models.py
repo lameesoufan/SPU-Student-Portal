@@ -82,7 +82,15 @@ class StudentIdeaProposal(models.Model):
             models.Index(fields=['supervisor', 'status', '-created_at']),
             models.Index(fields=['department', 'status', '-created_at']),
         ]
-
+        constraints = [
+        models.UniqueConstraint(
+            fields=['student'],
+            condition=Q(status__in=[
+                'awaiting_members', 'pending_supervisor', 'pending_hod', 'assigned'
+            ]),
+            name='unique_active_proposal_per_student',
+        ),
+    ]
     def __str__(self):
         return f"[Student] {self.title} ({self.student.username})"
 
@@ -170,9 +178,9 @@ class IdeaApplication(models.Model):
         related_name='idea_applications',
         limit_choices_to={'role': 'student'},
     )
-    team_size        = models.PositiveSmallIntegerField(default=1)  # 1, 2, 3, or 4
-    team_size_reason = models.TextField(blank=True, help_text='Required when team_size is 1 or 4')
-    status           = models.CharField(max_length=30, choices=IDEA_APPLICATION_STATUS,)
+    team_size   = models.PositiveSmallIntegerField(default=1)  # 1, 2, or 3 
+    team_size_reason = models.TextField(blank=True, help_text='Required when team_size < 2 or > 3')
+    status      = models.CharField(max_length=30, choices=IDEA_APPLICATION_STATUS, default='pending_doctor')
     rejection_reason = models.TextField(blank=True)
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
@@ -186,6 +194,14 @@ class IdeaApplication(models.Model):
                 name='unique_registered_application_per_idea',
             ),
         ]
+        models.UniqueConstraint(
+        fields=['student'],
+        condition=Q(status__in=[
+            'awaiting_members', 'pending_doctor', 'pending_hod', 'registered'
+        ]),
+        name='unique_active_application_per_student',
+        ),
+        
         indexes = [
             models.Index(fields=['student', 'status']),
             models.Index(fields=['idea', 'status']),

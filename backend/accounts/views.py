@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from openpyxl import load_workbook
 from django.contrib.auth import authenticate
+from django.conf import settings
 
 from .models import DEPARTMENTS
 from .permissions import IsDeanOrAdmin
@@ -22,18 +23,41 @@ MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024
 MAX_IMPORT_ROWS = 5000
 
 
+def _set_cookie(response, name, value, max_age, secure=False):
+    """Helper to set HttpOnly JWT cookies."""
+    response.set_cookie(
+        name,
+        value,
+        max_age=max_age,
+        httponly=True,
+        secure=secure,
+        samesite='Lax',
+        path='/',
+    )
+
+
+def _clear_cookie(response, name):
+    """Helper to clear a cookie."""
+    response.delete_cookie(name, path='/')
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout(request):
-    refresh_token = request.data.get('refresh')
+    """Logout: clear JWT cookies and blacklist the refresh token."""
+    refresh_token = request.COOKIES.get('refresh_token')
     if not refresh_token:
-        return Response({'error': 'Refresh token is required.'}, status=400)
-    try:
-        token = RefreshToken(refresh_token)
-        token.blacklist()
-    except TokenError:
-        return Response({'error': 'Invalid or already blacklisted token.'}, status=400)
-    return Response({'message': 'Logged out successfully.'})
+        refresh_token = request.data.get('refresh')
+    if refresh_token:
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except TokenError:
+            pass
+    response = Response({'message': 'Logged out successfully.'})
+    _clear_cookie(response, 'access_token')
+    _clear_cookie(response, 'refresh_token')
+    return response
 
 
 @api_view(['POST'])
@@ -56,7 +80,6 @@ def change_password(request):
 def import_users(request):
     if 'file' not in request.FILES or 'role' not in request.data:
         return Response({'error': 'File and role are required.'}, status=400)
-
 
     upload = request.FILES['file']
     filename = str(upload.name or '').lower()
@@ -83,7 +106,10 @@ def import_users(request):
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not row:
                 continue
-            full_name, identifier, email = row[:3]
+            full_name = row[0] if len(row) > 0 else None
+            identifier = row[1] if len(row) > 1 else None
+            email = row[2] if len(row) > 2 else None
+            department = row[3] if len(row) > 3 else ''
             if identifier is None:
                 continue
             if isinstance(identifier, float) and identifier.is_integer():
@@ -91,11 +117,15 @@ def import_users(request):
             username = str(identifier).strip()
             if not username:
                 continue
-            user = create_user_from_import(username=username, email=email, role=role, password=username)
-            if user:
+            result = create_user_from_import(
+                username=username, email=email, role=role,
+                password=username, department=department,
+            )
+            if result.get('ok'):
+                user_obj = result['user']
                 if full_name:
-                    user.first_name = str(full_name)
-                    user.save(update_fields=['first_name'])
+                    user_obj.first_name = str(full_name)
+                    user_obj.save(update_fields=['first_name'])
                 created_users.append({'username': username})
     except Exception as exc:
         return Response({'error': f'Import failed. Please try again.'}, status=400)
@@ -180,15 +210,27 @@ def student_self_register(request):
     else:
         user = result['user']
 
-    # Step 3: issue JWT
+    # Step 3: issue JWT as HttpOnly cookies
     refresh = RefreshToken.for_user(user)
     refresh['role']                 = user.role
     refresh['username']             = user.username
     refresh['must_change_password'] = user.must_change_password
     refresh['department']           = user.department
 
-    return Response({
+    access_token = str(refresh.access_token)
+    refresh_token_str = str(refresh)
+
+    response = Response({
         'message': f'Welcome, {user.first_name or user.username}.',
-        'access':  str(refresh.access_token),
-        'refresh': str(refresh),
+        'username': user.username,
+        'role': user.role,
+        'must_change_password': user.must_change_password,
+        'department': user.department,
     })
+
+    secure = getattr(settings, 'JWT_COOKIE_SECURE', not settings.DEBUG)
+    _set_cookie(response, 'access_token', access_token,
+                getattr(settings, 'JWT_COOKIE_ACCESS_MAX_AGE', 86400), secure=secure)
+    _set_cookie(response, 'refresh_token', refresh_token_str,
+                getattr(settings, 'JWT_COOKIE_REFRESH_MAX_AGE', 604800), secure=secure)
+    return response

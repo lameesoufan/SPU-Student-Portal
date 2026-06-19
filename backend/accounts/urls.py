@@ -1,15 +1,15 @@
-from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
+from .token_views import CookieTokenObtainPairView, CookieTokenRefreshView, cookie_logout
 from .views import (
     import_users, change_password, list_doctors, list_departments,
     assign_hod_view, logout, student_self_register,
 )
 from .serializers import CustomTokenObtainPairView
+from django.urls import path
 
 urlpatterns = [
-    path('api/token/',           CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/',   TokenRefreshView.as_view(),          name='token_refresh'),
-    path('api/logout/',          logout,                               name='logout'),
+    path('api/token/', CookieTokenObtainPairView.as_view()),
+    path('api/token/refresh/', CookieTokenRefreshView.as_view()),
+    path('api/logout/', cookie_logout),
     path('api/change-password/', change_password,                      name='change_password'),
     path('api/import-users/',    import_users,                         name='import_users'),
     path('api/doctors/',         list_doctors,                         name='list_doctors'),

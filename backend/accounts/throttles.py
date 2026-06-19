@@ -18,4 +18,12 @@ class RegisterRateThrottle(SimpleRateThrottle):
         ident = self.get_ident(request)
         university_id = str(request.data.get('university_id', '')).strip().lower()
         key = f"{ident}:{university_id}" if university_id else ident
-        return self.cache_format % {'scope': self.scope, 'ident': key}
+  
+class ProposeIdeaThrottle(SimpleRateThrottle):
+    scope = 'propose_idea'        # 10/minute
+
+class WorkflowSubmitThrottle(SimpleRateThrottle):
+    scope = 'workflow_submit'     # 15/minute
+
+class FileUploadThrottle(SimpleRateThrottle):
+    scope = 'file_upload'         # 20/minute      return self.cache_format % {'scope': self.scope, 'ident': key}

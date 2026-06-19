@@ -1,10 +1,11 @@
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import Q
-from rest_framework.decorators import parser_classes
+
 from accounts.models import User
+from accounts.throttles import ProposeIdeaThrottle
 from .permissions import IsDoctor, IsStudent, IsHod
 from .selectors import (
     get_ideas_for_doctor, get_student_proposal, get_approved_ideas,
@@ -26,8 +27,7 @@ from .services import (
     replace_proposal_member, replace_application_member,
 )
 from .models import StudentIdeaProposal, ProjectIdea, IdeaApplication, TeamInvitation, ProposalInvitation
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-import json
+
 
 MAX_STUDENT_SEARCH_RESULTS = 20
 MIN_STUDENT_SEARCH_CHARS = 2
@@ -38,20 +38,18 @@ def _validation_error_response(errors):
     return Response({'error': 'Validation failed.', 'details': errors}, status=400)
 
 # helper to save dynamic form response inside an existing transaction
-def _save_form_response(student, form_id, field_responses, proposal_id=None, application_id=None, request=None):
+def _save_form_response(student, form_id, field_responses, proposal_id=None, application_id=None):
+    """Save a FormResponse + FieldResponses if form_id and field_responses are provided."""
     if not form_id or not isinstance(field_responses, list):
         return
     from dy_forms.serializers import FormResponseSerializer
 
-    serializer = FormResponseSerializer(
-        data={
-            'form': form_id,
-            'proposal_id': proposal_id,
-            'application_id': application_id,
-            'field_responses': field_responses,
-        },
-        context={'request': request},
-    )
+    serializer = FormResponseSerializer(data={
+        'form': form_id,
+        'proposal_id': proposal_id,
+        'application_id': application_id,
+        'field_responses': field_responses,
+    })
     serializer.is_valid(raise_exception=True)
     serializer.save(student=student)
 
@@ -60,7 +58,6 @@ def _save_form_response(student, form_id, field_responses, proposal_id=None, app
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsDoctor])
-@parser_classes([MultiPartParser, FormParser, JSONParser])
 def submit_idea(request):
     serializer = ProjectIdeaSerializer(data=request.data)
     if not serializer.is_valid():
@@ -83,7 +80,7 @@ def my_ideas(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsStudent])
-@parser_classes([MultiPartParser, FormParser, JSONParser])
+@throttle_classes([ProposeIdeaThrottle])
 def propose_idea(request):
     serializer = StudentIdeaProposalSerializer(data=request.data)
     if not serializer.is_valid():
@@ -93,14 +90,7 @@ def propose_idea(request):
     team_size_reason = request.data.get('team_size_reason', '').strip()
     member_ids       = request.data.get('member_ids', [])
     form_id          = request.data.get('form_id')
-    field_responses_raw = request.data.get('field_responses', [])
-    if isinstance(field_responses_raw, str):
-        try:
-            field_responses = json.loads(field_responses_raw)
-        except (json.JSONDecodeError, ValueError):
-            return Response({'error': 'Invalid field_responses JSON.'}, status=400)
-    else:
-        field_responses = field_responses_raw
+    field_responses  = request.data.get('field_responses', [])
 
     with transaction.atomic():
         result = create_student_proposal(
@@ -121,7 +111,6 @@ def propose_idea(request):
             form_id=form_id,
             field_responses=field_responses,
             proposal_id=result['proposal'].id,
-            request=request,
         )
 
     return Response(
@@ -298,7 +287,6 @@ def browse_ideas(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsStudent])
-@parser_classes([MultiPartParser, FormParser, JSONParser])
 def apply_idea(request, idea_id):
     try:
         idea = ProjectIdea.objects.get(pk=idea_id)
@@ -306,18 +294,11 @@ def apply_idea(request, idea_id):
         return Response({'error': 'Idea not found.'}, status=404)
 
     team_size       = int(request.data.get('team_size', 1))
+    team_size_reason = request.data.get('team_size_reason', '').strip()
     member_ids      = request.data.get('member_ids', [])
     form_id         = request.data.get('form_id')
-    field_responses_raw = request.data.get('field_responses', [])
-    if isinstance(field_responses_raw, str):
-        try:
-            field_responses = json.loads(field_responses_raw)
-        except (json.JSONDecodeError, ValueError):
-            return Response({'error': 'Invalid field_responses JSON.'}, status=400)
-    else:
-        field_responses = field_responses_raw
-    team_size_reason = request.data.get('team_size_reason', '').strip()
-    
+    field_responses = request.data.get('field_responses', [])
+
     with transaction.atomic():
         result = apply_on_idea(student=request.user, idea=idea, team_size=team_size, team_size_reason=team_size_reason, member_ids=member_ids)
         if not result['ok']:
@@ -328,7 +309,6 @@ def apply_idea(request, idea_id):
             form_id=form_id,
             field_responses=field_responses,
             application_id=result['application'].id,
-            request=request,
         )
 
     return Response(IdeaApplicationSerializer(result['application']).data, status=201)

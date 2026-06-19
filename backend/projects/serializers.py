@@ -44,11 +44,13 @@ class ProjectIdeaSerializer(serializers.ModelSerializer):
             if inv.status == 'accepted'
         ]
         return {'leader': leader, 'members': members}
-
-    def validate_max_team_size(self, value):
+    
+    def validate_max_team_size(self, value):    # ✅ جوا الكلاس!
         if value not in (2, 3, 4):
             raise serializers.ValidationError('Max team size must be 2, 3, or 4.')
         return value
+
+
 
 
 # ── UC-02: Student proposal ───────────────────────────────────────────────────
@@ -141,11 +143,11 @@ class IdeaApplicationSerializer(serializers.ModelSerializer):
     class Meta:
         model  = IdeaApplication
         fields = [
-            'id', 'idea', 'idea_title', 'doctor_name', 'team_size',
-            'team_size_reason',
-            'student_name', 'status', 'rejection_reason',
-            'invitations', 'created_at', 'updated_at',
-        ]
+    'id', 'idea', 'idea_title', 'doctor_name', 'team_size',
+    'team_size_reason',
+    'student_name', 'status', 'rejection_reason',
+    'invitations', 'created_at', 'updated_at',
+    ]   
         read_only_fields = ['status', 'rejection_reason', 'created_at', 'updated_at',
                             'student_name', 'idea_title', 'doctor_name', 'invitations']
 

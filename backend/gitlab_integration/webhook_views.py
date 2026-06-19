@@ -105,6 +105,6 @@ class GitLabWebhookView(views.APIView):
                 exc_info=True
             )
             return Response(
-                {'error': f'خطأ في معالجة الـ webhook: {str(e)}'},
+                {'error': 'حدث خطأ داخلي أثناء معالجة الـ webhook'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

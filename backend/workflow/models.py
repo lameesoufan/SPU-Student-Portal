@@ -115,10 +115,10 @@ class WorkflowStageField(models.Model):
 
 
 class ProjectWorkflow(models.Model):
-    project_board = models.OneToOneField(
+    project_board = models.ForeignKey(          
         'project_management.ProjectBoard',
         on_delete=models.CASCADE,
-        related_name='workflow',
+        related_name='workflows',              
     )
     template = models.ForeignKey(WorkflowTemplate, on_delete=models.CASCADE, related_name='project_workflows')
     started_at = models.DateTimeField(auto_now_add=True)

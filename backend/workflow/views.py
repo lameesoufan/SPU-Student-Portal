@@ -1,4 +1,4 @@
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import IntegrityError, transaction
@@ -10,7 +10,7 @@ from .serializers import (
     ProjectWorkflowSerializer, WorkflowStageInstanceSerializer
 )
 from .permissions import IsHodOrDoctor, IsHod, IsStudent
-
+from accounts.throttles import WorkflowSubmitThrottle
 
 def _get_project_board(project_board_id):
     from project_management.models import ProjectBoard
@@ -527,9 +527,59 @@ def get_project_workflow(request, project_board_id):
 def get_pending_stages(request):
     """Get all pending workflow stages for the student's projects."""
     return Response({'message': 'To be implemented with project integration'})
+def _validate_field_response(field, value):
+    """Validate a single field response against its type and options."""
+    from datetime import datetime as dt
 
+    # File type handled separately (file uploads)
+    if field.field_type == 'file':
+        return None  # file validation done elsewhere
+
+    # Empty value for non-required fields is OK
+    if value is None or value == '':
+        if field.required:
+            return f'Field "{field.label}" is required.'
+        return None
+
+    if field.field_type == 'number':
+        try:
+            float(value)
+        except (ValueError, TypeError):
+            return f'Field "{field.label}" must be a number.'
+
+    elif field.field_type == 'date':
+        if isinstance(value, str):
+            for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y'):
+                try:
+                    dt.strptime(value, fmt)
+                    break
+                except ValueError:
+                    continue
+            else:
+                return f'Field "{field.label}" must be a valid date (YYYY-MM-DD).'
+
+    elif field.field_type in ('select', 'radio'):
+        # Single selection - value must be in options
+        if field.options:
+            option_values = [opt.get('value', opt) if isinstance(opt, dict) else opt for opt in field.options]
+            if str(value) not in [str(v) for v in option_values]:
+                return f'Field "{field.label}": "{value}" is not a valid option.'
+
+    elif field.field_type == 'checkbox':
+        # Multiple selections - value must be a list, each item in options
+        if not isinstance(value, list):
+            return f'Field "{field.label}" must be a list of selections.'
+        if field.options:
+            option_values = [opt.get('value', opt) if isinstance(opt, dict) else opt for opt in field.options]
+            option_strs = [str(v) for v in option_values]
+            for v in value:
+                if str(v) not in option_strs:
+                    return f'Field "{field.label}": "{v}" is not a valid option.'
+
+    return None
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsStudent])
+@throttle_classes([WorkflowSubmitThrottle])
 def submit_workflow_stage(request, stage_instance_id):
     """Submit field responses for a workflow stage."""
     try:
@@ -567,7 +617,13 @@ def submit_workflow_stage(request, stage_instance_id):
     for field in fields_by_id.values():
         if field.required and not field_responses.get(str(field.id)):
             return Response({'error': f'Field is required: {field.label}'}, status=400)
-    
+        # Validate field types and options
+    for field_id_str, value in field_responses.items():
+        field_obj = fields_by_id.get(field_id_str)
+        if field_obj:
+            error = _validate_field_response(field_obj, value)
+            if error:
+                return Response({'error': error}, status=400)
     with transaction.atomic():
         from .models import WorkflowFieldResponse
         stage_instance = WorkflowStageInstance.objects.select_for_update().get(pk=stage_instance.pk)

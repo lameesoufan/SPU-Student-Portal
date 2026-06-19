@@ -28,7 +28,7 @@ def _env_bool(name, default=False):
 
 
 # Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+# See https://docs.djangoproject.com/en/5.2/howto/deployment-checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('SECRET_KEY')
@@ -76,12 +76,16 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'accounts_login': '10/minute',
         'accounts_register': '5/minute',
+        'propose_idea': '10/hour',
+        'workflow_submit': '30/hour',
+        'file_upload': '20/hour',
         'anon': os.getenv('DRF_ANON_THROTTLE_RATE', '60/minute'),
         'user': os.getenv('DRF_USER_THROTTLE_RATE', '600/minute'),
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': int(os.getenv('DRF_PAGE_SIZE', '50')),
 }
+
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -131,7 +135,6 @@ if DATABASE_ENGINE in ('postgres', 'postgresql') or os.getenv('DB_NAME'):
             'OPTIONS': {
                 'sslmode': os.getenv('DB_SSLMODE', 'prefer'),
             },
-
         }
     }
 else:
@@ -189,6 +192,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ── JWT Settings ──────────────────────────────────────────────────────────────
 from datetime import timedelta
 
 SIMPLE_JWT = {
@@ -197,37 +201,53 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS':  True,   # يعطي refresh token جديد مع كل تجديد
     'BLACKLIST_AFTER_ROTATION': True, # يبلاكليست القديم تلقائياً
 }
-# M-12 Fix: إعدادات JWT Cookies
-JWT_COOKIE_SECURE = _env_bool('JWT_COOKIE_SECURE', not DEBUG)        # True لما تستخدمي HTTPS
+
+# JWT Cookie Settings (HttpOnly cookies)
+JWT_COOKIE_SECURE = False          # True لما تستخدمي HTTPS
 JWT_COOKIE_HTTPONLY = True         # لا يقدر JavaScript يقرأه
 JWT_COOKIE_SAMESITE = 'Lax'        # حماية من CSRF
-JWT_COOKIE_ACCESS_MAX_AGE = 60 * 60 * 24    # يوم واحد (بالثواني)
+JWT_COOKIE_ACCESS_MAX_AGE = 60 * 60 * 24       # يوم واحد (بالثواني)
 JWT_COOKIE_REFRESH_MAX_AGE = 60 * 60 * 24 * 7  # أسبوع
+
+# ── CORS Settings ─────────────────────────────────────────────────────────────
+# MUST NOT use CORS_ALLOW_ALL_ORIGINS with credentials
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
+    for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173').split(',')
     if origin.strip()
 ]
+
+# ── Production Security Settings ──────────────────────────────────────────────
+# تتفعل تلقائياً لما DEBUG=False (إنتاج)، وتتنفصل لما DEBUG=True (تطوير)
 SECURE_SSL_REDIRECT = _env_bool('SECURE_SSL_REDIRECT', not DEBUG)
 SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', not DEBUG)
 CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', not DEBUG)
 SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '31536000' if not DEBUG else '0'))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', not DEBUG)
 SECURE_HSTS_PRELOAD = _env_bool('SECURE_HSTS_PRELOAD', not DEBUG)
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+REFERRER_POLICY = 'strict-origin-when-cross-origin'
 if _env_bool('USE_X_FORWARDED_PROTO', not DEBUG):
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-    
-# ===== GitLab Integration =====
+
+# Permissions-Policy
+PERMISSIONS_POLICY = {
+    'camera': [],
+    'microphone': [],
+    'geolocation': [],
+}
+
+# ── GitLab Integration ────────────────────────────────────────────────────────
 GITLAB_URL = os.getenv('GITLAB_URL', 'http://localhost:8080')
 GITLAB_TOKEN = os.getenv('GITLAB_TOKEN', '')
 GITLAB_WEBHOOK_SECRET = os.getenv('GITLAB_WEBHOOK_SECRET', '')
 GITLAB_WEBHOOK_BASE_URL = os.getenv('GITLAB_WEBHOOK_BASE_URL', 'http://localhost:8000')
-# سطر 221
 GITLAB_EXTERNAL_URL = os.getenv('GITLAB_EXTERNAL_URL', 'http://localhost:8080')
 
-# Celery Beat Schedule
-# Celery Configuration (optional - needs celery + redis installed)
+# ── Celery Configuration (optional - needs celery + redis installed) ──────────
 try:
     from celery.schedules import crontab
 
@@ -237,7 +257,6 @@ try:
     CELERY_ACCEPT_CONTENT = ['json']
     CELERY_TASK_SERIALIZER = 'json'
     CELERY_RESULT_SERIALIZER = 'json'
-    
 
     CELERY_BEAT_SCHEDULE = {
         'generate-recurring-stages-daily': {
@@ -255,6 +274,3 @@ try:
     }
 except ImportError:
     pass
-
-
-

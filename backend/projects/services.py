@@ -389,7 +389,7 @@ def student_can_apply(student):
     return True, None
 
 
-def apply_on_idea(*, student, idea, team_size, team_size_reason, member_ids):
+def apply_on_idea(*, student, idea, team_size, team_size_reason='', member_ids=None):
     with transaction.atomic():
         # Lock the idea row to prevent race conditions
         idea = ProjectIdea.objects.select_for_update().get(pk=idea.pk)
@@ -401,6 +401,13 @@ def apply_on_idea(*, student, idea, team_size, team_size_reason, member_ids):
         if IdeaApplication.objects.filter(idea=idea, status='registered').exists():
             return {'ok': False, 'error': 'This idea has already been taken by another team.'}
 
+        # Check if student already has an active (non-rejected) application on this idea
+        if IdeaApplication.objects.filter(idea=idea, student=student).exclude(status='rejected').exists():
+            return {'ok': False, 'error': 'You already have an active application on this idea.'}
+
+        # Soft-delete any previous rejected application so the unique_together constraint works
+        IdeaApplication.objects.filter(idea=idea, student=student, status='rejected').delete()
+
         if team_size not in (1, 2, 3, 4):
             return {'ok': False, 'error': 'Team size must be 1, 2, 3, or 4.'}
 
@@ -409,6 +416,7 @@ def apply_on_idea(*, student, idea, team_size, team_size_reason, member_ids):
         if team_size > idea.max_team_size:
             return {'ok': False, 'error': f'This idea allows up to {idea.max_team_size} students.'}
 
+        member_ids = member_ids or []
         if len(member_ids) != team_size - 1:
             return {'ok': False, 'error': f'Please provide {team_size - 1} additional member ID(s).'}
 
