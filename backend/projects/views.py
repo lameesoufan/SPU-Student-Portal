@@ -86,32 +86,61 @@ def propose_idea(request):
     if not serializer.is_valid():
         return _validation_error_response(serializer.errors)
 
-    team_size        = int(request.data.get('team_size', 1))
+    try:
+        team_size = int(request.data.get('team_size', 1))
+    except (TypeError, ValueError):
+        return _validation_error_response({'team_size': 'Team size must be a valid number.'})
+
     team_size_reason = request.data.get('team_size_reason', '').strip()
-    member_ids       = request.data.get('member_ids', [])
-    form_id          = request.data.get('form_id')
-    field_responses  = request.data.get('field_responses', [])
 
-    with transaction.atomic():
-        result = create_student_proposal(
-            student=request.user,
-            supervisor=serializer.validated_data['supervisor'],
-            title=serializer.validated_data['title'],
-            description=serializer.validated_data['description'],
-            department=serializer.validated_data['department'],
-            team_size=team_size,
-            team_size_reason=team_size_reason,
-            member_ids=member_ids,
-        )
-        if not result['ok']:
-            return Response({'error': result['error']}, status=400)
+    if hasattr(request.data, 'getlist'):
+        member_ids = request.data.getlist('member_ids')
+    else:
+        member_ids = request.data.get('member_ids', [])
 
-        _save_form_response(
-            student=request.user,
-            form_id=form_id,
-            field_responses=field_responses,
-            proposal_id=result['proposal'].id,
-        )
+    form_id = request.data.get('form_id')
+
+    import json
+    raw_field_responses = request.data.get('field_responses', [])
+    if isinstance(raw_field_responses, str):
+        try:
+            field_responses = json.loads(raw_field_responses)
+        except json.JSONDecodeError:
+            field_responses = []
+    else:
+        field_responses = raw_field_responses
+
+    try:
+        with transaction.atomic():
+            result = create_student_proposal(
+                student=request.user,
+                supervisor=serializer.validated_data['supervisor'],
+                title=serializer.validated_data['title'],
+                description=serializer.validated_data['description'],
+                department=serializer.validated_data['department'],
+                team_size=team_size,
+                team_size_reason=team_size_reason,
+                member_ids=member_ids,
+            )
+            if not result['ok']:
+                return Response({'error': result['error']}, status=400)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'propose_idea unexpected error: {e}', exc_info=True)
+        return Response({'error': 'An unexpected error occurred while submitting your proposal. Please try again.'}, status=500)
+
+    # ↓↓↓ حفظ الـ form برا الـ transaction الرئيسي — إذا فشل ما يكسر الـ proposal ↓↓↓
+    if form_id and field_responses:
+        try:
+            _save_form_response(
+                student=request.user,
+                form_id=form_id,
+                field_responses=field_responses,
+                proposal_id=result['proposal'].id,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f'Failed to save form response for proposal {result["proposal"].id}: {e}')
 
     return Response(
         {'message': 'Proposal submitted successfully.',
@@ -293,26 +322,54 @@ def apply_idea(request, idea_id):
     except ProjectIdea.DoesNotExist:
         return Response({'error': 'Idea not found.'}, status=404)
 
-    team_size       = int(request.data.get('team_size', 1))
+    try:
+        team_size = int(request.data.get('team_size', 1))
+    except (TypeError, ValueError):
+        return _validation_error_response({'team_size': 'Team size must be a valid number.'})
+
     team_size_reason = request.data.get('team_size_reason', '').strip()
-    member_ids      = request.data.get('member_ids', [])
-    form_id         = request.data.get('form_id')
-    field_responses = request.data.get('field_responses', [])
 
-    with transaction.atomic():
-        result = apply_on_idea(student=request.user, idea=idea, team_size=team_size, team_size_reason=team_size_reason, member_ids=member_ids)
-        if not result['ok']:
-            return Response({'error': result['error']}, status=400)
+    if hasattr(request.data, 'getlist'):
+        member_ids = request.data.getlist('member_ids')
+    else:
+        member_ids = request.data.get('member_ids', [])
 
-        _save_form_response(
-            student=request.user,
-            form_id=form_id,
-            field_responses=field_responses,
-            application_id=result['application'].id,
-        )
+    form_id = request.data.get('form_id')
+
+    import json
+    raw_field_responses = request.data.get('field_responses', [])
+    if isinstance(raw_field_responses, str):
+        try:
+            field_responses = json.loads(raw_field_responses)
+        except json.JSONDecodeError:
+            field_responses = []
+    else:
+        field_responses = raw_field_responses
+
+    try:
+        with transaction.atomic():
+            result = apply_on_idea(student=request.user, idea=idea, team_size=team_size, team_size_reason=team_size_reason, member_ids=member_ids)
+            if not result['ok']:
+                return Response({'error': result['error']}, status=400)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'apply_idea unexpected error: {e}', exc_info=True)
+        return Response({'error': 'An unexpected error occurred while applying. Please try again.'}, status=500)
+
+    # ↓↓↓ حفظ الـ form برا الـ transaction — إذا فشل ما يكسر الـ application ↓↓↓
+    if form_id and field_responses:
+        try:
+            _save_form_response(
+                student=request.user,
+                form_id=form_id,
+                field_responses=field_responses,
+                application_id=result['application'].id,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f'Failed to save form response for application {result["application"].id}: {e}')
 
     return Response(IdeaApplicationSerializer(result['application']).data, status=201)
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsStudent])

@@ -72,6 +72,19 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
         read_only_fields = ['status', 'rejection_reason', 'created_at', 'updated_at',
                             'supervisor_name', 'student_name', 'invitations']
 
+    def validate_supervisor(self, value):
+        if value and getattr(value, 'role', None) != 'doctor':
+            raise serializers.ValidationError('Supervisor must be a doctor.')
+        return value
+
+    def validate(self, data):
+        team_size = data.get('team_size')
+        reason = data.get('team_size_reason', '').strip()
+        if team_size in (1, 4) and not reason:
+            raise serializers.ValidationError({
+                'team_size_reason': f'A justification is required when team size is {team_size}.'
+            })
+        return data
     def get_supervisor_name(self, obj):
         if obj.supervisor:
             return obj.supervisor.get_full_name() or obj.supervisor.username

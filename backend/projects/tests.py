@@ -137,6 +137,7 @@ class ProjectsPhaseOneIntegrityTests(TestCase):
             student=self.student1,
             idea=self.idea,
             team_size=1,
+            team_size_reason='Solo reason',  # ↓↓↓ أضف هاد ↓↓↓
             member_ids=[],
         )
         self.assertTrue(ok_result['ok'])
@@ -161,6 +162,7 @@ class ProjectsPhaseTwoAlignmentTests(TestCase):
 
     def test_student_proposal_team_size_accepts_supported_values_only(self):
         another_leader = User.objects.create_user(username='leader_2', password='StudentPass123', role='student')
+        another_member = User.objects.create_user(username='member_2', password='StudentPass123', role='student')
 
         ok = create_student_proposal(
             student=self.leader,
@@ -174,18 +176,20 @@ class ProjectsPhaseTwoAlignmentTests(TestCase):
         )
         self.assertTrue(ok['ok'])
 
+        # ↓↓↓ غيّرت: team_size=5 (غير مدعوم) بدل 4 ↓↓↓
         bad = create_student_proposal(
             student=another_leader,
             supervisor=self.doctor,
-            title='Proposal Four',
+            title='Proposal Bad',
             description='desc',
             department='software_engineering',
-            team_size=4,
+            team_size=5,
             team_size_reason='Need more',
-            member_ids=[self.member.username, 'missing', 'missing2'],
+            member_ids=[self.member.username, another_member.username, 'missing', 'missing2'],
         )
         self.assertFalse(bad['ok'])
-        self.assertIn('Team size must be 2 or 3 students.', bad['error'])
+        # ↓↓↓ غيّرت: رسالة الخطأ الجديدة ↓↓↓
+        self.assertIn('Team size must be 1, 2, 3, or 4', bad['error'])
 
     def test_team_size_reason_is_preserved_when_submitted(self):
         proposal = create_student_proposal(
