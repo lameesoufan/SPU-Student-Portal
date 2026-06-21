@@ -177,7 +177,20 @@ def cancel_proposal(*, proposal, student):
         proposal.status = 'rejected'
         proposal.rejection_reason = 'Cancelled by the proposing student.'
         proposal.save(update_fields=['status', 'rejection_reason', 'updated_at'])
+        all_invitations = list(proposal.invitations.select_related('invitee'))
+        proposal.invitations.update(status='rejected')
 
+    for inv in all_invitations:
+        if inv.status == 'accepted':
+            notify(inv.invitee, 'proposal_rejected',
+                   'Proposal Cancelled',
+                   f'The proposal "{proposal.title}" you were part of has been cancelled by the proposer.')
+        elif inv.status == 'pending':
+            notify(inv.invitee, 'proposal_rejected',
+                   'Proposal Cancelled',
+                   f'The proposal "{proposal.title}" you were invited to has been cancelled by the proposer.')
+
+            return {'ok': True}
         accepted = list(proposal.invitations.filter(status='accepted').select_related('invitee'))
         proposal.invitations.update(status='rejected')
 

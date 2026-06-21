@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchHodPendingApplications, hodReviewApplication, fetchResponseByApplication } from '../api';
-import {
-  FileCheck2, Loader2, ClipboardCheck, CheckCircle2, XCircle,
-  User, Users, ChevronDown, GraduationCap, Calendar, Stethoscope,
-} from 'lucide-react';
+import { FileCheck2, Loader2, ClipboardCheck, CheckCircle2, XCircle, User, Users, ChevronDown, GraduationCap, Calendar, Stethoscope, Info } from 'lucide-react';
 
 const TEAM_STATUS_STYLES = {
   accepted: 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20',
@@ -169,8 +166,20 @@ export default function HodApplicationReview({ onBack }) {
                 </div>
               </div>
 
-              {/* Card Body */}
-              <div className="px-6 py-4 flex flex-col gap-3.5">
+{/* Card Body */}
+<div className="px-6 py-4 flex flex-col gap-3.5">
+ 
+
+  {/* Team Size Reason */}
+  {app.team_size_reason && (
+    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+      <Info size={14} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+      <div>
+        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Team Size Justification</span>
+        <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">{app.team_size_reason}</p>
+      </div>
+    </div>
+  )}
                 {/* Team Members */}
                 {app.invitations && app.invitations.length > 0 && (
                   <div className="flex items-center flex-wrap gap-1.5">

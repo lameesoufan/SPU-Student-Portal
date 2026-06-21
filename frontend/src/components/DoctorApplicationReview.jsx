@@ -176,6 +176,16 @@ export default function DoctorApplicationReview({ onBack }) {
                     ))}
                   </div>
                 )}
+                                {/* Team Size Reason */}
+                {app.team_size_reason && (
+                  <div className="flex items-start gap-2 p-3 rounded-[var(--radius-sm)] bg-amber-500/10 border border-amber-500/20">
+                    <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Team Size Justification</span>
+                      <p className="text-sm text-[var(--text)] mt-0.5">{app.team_size_reason}</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Dynamic Form Responses (collapsible) */}
                 {resp && resp.field_responses && resp.field_responses.length > 0 && (

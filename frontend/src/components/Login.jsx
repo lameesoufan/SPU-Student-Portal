@@ -52,18 +52,18 @@ export default function Login({ onLogin, onRegister }) {
     }
 
     setLoading(true);
-    try {
+  try {
       const res = await login(form.username, form.password);
-      localStorage.setItem('access', res.data.access);
-      localStorage.setItem('refresh', res.data.refresh);
-      const payload = JSON.parse(atob(res.data.access.split('.')[1]));
+      const data = res.data;
+      // Tokens now in HttpOnly cookies — no localStorage needed
       onLogin({
-        username: form.username,
-        role: payload.role,
-        must_change_password: payload.must_change_password,
-        department: payload.department,
+        username: data.username || form.username,
+        role: data.role,
+        must_change_password: data.must_change_password,
+       department: data.department,
       });
-    } catch (err) {
+    }
+    catch (err) {
       setServerError(err.response?.data?.detail || 'Invalid credentials. Please try again.');
       setShaking(true);
       setTimeout(() => setShaking(false), 400);

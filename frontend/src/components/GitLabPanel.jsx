@@ -54,7 +54,7 @@ function TokenSteps({ gitlabUrl }) {
       ))}
       {gitlabUrl && (
         <a
-          href={`${gitlabUrl}/users/sign_out`}
+          href={gitlabUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 bg-violet-500/10 text-violet-600 border border-violet-500/20 px-3.5 py-2 rounded-lg font-semibold text-[13px] hover:bg-violet-500/20 transition-colors mx-auto mt-1"
@@ -93,6 +93,7 @@ export default function GitLabPanel({ boardId, canManage = false }) {
 
   const [tokenInput, setTokenInput] = useState('');
   const [tokenVerified, setTokenVerified] = useState(null);
+  const [tokenError, setTokenError] = useState('');
   const [verifiedInfo, setVerifiedInfo] = useState(null);
   const [repoName, setRepoName] = useState('');
   const [repoVisibility, setRepoVisibility] = useState('private');
@@ -163,12 +164,18 @@ export default function GitLabPanel({ boardId, canManage = false }) {
     if (!tokenInput.trim()) return;
     setActionLoading(true);
     setTokenVerified(null);
+    setTokenError('');
     try {
       const res = await verifyGitLabToken(tokenInput.trim());
       setTokenVerified(true);
       setVerifiedInfo(res.data);
     } catch (err) {
       setTokenVerified(false);
+      setTokenError(
+        err.isSessionExpired || err.response?.status === 401
+          ? 'Your login session expired. Please sign in again and retry.'
+          : err.response?.data?.message || 'Invalid Token. Please check and try again.'
+      );
     } finally {
       setActionLoading(false);
     }
@@ -182,6 +189,7 @@ export default function GitLabPanel({ boardId, canManage = false }) {
       setShowLinkModal(false);
       setTokenInput('');
       setTokenVerified(null);
+      setTokenError('');
       setVerifiedInfo(null);
       loadData();
     } catch (err) {
@@ -342,9 +350,10 @@ export default function GitLabPanel({ boardId, canManage = false }) {
               <label className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Personal Access Token</label>
               <input
                 type="password"
+                autoComplete="new-password"
                 className="w-full py-2.5 px-3 text-sm border-[1.5px] border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none"
                 value={tokenInput}
-                onChange={(e) => { setTokenInput(e.target.value); setTokenVerified(null); }}
+                onChange={(e) => { setTokenInput(e.target.value); setTokenVerified(null); setTokenError(''); }}
                 placeholder="glpat-..."
               />
               <button
@@ -373,7 +382,7 @@ export default function GitLabPanel({ boardId, canManage = false }) {
 
             {tokenVerified === false && (
               <div className="mt-3 py-3 px-4 bg-red-500/10 border border-red-500/20 rounded-lg text-[13px] text-red-600 flex items-center gap-1.5">
-                <XCircle size={14} /> Invalid Token. Please check and try again.
+                <XCircle size={14} /> {tokenError || 'Invalid Token. Please check and try again.'}
               </div>
             )}
 
@@ -391,7 +400,7 @@ export default function GitLabPanel({ boardId, canManage = false }) {
               A GitLab repository will be created and linked to this project.
               {gitlabUrl && (
                 <> You can open GitLab from{' '}
-                  <a href={`${gitlabUrl}/users/sign_out`} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline font-semibold">{gitlabUrl} ↗</a>
+                  <a href={gitlabUrl} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline font-semibold">{gitlabUrl} ↗</a>
                 </>
               )}
             </p>
@@ -451,7 +460,7 @@ export default function GitLabPanel({ boardId, canManage = false }) {
           </span>
         </div>
         <div className="flex gap-2 items-center">
-          <button onClick={() => handleOpenGitLab(gitlabProject.web_url)} className="inline-flex items-center gap-1.5 py-2 px-3.5 text-[13px] font-semibold rounded-lg bg-violet-500/10 text-violet-600 border border-violet-500/20 hover:bg-violet-500/20 transition-colors">
+          <button onClick={() => handleOpenGitLab(gitlabUrl)} className="inline-flex items-center gap-1.5 py-2 px-3.5 text-[13px] font-semibold rounded-lg bg-violet-500/10 text-violet-600 border border-violet-500/20 hover:bg-violet-500/20 transition-colors">
             <ExternalLink size={13} /> Open in GitLab
           </button>
           <button className="inline-flex items-center gap-1.5 py-2 px-3 text-[13px] font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={handleSyncCommits}>
@@ -633,7 +642,7 @@ export default function GitLabPanel({ boardId, canManage = false }) {
 
           <div className="mt-4 flex flex-col gap-1.5">
             <label className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Personal Access Token</label>
-            <input type="password" className="w-full py-2.5 px-3 text-sm border-[1.5px] border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none" value={tokenInput} onChange={(e) => { setTokenInput(e.target.value); setTokenVerified(null); }} placeholder="glpat-..." />
+            <input type="password" className="w-full py-2.5 px-3 text-sm border-[1.5px] border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none" value={tokenInput} onChange={(e) => { setTokenInput(e.target.value); setTokenVerified(null); setTokenError(''); }} placeholder="glpat-..." />
             <button className="inline-flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50" onClick={handleVerifyToken} disabled={!tokenInput.trim() || actionLoading}>
               {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
               {actionLoading ? 'Verifying...' : 'Verify'}
@@ -650,7 +659,7 @@ export default function GitLabPanel({ boardId, canManage = false }) {
 
           {tokenVerified === false && (
             <div className="mt-3 py-3 px-4 bg-red-500/10 border border-red-500/20 rounded-lg text-[13px] text-red-600 flex items-center gap-1.5">
-              <XCircle size={14} /> Invalid Token. Please check and try again.
+              <XCircle size={14} /> {tokenError || 'Invalid Token. Please check and try again.'}
             </div>
           )}
 

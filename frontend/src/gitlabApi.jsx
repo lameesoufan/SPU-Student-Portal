@@ -1,75 +1,104 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8000/api/gitlab';
+const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:8000') + '/api/gitlab';
+const ROOT_API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('access');
-  return {
-    headers: { Authorization: `Bearer ${token}` },
-  };
-};
+const api = axios.create({
+  baseURL: API_BASE,
+  withCredentials: true,  // ← يبعث الـ cookies تلقائياً
+});
+let refreshPromise = null;
+
+// لا نحتاج نحط Authorization header يدوي — الـ cookies بتنرسل تلقائياً
+// والـ JWTCookieMiddleware بالـ backend بيقري الـ cookie وبيحط الـ header
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const original = error.config;
+    const status = error.response?.status;
+    const isTokenRequest = original?.url?.includes('/api/token/');
+
+    if (status !== 401 || !original || original._retry || isTokenRequest) {
+      return Promise.reject(error);
+    }
+
+    original._retry = true;
+    try {
+      if (!refreshPromise) {
+        refreshPromise = axios.post(`${ROOT_API_BASE}/api/token/refresh/`, {}, {
+          withCredentials: true,
+        }).finally(() => { refreshPromise = null; });
+      }
+      await refreshPromise;
+      return api(original);
+    } catch (refreshError) {
+      refreshError.isSessionExpired = true;
+      return Promise.reject(refreshError);
+    }
+  }
+);
 
 // ===== Health Check =====
 export const checkGitLabHealth = () =>
-  axios.get(`${API_BASE}/health/`, getAuthHeaders());
+  api.get('/health/');
 
 // ===== GitLab Config =====
 export const getGitLabConfig = () =>
-  axios.get(`${API_BASE}/config/`, getAuthHeaders());
+  api.get('/config/');
 
 // ===== Account Linking =====
 export const verifyGitLabToken = (gitlabToken) =>
-  axios.post(`${API_BASE}/verify-token/`, { gitlab_token: gitlabToken }, getAuthHeaders());
+  api.post('/verify-token/', { gitlab_token: gitlabToken });
 
 export const linkGitLabAccount = (gitlabToken, gitlabUsername) =>
-  axios.post(`${API_BASE}/link-account/`, {
+  api.post('/link-account/', {
     gitlab_token: gitlabToken,
     gitlab_username: gitlabUsername || undefined,
-  }, getAuthHeaders());
+  });
 
 export const unlinkGitLabAccount = () =>
-  axios.post(`${API_BASE}/unlink-account/`, {}, getAuthHeaders());
+  api.post('/unlink-account/');
 
 export const getGitLabAccountStatus = () =>
-  axios.get(`${API_BASE}/account-status/`, getAuthHeaders());
+  api.get('/account-status/');
 
 // ===== Project (per board) =====
 export const createGitLabProject = (boardId, data = {}) =>
-  axios.post(`${API_BASE}/board/${boardId}/create-project/`, data, getAuthHeaders());
+  api.post(`/board/${boardId}/create-project/`, data);
 
 export const getBoardGitLabInfo = (boardId) =>
-  axios.get(`${API_BASE}/board/${boardId}/`, getAuthHeaders());
+  api.get(`/board/${boardId}/`);
 
 // ===== Members =====
 export const getBoardMembers = (boardId) =>
-  axios.get(`${API_BASE}/board/${boardId}/members/`, getAuthHeaders());
+  api.get(`/board/${boardId}/members/`);
 
 export const addBoardMember = (boardId, gitlabUsername, accessLevel = 30) =>
-  axios.post(`${API_BASE}/board/${boardId}/members/add/`, {
+  api.post(`/board/${boardId}/members/add/`, {
     gitlab_username: gitlabUsername,
     access_level: accessLevel,
-  }, getAuthHeaders());
+  });
 
 export const removeBoardMember = (boardId, gitlabUserId) =>
-  axios.post(`${API_BASE}/board/${boardId}/members/remove/`, {
+  api.post(`/board/${boardId}/members/remove/`, {
     gitlab_user_id: gitlabUserId,
-  }, getAuthHeaders());
+  });
 
 // ===== Commits =====
 export const getBoardCommits = (boardId, params = {}) => {
   const query = new URLSearchParams(params).toString();
-  return axios.get(`${API_BASE}/board/${boardId}/commits/${query ? `?${query}` : ''}`, getAuthHeaders());
+  return api.get(`/board/${boardId}/commits/${query ? `?${query}` : ''}`);
 };
 
 export const getCommitDetail = (boardId, commitId) =>
-  axios.get(`${API_BASE}/board/${boardId}/commits/${commitId}/`, getAuthHeaders());
+  api.get(`/board/${boardId}/commits/${commitId}/`);
 
 export const getBoardCommitStats = (boardId) =>
-  axios.get(`${API_BASE}/board/${boardId}/stats/`, getAuthHeaders());
+  api.get(`/board/${boardId}/stats/`);
 
 export const syncCommits = (boardId) =>
-  axios.post(`${API_BASE}/board/${boardId}/sync/`, {}, getAuthHeaders());
+  api.post(`/board/${boardId}/sync/`);
 
 // ===== All Boards Stats =====
 export const getAllBoardsStats = () =>
-  axios.get(`${API_BASE}/stats/`, getAuthHeaders());
+  api.get('/stats/');

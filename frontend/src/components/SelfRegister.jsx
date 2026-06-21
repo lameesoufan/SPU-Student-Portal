@@ -32,15 +32,14 @@ export default function SelfRegister({ onRegistered, onBack }) {
     setLoading(true);
     try {
       const res = await studentSelfRegister(form.university_id, form.password);
-      localStorage.setItem('access', res.data.access);
-      localStorage.setItem('refresh', res.data.refresh);
-      const payload = JSON.parse(atob(res.data.access.split('.')[1]));
+// JWT tokens are set as HttpOnly cookies by the backend automatically
+      const data = res.data;
       onRegistered({
-        username: payload.username,
-        role: payload.role,
-        must_change_password: payload.must_change_password,
-        department: payload.department,
-      });
+       username: data.username || form.university_id,
+      role: data.role || 'student',
+      must_change_password: data.must_change_password ?? true,
+     department: data.department || '',
+});
     } catch (err) {
       setError(err.response?.data?.error || 'Verification failed. Please try again.');
     } finally {

@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchHodPendingDoctorIdeas, hodReviewDoctorIdea } from '../api';
-import {
-  Lightbulb, Loader2, ClipboardCheck, CheckCircle2, XCircle,
-  User, Users, Wrench,
-} from 'lucide-react';
+import { FileCheck2, Loader2, ClipboardCheck, CheckCircle2, XCircle, User, Users, ChevronDown, GraduationCap, Calendar, Stethoscope, Info, Lightbulb, Wrench } from 'lucide-react';
 
 export default function HodIdeaReview({ onBack }) {
   const [ideas, setIdeas]         = useState([]);

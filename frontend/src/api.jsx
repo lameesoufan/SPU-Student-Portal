@@ -1,14 +1,18 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
-const api = axios.create({ baseURL: API_BASE });
+const api = axios.create({
+  baseURL: API_BASE,
+  withCredentials: true,  // ← مهم: يبعث الـ cookies مع كل request
+});
 let refreshPromise = null;
 
-// Attach token to every request
+// No need for request interceptor — cookies are sent automatically!
+// But keep a fallback for any edge cases
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  // مع HttpOnly cookies، ما نحتاج نحط Authorization header يدوي
+  // الـ JWTCookieMiddleware بالـ backend بيقري الـ cookie وبيحط الـ header
   return config;
 });
 
@@ -23,28 +27,19 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const refresh = localStorage.getItem('refresh');
-    if (!refresh) {
-      localStorage.removeItem('access');
-      return Promise.reject(error);          // ← شلينا dispatch
-    }
-
     original._retry = true;
     try {
       if (!refreshPromise) {
-        refreshPromise = axios.post(`${API_BASE}/api/token/refresh/`, { refresh })
-          .finally(() => { refreshPromise = null; });
+        refreshPromise = axios.post(`${API_BASE}/api/token/refresh/`, {}, {
+          withCredentials: true,  // ← يبعث الـ refresh cookie
+        }).finally(() => { refreshPromise = null; });
       }
-      const res = await refreshPromise;
-      localStorage.setItem('access', res.data.access);
-      if (res.data.refresh) localStorage.setItem('refresh', res.data.refresh);
-      original.headers = original.headers || {};
-      original.headers.Authorization = `Bearer ${res.data.access}`;
+      await refreshPromise;
+      // الـ backend بيضبط الـ cookies الجديدة تلقائياً
       return api(original);
     } catch (refreshError) {
-      localStorage.removeItem('access');
-      localStorage.removeItem('refresh');
-      return Promise.reject(refreshError);    // ← شلينا dispatch
+      // Refresh فشل — الـ cookies انحذفت أو انتهت
+      return Promise.reject(refreshError);
     }
   }
 );
@@ -57,12 +52,12 @@ export const importUsers = (file, role) => {
   form.append('file', file);
   form.append('role', role);
   return api.post('/api/import-users/', form, {
-  headers: { 'Content-Type': 'multipart/form-data' },
+    headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
 
 export const logoutUser = () =>
-  api.post('/api/logout/', { refresh: localStorage.getItem('refresh') });
+  api.post('/api/logout/');
 
 export const changePassword = (new_password, confirm_password) =>
   api.post('/api/change-password/', { new_password, confirm_password });
@@ -72,6 +67,13 @@ export const fetchDepartments = () => api.get('/api/departments/');
 export const assignHod = (doctor_id, department) =>
   api.post('/api/assign-hod/', { doctor_id, department });
 
+export const uploadReferenceDb = (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return api.post('/api/upload-reference/', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
 
 export const studentSelfRegister = (university_id, password) =>
   api.post('/api/register/', { university_id, password });

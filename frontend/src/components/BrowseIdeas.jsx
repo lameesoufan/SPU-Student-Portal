@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { browseIdeas, applyOnIdea, fetchMyIdeaApplication, fetchMyProposal, fetchStudentForm } from '../api';
+import { browseIdeas, applyOnIdea, fetchMyIdeaApplication, fetchMyProposal, fetchStudentForm, fetchMyBoard } from '../api';
 import StudentSearch from './StudentSearch';
 import DynamicCheckboxGroup from './DynamicCheckboxGroup';
 import { Users, User, Award, Briefcase, Wrench, Search, Lock, Send, CheckCircle, Clock, BookOpen } from 'lucide-react';
@@ -14,7 +14,7 @@ const STATUS_META = {
   rejected_insufficient_members: { label: 'Rejected (Insufficient Members)', cls: 'badge-danger' },
 };
 
-const EMPTY_APPLY = { team_size: 1, member_ids: [] };
+const EMPTY_APPLY = { team_size: 1, member_ids: [], team_size_reason: '' };
 
 const emptyValueForField = (field) => field.field_type === 'checkbox' ? [] : '';
 
@@ -34,13 +34,23 @@ export default function BrowseIdeas({ onBack }) {
   const [loadingDynForm, setLoadingDynForm] = useState(false);
 
   useEffect(() => {
-    Promise.all([browseIdeas(), fetchMyIdeaApplication(), fetchMyProposal()])
-      .then(([ideasRes, appRes, propRes]) => {
-        setIdeas(ideasRes.data);
-        if (appRes.data && ['awaiting_members', 'pending_doctor', 'pending_hod', 'registered'].includes(appRes.data.status)) {
-          setMyApp(appRes.data);
-        } else if (propRes.data && ['pending_supervisor', 'pending_hod', 'assigned'].includes(propRes.data.status)) {
-          setMyApp({ _type: 'proposal', status: propRes.data.status });
+    Promise.allSettled([browseIdeas(), fetchMyIdeaApplication(), fetchMyProposal(), fetchMyBoard()])
+      .then(([ideasRes, appRes, propRes, boardRes]) => {
+        if (ideasRes.status === 'fulfilled') {
+          setIdeas(ideasRes.value.data);
+        } else {
+          setError('Failed to load ideas.');
+        }
+
+        const boardData = boardRes.status === 'fulfilled' ? boardRes.value.data : null;
+        const appData = appRes.status === 'fulfilled' ? appRes.value.data : null;
+        const propData = propRes.status === 'fulfilled' ? propRes.value.data : null;
+        if (boardData && boardData.has_project) {
+          setMyApp({ _type: 'board', status: 'registered', idea_title: boardData.board?.title || 'Your Project' });
+        } else if (appData && ['awaiting_members', 'pending_doctor', 'pending_hod', 'registered'].includes(appData.status)) {
+          setMyApp(appData);
+        } else if (propData && ['pending_supervisor', 'pending_hod', 'assigned'].includes(propData.status)) {
+          setMyApp({ _type: 'proposal', status: propData.status });
         } else {
           setMyApp(null);
         }
@@ -51,7 +61,8 @@ export default function BrowseIdeas({ onBack }) {
 
   const openApply = (idea) => {
     setApplyModal(idea);
-    setApplyForm({ team_size: 1, member_ids: [] });
+    setApplyForm({ team_size: 1, member_ids: [], team_size_reason: '' });
+    // باقي الكود نفسو...
     setApplyError('');
     setDynForm(null);
     setDynValues({});
@@ -69,9 +80,13 @@ export default function BrowseIdeas({ onBack }) {
       .finally(() => setLoadingDynForm(false));
   };
 
-  const handleTeamSizeChange = (size) => {
+const handleTeamSizeChange = (size) => {
     const s = Number(size);
-    setApplyForm({ team_size: s, member_ids: Array(s - 1).fill('') });
+    setApplyForm(prev => ({
+      team_size: s,
+      member_ids: Array(s - 1).fill(''),
+      team_size_reason: (s === 2 || s === 3) ? '' : prev.team_size_reason || '',
+    }));
   };
 
   const handleMemberChange = (idx, val) => {
@@ -112,6 +127,8 @@ export default function BrowseIdeas({ onBack }) {
         });
       }
 
+      fd.append('team_size_reason', (Number(applyForm.team_size) === 1 || Number(applyForm.team_size) > 3) ? applyForm.team_size_reason.trim() : '');
+      fd.append('team_size', applyForm.team_size);
       const res = await applyOnIdea(applyModal.id, fd);
       setMyApp(res.data);
       setApplyModal(null);
@@ -166,7 +183,12 @@ export default function BrowseIdeas({ onBack }) {
             <span>You already have an active idea proposal. You cannot apply on another idea.</span>
           </div>
         )}
-
+        {myApp && myApp._type === 'board' && (
+          <div className="flex items-center gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm">
+            <CheckCircle size={16} />
+            <span>You already have a registered project. You cannot apply on another idea.</span>
+          </div>
+        )}
         {error && (
           <div className="flex items-center gap-2 p-3 rounded-[var(--radius-sm)] bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
             <Lock size={16} />
@@ -227,12 +249,13 @@ export default function BrowseIdeas({ onBack }) {
             const isApplied  = myApp && myApp.idea === idea.id;
             const isTaken    = idea.is_taken;
             const canApply   = !myApp && !isTaken;
+            const hasProject = !!myApp;
             const team       = idea.registered_team;
 
             return (
               <div
                 key={idea.id}
-                className={`bg-[var(--card)] border border-[var(--border)] rounded-[var(--radius)] shadow-[var(--shadow)] overflow-hidden transition-all duration-300 hover:-translate-y-[3px] hover:shadow-[0_8px_30px_rgba(139,92,246,0.15)] hover:border-[var(--primary-border)] ${isTaken ? 'opacity-75 hover:translate-y-0 hover:shadow-[var(--shadow)] hover:border-[var(--border)]' : ''}`}
+                className={`bg-[var(--card)] border border-[var(--border)] rounded-[var(--radius)  ${(isTaken || hasProject) ? 'opacity-75 hover:translate-y-0 hover:shadow-[var(--shadow)] hover:border-[var(--border)]' : ''}`}
               >
                 <div className="p-6 flex flex-col gap-[18px]">
                   {/* Card header */}
@@ -315,21 +338,17 @@ export default function BrowseIdeas({ onBack }) {
                           {(STATUS_META[myApp.status] || STATUS_META.rejected).label}
                         </span>
                       </div>
-                    ) : isTaken ? (
+                    ) : isTaken || hasProject ? (
                       <button className="w-full inline-flex items-center justify-center gap-2 opacity-60 bg-transparent text-[var(--text-muted)] py-2.5 px-4 rounded-[var(--radius-sm)] cursor-not-allowed" disabled>
-                        <Lock size={16} /> Not Available
+                        <Lock size={16} /> {hasProject ? 'Already Have Project' : 'Not Available'}
                       </button>
-                    ) : canApply ? (
+                    ) : (
                       <button
                         className="w-full inline-flex items-center justify-center gap-2 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-semibold py-2.5 px-4 rounded-[var(--radius-sm)] transition-all duration-200 hover:shadow-md"
                         onClick={() => openApply(idea)}
                       >
                         <Send size={16} />
                         Apply for Project
-                      </button>
-                    ) : (
-                      <button className="w-full inline-flex items-center justify-center gap-2 opacity-60 bg-transparent text-[var(--text-muted)] py-2.5 px-4 rounded-[var(--radius-sm)] cursor-not-allowed" disabled>
-                        Not Available
                       </button>
                     )}
                   </div>
@@ -372,18 +391,41 @@ export default function BrowseIdeas({ onBack }) {
                   ))}
                 </select>
               </div>
-
-              {applyForm.member_ids.map((val, idx) => (
-                <div className="mb-4" key={idx}>
-                  <label htmlFor={`member-${idx}`} className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">Team Member {idx + 2}</label>
-                  <StudentSearch
-                    id={`member-${idx}`}
-                    value={val}
-                    onChange={(username) => handleMemberChange(idx, username)}
-                    placeholder="Search by student name or university ID…"
+              {(Number(applyForm.team_size) === 1 || Number(applyForm.team_size) > 3) && (
+                <div className="mb-4">
+                  <label htmlFor="team-size-reason" className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">
+                    Justification for team size
+                    <span className="text-[var(--danger)] ml-0.5">*</span>
+                    <span className="text-xs text-[var(--text-muted)] font-normal ml-2">
+                      {Number(applyForm.team_size) === 1 ? 'Why are you working alone?' : 'Why do you need more than 3 members?'}
+                    </span>
+                  </label>
+                  <textarea
+                    id="team-size-reason"
+                    className="w-full bg-[var(--input-bg)] text-[var(--text)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors resize-none"
+                    rows={3}
+                    value={applyForm.team_size_reason}
+                    onChange={(e) => setApplyForm(prev => ({ ...prev, team_size_reason: e.target.value }))}
+                    placeholder={Number(applyForm.team_size) === 1
+                      ? 'Explain why you are applying without team members…'
+                      : 'Explain why your team needs more than 3 members…'}
+                    required
                   />
                 </div>
-              ))}
+              )}
+
+{applyForm.member_ids.map((val, idx) => (
+  <div className="mb-4" key={idx}>
+    <label htmlFor={`member-${idx}`} className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">Team Member {idx + 2}</label>
+    <StudentSearch
+      id={`member-${idx}`}
+      value={val}
+      onChange={(username) => handleMemberChange(idx, username)}
+      placeholder="Search by student name or university ID…"
+    />
+  </div>
+))}
+
 
               {loadingDynForm && (
                 <div className="py-2 flex items-center gap-2">

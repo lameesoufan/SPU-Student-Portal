@@ -24,10 +24,9 @@ function AppInner() {
   const handleLogin      = (u) => { setUser(u); setPage('dashboard'); setScreen('login'); };
   const handleRegistered = (u) => { setUser(u); setPage('dashboard'); };
 
-  const handleLogout = async () => {
+const handleLogout = async () => {
     try { await logoutUser(); } catch { /* proceed */ }
-    localStorage.removeItem('access');
-    localStorage.removeItem('refresh');
+    // Cookies are cleared by the backend — no localStorage to clean
     setUser(null);
     setScreen('login');
     setPage('dashboard');

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { submitStudentProposal, fetchMyProposal, fetchDoctorsList, fetchStudentForm } from '../api';
+
 import StudentSearch from './StudentSearch';
 import DynamicCheckboxGroup from './DynamicCheckboxGroup';
 import {
   Send, Users, Clock, RefreshCw, CheckCircle, XCircle, Info,
   Lightbulb, UserPlus, Building2, Clipboard, ChevronRight, ChevronDown, ChevronLeft,
-  Loader2, User, Check
+  Loader2, User, Check, UserMinus
 } from 'lucide-react';
+import { submitStudentProposal, fetchMyProposal, fetchDoctorsList, fetchStudentForm, replaceProposalMember } from '../api';
 
 const DEPARTMENTS = [
   { value: 'software_engineering',    label: 'Software Engineering' },
@@ -40,7 +41,7 @@ const STATUS_STEPS = {
   rejected:           0,
 };
 
-const EMPTY = { title: '', description: '', department: '', supervisor: '', team_size: 2, team_size_reason: '', member_ids: [''] };
+const EMPTY = { title: '', description: '', department: '', supervisor: '', team_size: 2, member_ids: [''], team_size_reason: '' };
 const emptyValueForField = (field) => field.field_type === 'checkbox' ? [] : '';
 
 const STEPS = [
@@ -62,7 +63,9 @@ export default function ProposeIdea({ onBack }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [dynForm, setDynForm]       = useState(null);
   const [dynValues, setDynValues]   = useState({});
-
+  const [replacingId, setReplacingId]     = useState(null);   // username of member being replaced
+  const [replaceLoading, setReplaceLoading] = useState(false);
+  const [replaceError, setReplaceError]   = useState('');
   useEffect(() => {
     setLoading(true);
     Promise.allSettled([fetchMyProposal(), fetchDoctorsList()])
@@ -100,13 +103,14 @@ export default function ProposeIdea({ onBack }) {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleTeamSizeChange = (size) => {
+const handleTeamSizeChange = (size) => {
     const s = Number(size);
     setForm((prev) => ({
       ...prev,
       team_size: s,
       member_ids: Array(s - 1).fill(''),
-      team_size_reason: (s === 1 || s === 4) ? prev.team_size_reason : '',
+      // Clear reason if team_size is normal (2 or 3)
+      team_size_reason: (s === 2 || s === 3) ? '' : prev.team_size_reason,
     }));
   };
 
@@ -152,7 +156,7 @@ export default function ProposeIdea({ onBack }) {
         department:       form.department,
         supervisor:       Number(form.supervisor),
         team_size:        Number(form.team_size),
-        team_size_reason: form.team_size_reason || '',
+        team_size_reason: (Number(form.team_size) === 1 || Number(form.team_size) > 3) ? form.team_size_reason.trim() : '',
         member_ids:       form.member_ids.filter(Boolean),
         form_id:          dynForm?.id || null,
         field_responses:  dynForm
@@ -169,7 +173,23 @@ export default function ProposeIdea({ onBack }) {
       setSubmitting(false);
     }
   };
-
+    const handleReplaceMember = async (oldMemberId, newMemberUsername) => {
+    if (!newMemberUsername.trim()) return;
+    setReplaceLoading(true);
+    setReplaceError('');
+    try {
+      await replaceProposalMember(existing.id, oldMemberId, newMemberUsername);
+      // Refresh proposal data
+      const res = await fetchMyProposal();
+      setExisting(res.data || null);
+      setReplacingId(null);
+    } catch (err) {
+      const data = err.response?.data;
+      setReplaceError(data?.error || 'Failed to replace member. Please try again.');
+    } finally {
+      setReplaceLoading(false);
+    }
+  };
   /* ── Loading State ── */
   if (loading) {
     return (
@@ -251,7 +271,15 @@ export default function ProposeIdea({ onBack }) {
                 </div>
               ))}
             </div>
-
+            {/* Team Size Reason */}
+{existing.team_size_reason && (
+  <div className="bg-amber-500/5 p-3.5 rounded-[var(--radius-sm)] border border-amber-500/20">
+    <span className="text-xs text-amber-600 dark:text-amber-400 uppercase tracking-wide font-semibold flex items-center gap-1.5">
+      <Info size={12} /> Team Size Justification
+    </span>
+    <p className="text-sm text-[var(--text)] mt-1.5">{existing.team_size_reason}</p>
+  </div>
+)}
             {/* Team Members */}
             {existing.invitations && existing.invitations.length > 0 && (
               <div className="flex flex-col gap-2">
@@ -259,17 +287,60 @@ export default function ProposeIdea({ onBack }) {
                 {existing.invitations.map((inv) => {
                   const InvIcon = inv.status === 'accepted' ? CheckCircle : inv.status === 'rejected' ? XCircle : Clock;
                   const invColor = inv.status === 'accepted' ? 'green' : inv.status === 'rejected' ? 'red' : 'blue';
+                  const canReplace = inv.status === 'rejected' && existing.status === 'awaiting_members';
+                  const isReplacing = replacingId === inv.invitee_id;
+
                   return (
-                    <div key={inv.id} className="flex items-center gap-3 py-2 border-b border-[var(--border-light)] last:border-0">
-                      <div className="w-8 h-8 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-[var(--text-muted)]">
-                        <User size={18} />
+                    <div key={inv.id} className="flex flex-col gap-2">
+                      <div className="flex items-center gap-3 py-2 border-b border-[var(--border-light)] last:border-0">
+                        <div className="w-8 h-8 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-[var(--text-muted)]">
+                          <User size={18} />
+                        </div>
+                        <span className="text-sm text-[var(--text)] font-medium flex-1">{inv.invitee_name}</span>
+                        <span className="text-xs text-[var(--text-muted)]">{inv.invitee_id}</span>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${BADGE_STYLES[invColor]}`}>
+                          <InvIcon size={12} />
+                          {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                        </span>
+                        {canReplace && !isReplacing && (
+                          <button
+                            type="button"
+                            onClick={() => { setReplacingId(inv.invitee_id); setReplaceError(''); }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-medium bg-amber-500/10 text-amber-600 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
+                          >
+                            <UserMinus size={12} />
+                            Replace
+                          </button>
+                        )}
                       </div>
-                      <span className="text-sm text-[var(--text)] font-medium flex-1">{inv.invitee_name}</span>
-                      <span className="text-xs text-[var(--text-muted)]">{inv.invitee_id}</span>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${BADGE_STYLES[invColor]}`}>
-                        <InvIcon size={12} />
-                        {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
-                      </span>
+                      {/* Replace member search */}
+                      {isReplacing && (
+                        <div className="ml-11 flex flex-col gap-2 p-3 rounded-[var(--radius-sm)] bg-amber-500/5 border border-amber-500/15">
+                          <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                            Choose a replacement for <strong>{inv.invitee_name}</strong>:
+                          </span>
+                          <StudentSearch
+                            value=""
+                            onChange={(username) => handleReplaceMember(inv.invitee_id, username)}
+                            placeholder="Search for a new team member…"
+                          />
+                          {replaceLoading && (
+                            <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
+                              <Loader2 size={12} className="animate-spin" /> Replacing…
+                            </span>
+                          )}
+                          {replaceError && (
+                            <span className="text-xs text-red-500">{replaceError}</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => { setReplacingId(null); setReplaceError(''); }}
+                            className="text-xs text-[var(--text-muted)] hover:text-[var(--text)] transition-colors self-start"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -492,42 +563,51 @@ export default function ProposeIdea({ onBack }) {
                 </div>
               </div>
               <div className="flex flex-col gap-1.5" style={{ maxWidth: 400 }}>
-                <label className="text-sm font-semibold text-[var(--text)]">Team Size</label>
-                <div className="flex gap-3">
-                  {[1, 2, 3, 4].map((n) => (
-                    <button
-                      key={n} type="button"
-                      className={`flex flex-col items-center px-6 py-3 rounded-xl border-2 transition-all ${
-                        form.team_size === n
-                          ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]'
-                          : 'border-[var(--border)] bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:border-[var(--primary)]/50'
-                      }`}
-                      onClick={() => handleTeamSizeChange(n)}
-                    >
-                      <span className="text-2xl font-bold">{n}</span>
-                      <span className="text-xs mt-1">{n === 1 ? 'Solo' : 'Members'}</span>
-                    </button>
-                  ))}
-                </div>
-                              </div>
-              {(form.team_size === 1 || form.team_size === 4) && (
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="team_size_reason" className="text-sm font-semibold text-[var(--text)]">
-                    Justification for {form.team_size === 1 ? 'Solo Project' : '4-Member Team'} <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    id="team_size_reason"
-                    name="team_size_reason"
-                    value={form.team_size_reason}
-                    onChange={handleChange}
-                    placeholder={form.team_size === 1 ? 'Explain why this project should be done individually...' : 'Explain why this project requires 4 team members...'}
-                    rows={3}
-                    required
-                    className={inputCls}
-                  />
-                  <span className="text-xs text-[var(--text-muted)]">Required: please provide a justification for this team size.</span>
-                </div>
-              )}
+<label className="text-sm font-semibold text-[var(--text)]">Team Size</label>
+<div className="flex gap-3">
+  {[1, 2, 3].map((n) => (
+    <button
+      key={n} type="button"
+      className={`flex flex-col items-center px-6 py-3 rounded-xl border-2 transition-all ${
+        form.team_size === n
+          ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]'
+          : 'border-[var(--border)] bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:border-[var(--primary)]/50'
+      }`}
+      onClick={() => handleTeamSizeChange(n)}
+    >
+      <span className="text-2xl font-bold">{n}</span>
+      <span className="text-xs mt-1">{n === 1 ? 'Solo' : 'Members'}</span>
+    </button>
+  ))}
+</div>
+</div>
+
+{/* Team Size Reason - shown when team_size is 1 or > 3 */}
+{(Number(form.team_size) === 1 || Number(form.team_size) > 3) && (
+  <div className="flex flex-col gap-1.5">
+    <label htmlFor="team-size-reason" className="text-sm font-semibold text-[var(--text)]">
+      Justification for team size
+      <span className="text-[var(--danger)] ml-0.5">*</span>
+      <span className="text-xs text-[var(--text-muted)] font-normal ml-2">
+        {Number(form.team_size) === 1 ? 'Why are you working alone?' : 'Why do you need more than 3 members?'}
+      </span>
+    </label>
+    <textarea
+      id="team-size-reason"
+      name="team_size_reason"
+      className={inputCls + ' resize-none'}
+      rows={3}
+      value={form.team_size_reason}
+      onChange={handleChange}
+      placeholder={Number(form.team_size) === 1
+        ? 'Explain why you are submitting this proposal without team members…'
+        : 'Explain why your team needs more than 3 members…'}
+      required
+    />
+  </div>
+)}
+
+
                             {form.member_ids.map((val, idx) => (
                 <div key={idx} className="flex flex-col gap-1.5">
                   <label htmlFor={`p-member-${idx}`} className="text-sm font-semibold text-[var(--text)]">
@@ -586,7 +666,7 @@ export default function ProposeIdea({ onBack }) {
                   { label: 'Title', value: form.title || '—' },
                   { label: 'Department', value: DEPARTMENTS.find(d => d.value === form.department)?.label || '—' },
                   { label: 'Supervisor', value: doctors.find(d => d.id === Number(form.supervisor))?.name || '—' },
-                  { label: 'Team Size', value: `${form.team_size} students` },
+                  { label: 'Team Size', value: `${form.team_size} student${form.team_size > 1 ? 's' : ''}` },
                 ].map(item => (
                   <div key={item.label} className="bg-[var(--bg-tertiary)] p-3 rounded-[var(--radius-sm)] border border-[var(--border-light)]">
                     <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">{item.label}</span>
@@ -594,11 +674,17 @@ export default function ProposeIdea({ onBack }) {
                   </div>
                 ))}
               </div>
-              <div className="bg-[var(--bg-tertiary)] p-3 rounded-[var(--radius-sm)] border border-[var(--border-light)]">
-                <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">Description</span>
-                <p className="text-sm text-[var(--text)] mt-1">{form.description || '—'}</p>
-              </div>
-            </div>
+  <div className="bg-[var(--bg-tertiary)] p-3 rounded-[var(--radius-sm)] border border-[var(--border-light)]">
+  <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">Description</span>
+  <p className="text-sm text-[var(--text)] mt-1">{form.description || '—'}</p>
+</div>
+{form.team_size_reason && (
+  <div className="bg-[var(--bg-tertiary)] p-3 rounded-[var(--radius-sm)] border border-[var(--border-light)]">
+    <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">Team Size Justification</span>
+    <p className="text-sm text-[var(--text)] mt-1">{form.team_size_reason}</p>
+  </div>
+)}
+</div>
           )}
 
           {/* Navigation Buttons */}

@@ -67,7 +67,7 @@ class IsSupervisorOrAdmin(permissions.BasePermission):
             return False
         user = request.user
         return (
-            getattr(user, 'role', None) in ['supervisor', 'hod', 'dean', 'admin']
+            getattr(user, 'role', None) in ['doctor', 'supervisor', 'hod', 'dean', 'admin']
             or user.is_staff
             or user.is_superuser
         )
@@ -206,9 +206,19 @@ class VerifyGitLabTokenView(views.APIView):
                 **gitlab_info,
             })
         except services.GitLabAPIError as e:
+            detail = {
+                'status_code': e.status_code,
+                'gitlab_url': settings.GITLAB_URL,
+            }
+            if settings.DEBUG and e.response:
+                detail['gitlab_response'] = e.response
             return Response({
                 'valid': False,
-                'message': e.message,
+                'message': (
+                    f'{e.message}. تأكد أن التوكن من نفس GitLab: {settings.GITLAB_URL} '
+                    'وأن الـ scope يحتوي api أو read_user.'
+                ),
+                'detail': detail,
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
