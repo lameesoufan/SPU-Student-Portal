@@ -30,7 +30,8 @@ import HodFormBuilder from './HodFormBuilder';
 import HodProjects from './HodProjects';
 import WorkflowBuilder from './WorkflowBuilder';
 import ApplyWorkflow from './ApplyWorkflow';
-import WorkflowReview from './WorkflowReview';
+import WorkflowReview from './WorkflowReview';import MyIdeas from './MyIdeas';         
+import SubmitIdea from './SubmitIdea';
 import { useTheme } from '../ThemeContext';
 import {
   fetchUnreadCount,
@@ -73,6 +74,7 @@ const Icon = {
 /* ── Navigation Items ── */
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Overview', IconComp: Icon.Overview },
+  { id: 'my-ideas', label: 'My Ideas', IconComp: Icon.Lightbulb },
   { id: 'ideas', label: 'Doctor Ideas', IconComp: Icon.Lightbulb },
   { id: 'proposals', label: 'Student Proposals', IconComp: Icon.ClipboardCheck },
   { id: 'applications', label: 'Idea Applications', IconComp: Icon.Inbox },
@@ -85,6 +87,13 @@ const NAV_ITEMS = [
 
 /* ── Module Cards ── */
 const MODULE_CARDS = [
+    {                                              // ← أضف هاد البلوك كامل
+    IconComp: Icon.Lightbulb,
+    label: 'My Ideas',
+    desc: 'Submit and manage your own project ideas (auto-approved)',
+    page: 'my-ideas',
+    gradient: 'linear-gradient(135deg, #ef4444, #f87171)',
+  },
   {
     IconComp: Icon.Lightbulb,
     label: 'Doctor Ideas',
@@ -235,6 +244,21 @@ usePolling(async () => {
 
   /* ── Render sub-pages ── */
   const renderContent = () => {
+      
+    if (page === 'my-ideas') {                                        // ← أضف
+      return (                                                        // ← أضف
+        <div className="std-page-wrapper">                            
+          <MyIdeas onBack={goBack} onSubmitNew={() => setPage('submit-idea')} />  
+        </div>                                                        // ← أضف
+      );                                                              // ← أضف
+    }                                                                 // ← أضف
+    if (page === 'submit-idea') {                                     // ← أضف
+      return (                                                        // ← أضف
+        <div className="std-page-wrapper">                            
+          <SubmitIdea onBack={goBack} />                              
+        </div>                                                        // ← أضف
+      );                                                              // ← أضف
+    }  
     if (page === 'ideas') {
       return (
         <div className="std-page-wrapper">

@@ -28,7 +28,8 @@ class ProjectIdea(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='project_ideas',
-        limit_choices_to={'role': 'doctor'},
+        limit_choices_to={'role__in': ['doctor', 'hod']},
+        
     )
     title           = models.CharField(max_length=255)
     description     = models.TextField()

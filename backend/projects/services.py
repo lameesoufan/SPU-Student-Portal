@@ -56,20 +56,33 @@ def _student_is_active(student):
 # ── UC-01 ─────────────────────────────────────────────────────────────────────
 
 def create_project_idea(*, doctor, title, description, department, required_skills, max_team_size):
+    # ── HoD auto-approval: if the submitter is HoD, skip review ──
+    if doctor.role == 'hod':
+        initial_status = 'approved'
+    else:
+        initial_status = 'pending_review'
+
     idea = ProjectIdea.objects.create(
         doctor=doctor, title=title, description=description,
         department=department, required_skills=required_skills,
-        max_team_size=max_team_size, status='pending_review',
+        max_team_size=max_team_size, status=initial_status,
     )
-    # Notify HoD of the department
-    from django.contrib.auth import get_user_model
-    U = get_user_model()
-    hods = U.objects.filter(role='hod', department=department)
-    notify_many(hods, 'idea_submitted',
-                'New Project Idea Submitted',
-                f'Dr. {doctor.get_full_name() or doctor.username} submitted a new idea: "{title}".')
-    return {'ok': True, 'idea': idea}
 
+    if initial_status == 'pending_review':
+        # Notify HoD of the department for regular doctor ideas
+        from django.contrib.auth import get_user_model
+        U = get_user_model()
+        hods = U.objects.filter(role='hod', department=department)
+        notify_many(hods, 'idea_submitted',
+                    'New Project Idea Submitted',
+                    f'Dr. {doctor.get_full_name() or doctor.username} submitted a new idea: "{title}".')
+    else:
+        # HoD idea — auto-approved notification
+        notify(doctor, 'idea_auto_approved',
+               'Project Idea Auto-Approved',
+               f'Your idea "{title}" has been auto-approved (HoD privilege) and is now visible to students.')
+
+        return {'ok': True, 'idea': idea}
 
 # ── UC-02 ─────────────────────────────────────────────────────────────────────
 
@@ -82,7 +95,7 @@ def student_can_propose(student):
 
 def create_student_proposal(*, student, supervisor, title, description, department,
                              team_size, team_size_reason, member_ids):
-    if not supervisor or supervisor.role != 'doctor':
+    if not supervisor or supervisor.role not in ('doctor', 'hod'):
         return {'ok': False, 'error': 'Supervisor must be a doctor.'}
 
     if team_size not in (1, 2, 3, 4):

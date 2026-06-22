@@ -6,7 +6,7 @@ from django.db.models import Q
 
 from accounts.models import User
 from accounts.throttles import ProposeIdeaThrottle
-from .permissions import IsDoctor, IsStudent, IsHod
+from .permissions import IsDoctor, IsDoctorOrHod, IsStudent, IsHod
 from .selectors import (
     get_ideas_for_doctor, get_student_proposal, get_approved_ideas,
     get_pending_supervisor_proposals, get_pending_hod_proposals,
@@ -57,7 +57,7 @@ def _save_form_response(student, form_id, field_responses, proposal_id=None, app
 # ── UC-01: Doctor ideas ───────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsDoctor])
+@permission_classes([IsAuthenticated, IsDoctorOrHod])
 def submit_idea(request):
     serializer = ProjectIdeaSerializer(data=request.data)
     if not serializer.is_valid():
@@ -70,7 +70,7 @@ def submit_idea(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsDoctor])
+@permission_classes([IsAuthenticated, IsDoctorOrHod])
 def my_ideas(request):
     ideas = get_ideas_for_doctor(request.user)[:MAX_LIST_RESPONSE_SIZE]
     return Response(ProjectIdeaSerializer(ideas, many=True).data)
@@ -175,7 +175,7 @@ def cancel_proposal_view(request, proposal_id):
 @permission_classes([IsAuthenticated, IsStudent])
 def list_doctors_for_student(request):
     """Return all doctors for the supervisor dropdown."""
-    doctors = User.objects.filter(role='doctor').values('id', 'username', 'first_name', 'last_name', 'department')[:MAX_LIST_RESPONSE_SIZE]
+    doctors = User.objects.filter(role__in=['doctor', 'hod']).values('id', 'username', 'first_name', 'last_name', 'department')[:MAX_LIST_RESPONSE_SIZE]
     result = [
         {
             'id': d['id'],
@@ -214,14 +214,15 @@ def list_students_for_team(request):
 # ── Supervisor review ─────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsDoctor])
+@permission_classes([IsAuthenticated, IsDoctorOrHod])
 def supervisor_pending_proposals(request):
     proposals = get_pending_supervisor_proposals(request.user)[:MAX_LIST_RESPONSE_SIZE]
     return Response(StudentIdeaProposalSerializer(proposals, many=True).data)
 
 
+
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsDoctor])
+@permission_classes([IsAuthenticated, IsDoctorOrHod])
 def supervisor_review(request, proposal_id):
     try:
         proposal = StudentIdeaProposal.objects.get(pk=proposal_id, supervisor=request.user)
@@ -383,14 +384,14 @@ def my_idea_application(request):
 # ── Doctor reviews applications on their ideas ────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsDoctor])
+@permission_classes([IsAuthenticated, IsDoctorOrHod])
 def doctor_pending_applications(request):
     apps = get_pending_doctor_applications(request.user)[:MAX_LIST_RESPONSE_SIZE]
     return Response(IdeaApplicationSerializer(apps, many=True).data)
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsDoctor])
+@permission_classes([IsAuthenticated, IsDoctorOrHod])
 def doctor_review_app(request, app_id):
     try:
         app = IdeaApplication.objects.get(pk=app_id, idea__doctor=request.user)

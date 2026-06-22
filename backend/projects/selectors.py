@@ -2,6 +2,7 @@ from .models import ProjectIdea, StudentIdeaProposal
 
 
 def get_ideas_for_doctor(doctor):
+    """Return ideas submitted by this doctor or HoD."""
     return ProjectIdea.objects.filter(doctor=doctor).prefetch_related(
         'applications', 'applications__student',
         'applications__invitations', 'applications__invitations__invitee',

@@ -73,8 +73,8 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
                             'supervisor_name', 'student_name', 'invitations']
 
     def validate_supervisor(self, value):
-        if value and getattr(value, 'role', None) != 'doctor':
-            raise serializers.ValidationError('Supervisor must be a doctor.')
+        if value and getattr(value, 'role', None) not in ('doctor', 'hod'):
+            raise serializers.ValidationError('Supervisor must be a doctor or HoD.')
         return value
 
     def validate(self, data):
