@@ -103,7 +103,7 @@ class ProjectBoardSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = ProjectBoard
-        fields = ['id', 'title', 'created_at', 'tasks', 'members', 'project_type']
+        fields = ['id', 'title', 'created_at', 'tasks', 'members', 'project_type', 'github_repo']
 
     def get_members(self, obj):
         return [

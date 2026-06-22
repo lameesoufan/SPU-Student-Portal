@@ -6,6 +6,7 @@ import { getProjectTypeLabel } from '../lib/constants';
 import {
   FolderKanban, ListTodo, CheckCircle2, TrendingUp,
   ArrowLeft, Users, ArrowRight, GitBranch, Loader2, FolderOpen,
+  Github,
 } from 'lucide-react';
 
 const COL_COLORS = {
@@ -66,9 +67,22 @@ export default function SupervisorProjects({ onBack }) {
                 </span>
               )}
             </div>
-            <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">
-              {selectedBoard.members.map(m => m.name || m.username).join(', ')}
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0 flex-1">
+                {selectedBoard.members.map(m => m.name || m.username).join(', ')}
+              </p>
+              {selectedBoard.github_repo && (
+                <a 
+                  href={selectedBoard.github_repo} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-violet-600 dark:text-violet-400 hover:underline"
+                >
+                  <Github size={14} />
+                  GitHub Repo
+                </a>
+              )}
+            </div>
           </div>
         </div>
 

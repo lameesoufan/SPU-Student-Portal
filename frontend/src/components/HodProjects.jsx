@@ -5,6 +5,7 @@ import { getProjectTypeLabel } from '../lib/constants';
 import {
   FolderKanban, BarChart3, FileText, Lightbulb, TrendingUp,
   ArrowLeft, Eye, Loader2, FolderOpen, Users,
+  Github,
 } from 'lucide-react';
 
 const STAT_ICONS = {
@@ -49,6 +50,17 @@ export default function HodProjects({ onBack, user }) {
             <Eye size={12} />
             Read-Only View
           </span>
+          {selectedBoard.github_repo && (
+            <a 
+              href={selectedBoard.github_repo} 
+              target="_blank" 
+              rel="noreferrer" 
+              className="inline-flex items-center gap-1.5 ml-auto text-[13px] font-medium text-violet-600 dark:text-violet-400 hover:underline"
+            >
+              <Github size={14} />
+              GitHub Repo
+            </a>
+          )}
         </div>
         <KanbanBoard
           board={selectedBoard}

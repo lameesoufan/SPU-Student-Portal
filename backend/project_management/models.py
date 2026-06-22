@@ -32,6 +32,7 @@ class ProjectBoard(models.Model):
         related_name='board',
     )
     title      = models.CharField(max_length=255)
+    github_repo = models.URLField(max_length=500, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

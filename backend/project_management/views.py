@@ -144,6 +144,23 @@ def my_board(request):
     return Response({'has_project': True, 'board': ProjectBoardSerializer(board).data})
 
 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_board(request, board_id):
+    if request.user.role != 'student':
+        return Response({'error': 'Only students can update board info.'}, status=403)
+        
+    board = _get_board_for_member(request.user, board_id)
+    if not board:
+        return Response({'error': 'Not found or not a member.'}, status=404)
+        
+    if 'github_repo' in request.data:
+        board.github_repo = request.data['github_repo']
+        board.save()
+        
+    return Response(ProjectBoardSerializer(board).data)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def supervisor_boards(request):

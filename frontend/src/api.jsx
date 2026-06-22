@@ -206,6 +206,9 @@ export const fetchResponseByApplication = (applicationId) =>
 export const fetchMyBoard = () =>
   api.get('/api/project-management/board/');
 
+export const updateBoard = (boardId, data) =>
+  api.patch(`/api/project-management/board/${boardId}/update/`, data);
+
 export const fetchSupervisorBoards = () =>
   api.get('/api/project-management/supervisor/boards/');
 

@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    my_board, supervisor_boards,
+    my_board, supervisor_boards, update_board,
     create_task, update_task, delete_task,
     task_comments, delete_comment,
     upload_attachment, delete_attachment,
@@ -12,6 +12,8 @@ urlpatterns = [
     # Board
     path('api/project-management/board/',
          my_board, name='my_board'),
+    path('api/project-management/board/<int:board_id>/update/',
+         update_board, name='update_board'),
     path('api/project-management/supervisor/boards/',
          supervisor_boards, name='supervisor_boards'),
     path('api/project-management/hod/boards/',

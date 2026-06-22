@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- **GitHub Repository Link**: Students can now add and manage a GitHub repository link directly from their project board.
+  - Added a dynamic input UI in the student's `MyProject` view.
+  - Supervisors, HoDs, and Deans can view the linked GitHub repository via quick-access links in their respective `SupervisorProjects` and `HodProjects` dashboards.
 - **Project Classification Feature**: Introduced a required `project_type` classification across the system.
   - Three new types supported: `Seasonal`, `Graduation 1`, and `Graduation 2`.
 - **Database Models**: 
