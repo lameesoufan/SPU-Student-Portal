@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { submitProjectIdea } from '../api';
+import { PROJECT_TYPES } from '../lib/constants';
 import { ChevronLeft, Lightbulb, CheckCircle, Send, Loader2, Info, AlertCircle } from 'lucide-react';
 
 const DEPARTMENTS = [
@@ -10,7 +11,7 @@ const DEPARTMENTS = [
   { value: 'control_robotics',        label: 'Control & Robotics' },
 ];
 
-const EMPTY = { title: '', description: '', department: '', required_skills: '', max_team_size: 2 };
+const EMPTY = { title: '', description: '', department: '', required_skills: '', max_team_size: 2, project_type: '' };
 
 const inputCls = "w-full bg-[var(--input-bg)] text-[var(--text)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors placeholder:text-[var(--text-faint)]";
 
@@ -156,8 +157,8 @@ export default function SubmitIdea({ onBack }) {
               />
             </div>
 
-            {/* Department + Team Size */}
-            <div className="grid grid-cols-2 gap-5 max-[520px]:grid-cols-1">
+            {/* Department + Team Size + Project Type */}
+            <div className="grid grid-cols-3 gap-5 max-[768px]:grid-cols-1">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="department" className="text-sm font-semibold text-[var(--text)]">
                   Department <span className="text-red-500">*</span>
@@ -186,6 +187,23 @@ export default function SubmitIdea({ onBack }) {
                 >
                   <option value={2}>2 Students</option>
                   <option value={3}>3 Students</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="project_type" className="text-sm font-semibold text-[var(--text)]">
+                  Project Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="project_type" name="project_type"
+                  className={inputCls}
+                  value={form.project_type} onChange={handleChange}
+                  required
+                >
+                  <option value="" disabled>Select project type</option>
+                  {PROJECT_TYPES.map((pt) => (
+                    <option key={pt.value} value={pt.value}>{pt.label}</option>
+                  ))}
                 </select>
               </div>
             </div>

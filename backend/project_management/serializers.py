@@ -97,15 +97,23 @@ class TaskSerializer(serializers.ModelSerializer):
 
 
 class ProjectBoardSerializer(serializers.ModelSerializer):
-    tasks   = TaskSerializer(many=True, read_only=True)
-    members = serializers.SerializerMethodField()
+    tasks        = TaskSerializer(many=True, read_only=True)
+    members      = serializers.SerializerMethodField()
+    project_type = serializers.SerializerMethodField()
 
     class Meta:
         model  = ProjectBoard
-        fields = ['id', 'title', 'created_at', 'tasks', 'members']
+        fields = ['id', 'title', 'created_at', 'tasks', 'members', 'project_type']
 
     def get_members(self, obj):
         return [
             {'id': m.id, 'username': m.username, 'name': m.get_full_name() or m.username}
             for m in obj.members
         ]
+
+    def get_project_type(self, obj):
+        if obj.proposal and obj.proposal.project_type:
+            return obj.proposal.project_type
+        if obj.application and obj.application.idea and obj.application.idea.project_type:
+            return obj.application.idea.project_type
+        return None

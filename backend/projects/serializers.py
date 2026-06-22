@@ -13,7 +13,7 @@ class ProjectIdeaSerializer(serializers.ModelSerializer):
         model  = ProjectIdea
         fields = [
             'id', 'title', 'description', 'department',
-            'required_skills', 'max_team_size', 'status',
+            'required_skills', 'max_team_size', 'project_type', 'status',
             'rejection_reason', 'created_at', 'doctor_name',
             'is_taken', 'registered_team',
         ]
@@ -65,7 +65,7 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'department',
             'supervisor', 'supervisor_name', 'student_name',
-            'team_size', 'team_size_reason',
+            'team_size', 'team_size_reason', 'project_type',
             'status', 'rejection_reason', 'invitations',
             'created_at', 'updated_at',
         ]
@@ -157,7 +157,7 @@ class IdeaApplicationSerializer(serializers.ModelSerializer):
         model  = IdeaApplication
         fields = [
     'id', 'idea', 'idea_title', 'doctor_name', 'team_size',
-    'team_size_reason',
+    'team_size_reason', 'project_type',
     'student_name', 'status', 'rejection_reason',
     'invitations', 'created_at', 'updated_at',
     ]   

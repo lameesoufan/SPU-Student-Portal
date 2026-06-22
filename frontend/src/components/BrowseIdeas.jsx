@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { browseIdeas, applyOnIdea, fetchMyIdeaApplication, fetchMyProposal, fetchStudentForm, fetchMyBoard } from '../api';
+import { PROJECT_TYPES, getProjectTypeLabel } from '../lib/constants';
 import StudentSearch from './StudentSearch';
 import DynamicCheckboxGroup from './DynamicCheckboxGroup';
 import { Users, User, Award, Briefcase, Wrench, Search, Lock, Send, CheckCircle, Clock, BookOpen } from 'lucide-react';
@@ -14,7 +15,7 @@ const STATUS_META = {
   rejected_insufficient_members: { label: 'Rejected (Insufficient Members)', cls: 'badge-danger' },
 };
 
-const EMPTY_APPLY = { team_size: 1, member_ids: [], team_size_reason: '' };
+const EMPTY_APPLY = { team_size: 1, member_ids: [], team_size_reason: '', project_type: '' };
 
 const emptyValueForField = (field) => field.field_type === 'checkbox' ? [] : '';
 
@@ -61,7 +62,7 @@ export default function BrowseIdeas({ onBack }) {
 
   const openApply = (idea) => {
     setApplyModal(idea);
-    setApplyForm({ team_size: 1, member_ids: [], team_size_reason: '' });
+    setApplyForm({ team_size: 1, member_ids: [], team_size_reason: '', project_type: '' });
     // باقي الكود نفسو...
     setApplyError('');
     setDynForm(null);
@@ -129,6 +130,7 @@ const handleTeamSizeChange = (size) => {
 
       fd.append('team_size_reason', (Number(applyForm.team_size) === 1 || Number(applyForm.team_size) > 3) ? applyForm.team_size_reason.trim() : '');
       fd.append('team_size', applyForm.team_size);
+      fd.append('project_type', applyForm.project_type);
       const res = await applyOnIdea(applyModal.id, fd);
       setMyApp(res.data);
       setApplyModal(null);
@@ -265,6 +267,11 @@ const handleTeamSizeChange = (size) => {
                         <BookOpen size={12} />
                         {idea.department.replace(/_/g, ' ')}
                       </span>
+                      {idea.project_type && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/10 text-purple-600 border border-purple-500/20">
+                          {getProjectTypeLabel(idea.project_type)}
+                        </span>
+                      )}
                       {isTaken && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-500 border border-red-500/20">
                           <Lock size={12} />
@@ -391,6 +398,23 @@ const handleTeamSizeChange = (size) => {
                   ))}
                 </select>
               </div>
+
+              <div className="mb-4">
+                <label htmlFor="project_type" className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">Project Type <span className="text-[var(--danger)]">*</span></label>
+                <select
+                  id="project_type"
+                  className="w-full bg-[var(--input-bg)] text-[var(--text)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors"
+                  value={applyForm.project_type}
+                  onChange={(e) => setApplyForm(prev => ({ ...prev, project_type: e.target.value }))}
+                  required
+                >
+                  <option value="" disabled>Select project type</option>
+                  {PROJECT_TYPES.map((pt) => (
+                    <option key={pt.value} value={pt.value}>{pt.label}</option>
+                  ))}
+                </select>
+              </div>
+
               {(Number(applyForm.team_size) === 1 || Number(applyForm.team_size) > 3) && (
                 <div className="mb-4">
                   <label htmlFor="team-size-reason" className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">

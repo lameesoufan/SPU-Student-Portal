@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { fetchSupervisorBoards } from '../api';
 import KanbanBoard, { COLUMNS } from './KanbanBoard';
 import GitLabPanel from './GitLabPanel';
+import { getProjectTypeLabel } from '../lib/constants';
 import {
   FolderKanban, ListTodo, CheckCircle2, TrendingUp,
   ArrowLeft, Users, ArrowRight, GitBranch, Loader2, FolderOpen,
@@ -57,7 +58,14 @@ export default function SupervisorProjects({ onBack }) {
             All Projects
           </button>
           <div className="flex-1">
-            <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">{selectedBoard.title}</h1>
+            <div className="flex items-center gap-2 mb-1">
+              <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">{selectedBoard.title}</h1>
+              {selectedBoard.project_type && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  {getProjectTypeLabel(selectedBoard.project_type)}
+                </span>
+              )}
+            </div>
             <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">
               {selectedBoard.members.map(m => m.name || m.username).join(', ')}
             </p>
@@ -204,6 +212,14 @@ export default function SupervisorProjects({ onBack }) {
                       {total} tasks
                     </span>
                   </div>
+
+                  {board.project_type && (
+                    <div className="flex items-start mt-1">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 tracking-wide">
+                        {getProjectTypeLabel(board.project_type)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Members */}
                   <div className="flex items-center gap-2 mt-3 flex-wrap">

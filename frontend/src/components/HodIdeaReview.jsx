@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchHodPendingDoctorIdeas, hodReviewDoctorIdea } from '../api';
+import { getProjectTypeLabel } from '../lib/constants';
 import { FileCheck2, Loader2, ClipboardCheck, CheckCircle2, XCircle, User, Users, ChevronDown, GraduationCap, Calendar, Stethoscope, Info, Lightbulb, Wrench } from 'lucide-react';
 
 export default function HodIdeaReview({ onBack }) {
@@ -112,6 +113,11 @@ export default function HodIdeaReview({ onBack }) {
                   <Users size={11} />
                   {idea.max_team_size} students
                 </span>
+                {idea.project_type && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 tracking-wide">
+                    {getProjectTypeLabel(idea.project_type)}
+                  </span>
+                )}
               </div>
             </div>
 

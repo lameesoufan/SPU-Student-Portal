@@ -55,7 +55,7 @@ def _student_is_active(student):
 
 # ── UC-01 ─────────────────────────────────────────────────────────────────────
 
-def create_project_idea(*, doctor, title, description, department, required_skills, max_team_size):
+def create_project_idea(*, doctor, title, description, department, required_skills, max_team_size, project_type):
     # ── HoD auto-approval: if the submitter is HoD, skip review ──
     if doctor.role == 'hod':
         initial_status = 'approved'
@@ -65,8 +65,10 @@ def create_project_idea(*, doctor, title, description, department, required_skil
     idea = ProjectIdea.objects.create(
         doctor=doctor, title=title, description=description,
         department=department, required_skills=required_skills,
-        max_team_size=max_team_size, status=initial_status,
+        max_team_size=max_team_size, project_type=project_type, status=initial_status,
     )
+
+    formatted_ptype = project_type.replace('_', ' ').title()
 
     if initial_status == 'pending_review':
         # Notify HoD of the department for regular doctor ideas
@@ -74,13 +76,13 @@ def create_project_idea(*, doctor, title, description, department, required_skil
         U = get_user_model()
         hods = U.objects.filter(role='hod', department=department)
         notify_many(hods, 'idea_submitted',
-                    'New Project Idea Submitted',
-                    f'Dr. {doctor.get_full_name() or doctor.username} submitted a new idea: "{title}".')
+                    f'New {formatted_ptype} Project Idea',
+                    f'Dr. {doctor.get_full_name() or doctor.username} submitted a new {formatted_ptype} idea: "{title}".')
     else:
         # HoD idea — auto-approved notification
         notify(doctor, 'idea_auto_approved',
-               'Project Idea Auto-Approved',
-               f'Your idea "{title}" has been auto-approved (HoD privilege) and is now visible to students.')
+               f'{formatted_ptype} Project Idea Auto-Approved',
+               f'Your {formatted_ptype} idea "{title}" has been auto-approved (HoD privilege) and is now visible to students.')
 
         return {'ok': True, 'idea': idea}
 
@@ -94,7 +96,7 @@ def student_can_propose(student):
 
 
 def create_student_proposal(*, student, supervisor, title, description, department,
-                             team_size, team_size_reason, member_ids):
+                             team_size, team_size_reason, member_ids, project_type):
     if not supervisor or supervisor.role not in ('doctor', 'hod'):
         return {'ok': False, 'error': 'Supervisor must be a doctor.'}
 
@@ -155,8 +157,11 @@ def create_student_proposal(*, student, supervisor, title, description, departme
                 student=student, supervisor=supervisor, title=title,
                 description=description, department=department,
                 team_size=team_size, team_size_reason=team_size_reason,
+                project_type=project_type,
                 status=initial_status,
             )
+
+            formatted_ptype = project_type.replace('_', ' ').title()
 
             for m in members:
                 ProposalInvitation.objects.create(proposal=proposal, invitee=m, status='pending')
@@ -166,8 +171,8 @@ def create_student_proposal(*, student, supervisor, title, description, departme
 
             if initial_status == 'pending_supervisor':
                 notify(supervisor, 'proposal_submitted',
-                       'New Student Proposal',
-                       f'{student.get_full_name() or student.username} submitted a proposal "{title}" with you as supervisor.')
+                       f'New Student {formatted_ptype} Proposal',
+                       f'{student.get_full_name() or student.username} submitted a {formatted_ptype} proposal "{title}" with you as supervisor.')
 
     except IntegrityError:
         return {'ok': False, 'error': 'A database conflict occurred. You may already have an active proposal or a team member is already assigned elsewhere.'}
@@ -459,7 +464,7 @@ def student_can_apply(student):
     return True, None
 
 
-def apply_on_idea(*, student, idea, team_size, team_size_reason='', member_ids=None):
+def apply_on_idea(*, student, idea, team_size, team_size_reason='', member_ids=None, project_type):
     try:
         with transaction.atomic():
             # Lock the idea row to prevent race conditions
@@ -527,7 +532,7 @@ def apply_on_idea(*, student, idea, team_size, team_size_reason='', member_ids=N
             initial_status = 'pending_doctor' if team_size == 1 else 'awaiting_members'
             app = IdeaApplication.objects.create(
                 student=student, idea=idea, team_size=team_size,
-                team_size_reason=team_size_reason, status=initial_status,
+                team_size_reason=team_size_reason, project_type=project_type, status=initial_status,
             )
             for m in members:
                 TeamInvitation.objects.create(application=app, invitee=m, status='pending')

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchHodPendingApplications, hodReviewApplication, fetchResponseByApplication } from '../api';
+import { getProjectTypeLabel } from '../lib/constants';
 import { FileCheck2, Loader2, ClipboardCheck, CheckCircle2, XCircle, User, Users, ChevronDown, GraduationCap, Calendar, Stethoscope, Info } from 'lucide-react';
 
 const TEAM_STATUS_STYLES = {
@@ -163,6 +164,11 @@ export default function HodApplicationReview({ onBack }) {
                     <Calendar size={11} />
                     {new Date(app.created_at).toLocaleDateString()}
                   </span>
+                  {app.project_type && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 tracking-wide">
+                      {getProjectTypeLabel(app.project_type)}
+                    </span>
+                  )}
                 </div>
               </div>
 

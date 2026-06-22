@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchSupervisorPending, supervisorReview, fetchResponseByProposal } from '../api';
+import { getProjectTypeLabel } from '../lib/constants';
 
 
 const renderResponseValue = (value) => {
@@ -97,7 +98,14 @@ export default function SupervisorReview({ onBack }) {
                     <h3 className="sv-card-title">{p.title}</h3>
                     <span className="sv-card-student">👤 {p.student_name}</span>
                   </div>
-                  <span className="badge badge-neutral">🏛 {p.department.replace(/_/g, ' ')}</span>
+                  <div>
+                    <span className="badge badge-neutral">🏛 {p.department.replace(/_/g, ' ')}</span>
+                    {p.project_type && (
+                      <span className="badge badge-primary" style={{ marginLeft: '8px' }}>
+                        {getProjectTypeLabel(p.project_type)}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p className="sv-card-desc">{p.description}</p>
 

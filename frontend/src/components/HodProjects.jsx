@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchHodBoards, fetchHodStats } from '../api';
 import KanbanBoard, { COLUMNS } from './KanbanBoard';
+import { getProjectTypeLabel } from '../lib/constants';
 import {
   FolderKanban, BarChart3, FileText, Lightbulb, TrendingUp,
   ArrowLeft, Eye, Loader2, FolderOpen, Users,
@@ -163,6 +164,14 @@ export default function HodProjects({ onBack, user }) {
                   {total} tasks
                 </span>
               </div>
+
+              {board.project_type && (
+                <div className="flex items-start">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 tracking-wide">
+                    {getProjectTypeLabel(board.project_type)}
+                  </span>
+                </div>
+              )}
 
               {/* Members */}
               <div className="flex items-center gap-1.5 flex-wrap">

@@ -5,6 +5,13 @@ from accounts.models import DEPARTMENTS
 
 SKILLS_MAX_LENGTH = 500
 
+PROJECT_TYPES = [
+    ('seasonal', 'Seasonal'),
+    ('graduation_1', 'Graduation 1'),
+    ('graduation_2', 'Graduation 2'),
+]
+
+
 # Statuses for doctor-proposed ideas (UC-01)
 DOCTOR_IDEA_STATUS = [
     ('pending_review', 'Pending Review'),
@@ -36,6 +43,7 @@ class ProjectIdea(models.Model):
     department      = models.CharField(max_length=50, choices=DEPARTMENTS)
     required_skills = models.CharField(max_length=SKILLS_MAX_LENGTH, blank=True, help_text='Comma-separated tags')
     max_team_size   = models.PositiveSmallIntegerField(default=2)
+    project_type    = models.CharField(max_length=20, choices=PROJECT_TYPES, default='seasonal')
     status          = models.CharField(max_length=35, choices=DOCTOR_IDEA_STATUS, default='pending_review')
     rejection_reason = models.TextField(blank=True)
     created_at      = models.DateTimeField(auto_now_add=True)
@@ -72,6 +80,7 @@ class StudentIdeaProposal(models.Model):
     department       = models.CharField(max_length=50, choices=DEPARTMENTS)
     team_size        = models.PositiveSmallIntegerField(default=1)
     team_size_reason = models.TextField(blank=True, help_text='Required when team_size is 1 or 4')
+    project_type     = models.CharField(max_length=20, choices=PROJECT_TYPES, default='seasonal')
     status           = models.CharField(max_length=25, choices=STUDENT_IDEA_STATUS, default='pending_supervisor')
     rejection_reason = models.TextField(blank=True)
     created_at       = models.DateTimeField(auto_now_add=True)
@@ -181,6 +190,7 @@ class IdeaApplication(models.Model):
     )
     team_size   = models.PositiveSmallIntegerField(default=1)  # 1, 2, or 3 
     team_size_reason = models.TextField(blank=True, help_text='Required when team_size < 2 or > 3')
+    project_type = models.CharField(max_length=20, choices=PROJECT_TYPES, default='seasonal')
     status      = models.CharField(max_length=30, choices=IDEA_APPLICATION_STATUS, default='pending_doctor')
     rejection_reason = models.TextField(blank=True)
     created_at  = models.DateTimeField(auto_now_add=True)

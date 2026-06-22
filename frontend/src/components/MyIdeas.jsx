@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { fetchMyIdeas } from '../api';
+import { getProjectTypeLabel } from '../lib/constants';
 
 const STATUS_META = {
   pending_review: { label: 'Pending Review', cls: 'badge-warning' },
@@ -100,6 +101,9 @@ export default function MyIdeas({ onBack, onSubmitNew }) {
                     <div className="flex flex-wrap gap-2">
                       <span className="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs py-1 px-3 rounded-md font-semibold">{idea.department.replace(/_/g, ' ')}</span>
                       <span className="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs py-1 px-3 rounded-md font-semibold">{idea.max_team_size} students</span>
+                      {idea.project_type && (
+                        <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 text-xs py-1 px-3 rounded-md font-semibold">{getProjectTypeLabel(idea.project_type)}</span>
+                      )}
                       {idea.required_skills && (
                         <span className="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs py-1 px-3 rounded-md font-semibold">{idea.required_skills}</span>
                       )}

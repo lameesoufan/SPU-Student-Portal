@@ -8,6 +8,7 @@ import {
   Loader2, User, Check, UserMinus
 } from 'lucide-react';
 import { submitStudentProposal, fetchMyProposal, fetchDoctorsList, fetchStudentForm, replaceProposalMember } from '../api';
+import { PROJECT_TYPES } from '../lib/constants';
 
 const DEPARTMENTS = [
   { value: 'software_engineering',    label: 'Software Engineering' },
@@ -41,7 +42,7 @@ const STATUS_STEPS = {
   rejected:           0,
 };
 
-const EMPTY = { title: '', description: '', department: '', supervisor: '', team_size: 2, member_ids: [''], team_size_reason: '' };
+const EMPTY = { title: '', description: '', department: '', supervisor: '', team_size: 2, member_ids: [''], team_size_reason: '', project_type: '' };
 const emptyValueForField = (field) => field.field_type === 'checkbox' ? [] : '';
 
 const STEPS = [
@@ -139,7 +140,7 @@ const handleTeamSizeChange = (size) => {
 
   const isStepValid = (step) => {
     if (step === 0) return form.title.trim() !== '' && form.description.trim() !== '';
-    if (step === 1) return form.department !== '' && form.supervisor !== '';
+    if (step === 1) return form.department !== '' && form.supervisor !== '' && form.project_type !== '';
     if (step === 2) return true;
     if (step === 3) return true;
     return false;
@@ -157,6 +158,7 @@ const handleTeamSizeChange = (size) => {
         supervisor:       Number(form.supervisor),
         team_size:        Number(form.team_size),
         team_size_reason: (Number(form.team_size) === 1 || Number(form.team_size) > 3) ? form.team_size_reason.trim() : '',
+        project_type:     form.project_type,
         member_ids:       form.member_ids.filter(Boolean),
         form_id:          dynForm?.id || null,
         field_responses:  dynForm
@@ -495,7 +497,7 @@ const handleTeamSizeChange = (size) => {
                   <p className="text-sm text-[var(--text-muted)]">Select your department and preferred supervisor</p>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="p-dept" className="text-sm font-semibold text-[var(--text)]">
                     Department <span className="text-[var(--danger)]">*</span>
@@ -541,6 +543,24 @@ const handleTeamSizeChange = (size) => {
                       No doctors found in the system. Please contact your department or try refreshing.
                     </span>
                   )}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="p-type" className="text-sm font-semibold text-[var(--text)]">
+                    Project Type <span className="text-[var(--danger)]">*</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="p-type" name="project_type"
+                      className={`${inputCls} appearance-none pr-10`}
+                      value={form.project_type} onChange={handleChange} required
+                    >
+                      <option value="" disabled>Select Type</option>
+                      {PROJECT_TYPES.map((pt) => (
+                        <option key={pt.value} value={pt.value}>{pt.label}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
+                  </div>
                 </div>
               </div>
               <div className="flex items-start gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm">

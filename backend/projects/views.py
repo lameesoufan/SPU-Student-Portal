@@ -120,6 +120,7 @@ def propose_idea(request):
                 department=serializer.validated_data['department'],
                 team_size=team_size,
                 team_size_reason=team_size_reason,
+                project_type=serializer.validated_data.get('project_type', 'seasonal'),
                 member_ids=member_ids,
             )
             if not result['ok']:
@@ -347,9 +348,13 @@ def apply_idea(request, idea_id):
     else:
         field_responses = raw_field_responses
 
+    project_type = request.data.get('project_type')
+    if not project_type or project_type not in ('seasonal', 'graduation_1', 'graduation_2'):
+        return _validation_error_response({'project_type': 'A valid project type is required.'})
+
     try:
         with transaction.atomic():
-            result = apply_on_idea(student=request.user, idea=idea, team_size=team_size, team_size_reason=team_size_reason, member_ids=member_ids)
+            result = apply_on_idea(student=request.user, idea=idea, team_size=team_size, team_size_reason=team_size_reason, member_ids=member_ids, project_type=project_type)
             if not result['ok']:
                 return Response({'error': result['error']}, status=400)
     except Exception as e:
