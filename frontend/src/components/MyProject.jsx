@@ -3,7 +3,8 @@ import { fetchMyBoard, updateBoard } from '../api';
 import KanbanBoard from './KanbanBoard';
 import ProjectWorkflowView from './ProjectWorkflowView';
 import GitLabPanel from './GitLabPanel';
-import { Github, Edit2, Check, X } from 'lucide-react';
+import { GitBranch, Edit2, Check, X } from 'lucide-react';
+
 
 export default function MyProject() {
   const [board, setBoard]     = useState(null);
@@ -137,7 +138,7 @@ function GithubLink({ board, setBoard }) {
   if (isEditing) {
     return (
       <div className="flex items-center gap-2 mt-1">
-        <Github size={18} className="text-gray-500" />
+        <GitBranch size={18} className="text-gray-500" />
         <input 
           type="url" 
           value={repo} 
@@ -158,7 +159,7 @@ function GithubLink({ board, setBoard }) {
 
   return (
     <div className="flex items-center gap-2 mt-1">
-      <Github size={18} className={board.github_repo ? "text-gray-900 dark:text-white" : "text-gray-400"} />
+      <GitBranch size={18} className={board.github_repo ? "text-gray-900 dark:text-white" : "text-gray-400"} />
       {board.github_repo ? (
         <a href={board.github_repo} target="_blank" rel="noreferrer" className="text-sm text-violet-600 dark:text-violet-400 hover:underline font-medium">
           {board.github_repo}

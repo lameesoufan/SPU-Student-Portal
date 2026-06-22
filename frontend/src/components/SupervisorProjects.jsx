@@ -6,7 +6,6 @@ import { getProjectTypeLabel } from '../lib/constants';
 import {
   FolderKanban, ListTodo, CheckCircle2, TrendingUp,
   ArrowLeft, Users, ArrowRight, GitBranch, Loader2, FolderOpen,
-  Github,
 } from 'lucide-react';
 
 const COL_COLORS = {
@@ -78,7 +77,7 @@ export default function SupervisorProjects({ onBack }) {
                   rel="noreferrer" 
                   className="inline-flex items-center gap-1.5 text-[13px] font-medium text-violet-600 dark:text-violet-400 hover:underline"
                 >
-                  <Github size={14} />
+                  <GitBranch size={14} />
                   GitHub Repo
                 </a>
               )}

@@ -5,7 +5,7 @@ import { getProjectTypeLabel } from '../lib/constants';
 import {
   FolderKanban, BarChart3, FileText, Lightbulb, TrendingUp,
   ArrowLeft, Eye, Loader2, FolderOpen, Users,
-  Github,
+ GitBranch,
 } from 'lucide-react';
 
 const STAT_ICONS = {
@@ -57,7 +57,7 @@ export default function HodProjects({ onBack, user }) {
               rel="noreferrer" 
               className="inline-flex items-center gap-1.5 ml-auto text-[13px] font-medium text-violet-600 dark:text-violet-400 hover:underline"
             >
-              <Github size={14} />
+              <GitBranch size={14} />
               GitHub Repo
             </a>
           )}
