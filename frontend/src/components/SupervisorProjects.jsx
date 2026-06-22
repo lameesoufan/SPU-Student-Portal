@@ -70,17 +70,17 @@ export default function SupervisorProjects({ onBack }) {
               <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0 flex-1">
                 {selectedBoard.members.map(m => m.name || m.username).join(', ')}
               </p>
-              {selectedBoard.github_repo && (
-                <a 
-                  href={selectedBoard.github_repo} 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-violet-600 dark:text-violet-400 hover:underline"
-                >
-                  <GitBranch size={14} />
-                  GitHub Repo
-                </a>
-              )}
+{selectedBoard.github_repo && selectedBoard.github_repo.startsWith('http') && (
+  <a 
+    href={selectedBoard.github_repo} 
+    target="_blank" 
+    rel="noreferrer" 
+    className="inline-flex items-center gap-1.5 text-[13px] font-medium text-violet-600 dark:text-violet-400 hover:underline"
+  >
+    <GitBranch size={14} />
+    GitHub Repo
+  </a>
+)}
             </div>
           </div>
         </div>
