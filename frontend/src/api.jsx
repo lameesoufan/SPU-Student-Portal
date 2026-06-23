@@ -56,6 +56,24 @@ export const importUsers = (file, role) => {
   });
 };
 
+export const importProjects = (file, { dry_run = true, preview_result_id = null } = {}) => {
+  const form = new FormData();
+  form.append('file', file);
+  if (preview_result_id) form.append('preview_result_id', preview_result_id);
+  return api.post(`/api/import/projects/?dry_run=${dry_run ? 'true' : 'false'}`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
+
+export const downloadProjectImportTemplate = () =>
+  api.get('/api/import/template/', { responseType: 'blob' });
+
+export const fetchProjectImportHistory = (params = {}) =>
+  api.get('/api/import/history/', { params });
+
+export const fetchProjectImportRows = (sessionId) =>
+  api.get(`/api/import/history/${sessionId}/rows/`);
+
 export const logoutUser = () =>
   api.post('/api/logout/');
 

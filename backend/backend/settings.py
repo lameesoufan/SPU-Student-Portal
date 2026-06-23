@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'workflow',
     'corsheaders',
     'gitlab_integration',
+    'project_imports',
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
@@ -79,6 +80,7 @@ REST_FRAMEWORK = {
         'propose_idea': '10/hour',
         'workflow_submit': '30/hour',
         'file_upload': '20/hour',
+        'import': os.getenv('IMPORT_RATE_LIMIT', '5/hour'),
         'anon': os.getenv('DRF_ANON_THROTTLE_RATE', '60/minute'),
         'user': os.getenv('DRF_USER_THROTTLE_RATE', '600/minute'),
     },
@@ -246,6 +248,9 @@ GITLAB_TOKEN = os.getenv('GITLAB_TOKEN', '')
 GITLAB_WEBHOOK_SECRET = os.getenv('GITLAB_WEBHOOK_SECRET', '')
 GITLAB_WEBHOOK_BASE_URL = os.getenv('GITLAB_WEBHOOK_BASE_URL', 'http://localhost:8000')
 GITLAB_EXTERNAL_URL = os.getenv('GITLAB_EXTERNAL_URL', 'http://localhost:8080')
+
+# Project import settings
+IMPORT_TEMP_PASSWORD_FORMAT = os.getenv('IMPORT_TEMP_PASSWORD_FORMAT', 'SPU{identifier}@2025-2026')
 
 # ── Celery Configuration (optional - needs celery + redis installed) ──────────
 try:

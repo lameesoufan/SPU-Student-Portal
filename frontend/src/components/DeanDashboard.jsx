@@ -3,6 +3,7 @@ import {
   LayoutGrid,
   Search,
   Upload,
+  FileSpreadsheet,
   UserPlus,
   Users,
   BookOpen,
@@ -22,6 +23,7 @@ import usePageHistory from '../hooks/usePageHistory';
 import './DashboardLayout.css';
 import HodProjects from './HodProjects';
 import ImportUsers from './ImportUsers';
+import ImportProjects from './ImportProjects';
 import AssignHod from './AssignHod';
 import { useTheme } from '../ThemeContext';
 import {
@@ -37,6 +39,7 @@ const Icon = {
   Overview: LayoutGrid,
   Search: Search,
   Upload: Upload,
+  ProjectImport: FileSpreadsheet,
   UserPlus: UserPlus,
   Users: Users,
   BookOpen: BookOpen,
@@ -56,6 +59,7 @@ const Icon = {
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Overview', IconComp: Icon.Overview },
   { id: 'import', label: 'Import Users', IconComp: Icon.Upload },
+  { id: 'import-projects', label: 'Import Projects', IconComp: Icon.ProjectImport },
   { id: 'assign-hod', label: 'Assign HoD', IconComp: Icon.UserPlus },
   { id: 'projects', label: 'All Projects', IconComp: Icon.Kanban },
   { id: 'faculty', label: 'Faculty Overview', IconComp: Icon.Users },
@@ -71,6 +75,13 @@ const MODULE_CARDS = [
     desc: 'Bulk import students and faculty members into the system',
     page: 'import',
     gradient: 'linear-gradient(135deg, #6366f1, #818cf8)',
+  },
+  {
+    IconComp: Icon.ProjectImport,
+    label: 'Import Projects',
+    desc: 'Preview and import assigned student projects from XLSX files',
+    page: 'import-projects',
+    gradient: 'linear-gradient(135deg, #0ea5e9, #38bdf8)',
   },
   {
     IconComp: Icon.UserPlus,
@@ -204,6 +215,13 @@ usePolling(async () => {
       return (
         <div className="std-page-wrapper">
           <ImportUsers onBack={goBack} />
+        </div>
+      );
+    }
+    if (page === 'import-projects') {
+      return (
+        <div className="std-page-wrapper">
+          <ImportProjects onBack={goBack} />
         </div>
       );
     }
@@ -382,7 +400,7 @@ usePolling(async () => {
       onMarkRead={handleMarkRead}
       user={user}
       onLogout={handleLogout}
-      roleLabel="Student"
+      roleLabel="Dean"
     >
       {renderContent()}
     </DashboardLayout>
