@@ -1,3 +1,5 @@
+from django.db.models import Q
+
 from .models import ProjectIdea, StudentIdeaProposal
 
 
@@ -24,7 +26,7 @@ def get_all_ideas():
 def get_student_proposal(student):
     """Return the student's latest active proposal, or the latest one of any status."""
     base = StudentIdeaProposal.objects.select_related('student', 'supervisor').prefetch_related(
-        'invitations', 'invitations__invitee'
+        'co_supervisors', 'invitations', 'invitations__invitee'
     )
 
     active = base.filter(
@@ -40,11 +42,11 @@ def get_student_proposal(student):
 def get_pending_supervisor_proposals(supervisor):
     """Proposals waiting for this supervisor's approval."""
     return StudentIdeaProposal.objects.filter(
-        supervisor=supervisor,
+        Q(supervisor=supervisor) | Q(co_supervisors=supervisor),
         status='pending_supervisor',
     ).select_related('student', 'supervisor').prefetch_related(
-        'invitations', 'invitations__invitee'
-    ).order_by('-created_at')
+        'co_supervisors', 'invitations', 'invitations__invitee'
+    ).distinct().order_by('-created_at')
 
 
 def get_pending_hod_proposals(department):
@@ -53,7 +55,7 @@ def get_pending_hod_proposals(department):
         department=department,
         status='pending_hod',
     ).select_related('student', 'supervisor').prefetch_related(
-        'invitations', 'invitations__invitee'
+        'co_supervisors', 'invitations', 'invitations__invitee'
     ).order_by('-created_at')
 
 

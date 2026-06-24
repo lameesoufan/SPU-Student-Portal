@@ -50,6 +50,7 @@ export default function ImportProjects({ onBack }) {
   const warnings = result?.warnings || preview?.warnings || [];
 
   const summary = useMemo(() => result || preview, [result, preview]);
+  const supervisorCredentialExport = result?.supervisor_credentials_export;
 
   useEffect(() => {
     loadHistory();
@@ -154,6 +155,35 @@ export default function ImportProjects({ onBack }) {
     const link = document.createElement('a');
     link.href = url;
     link.download = 'project_import_errors.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadSupervisorCredentialsCsv = () => {
+    const exportData = supervisorCredentialExport;
+    if (!exportData?.rows?.length) return;
+    const columns = exportData.columns || [
+      'source_row_number',
+      'project_title',
+      'department',
+      'full_name',
+      'username',
+      'generated_password',
+      'created_or_reused',
+      'created_at',
+      'notes',
+    ];
+    const rows = [
+      columns,
+      ...exportData.rows.map((item) => columns.map((column) => item[column] ?? '')),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = exportData.filename || 'supervisor_credentials.csv';
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -279,6 +309,24 @@ export default function ImportProjects({ onBack }) {
             <div className="mt-5 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
               <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
               Imported {result.created_projects_count} project{result.created_projects_count === 1 ? '' : 's'} successfully{result.partial_import ? ` and skipped ${result.failed_imports} invalid row${result.failed_imports === 1 ? '' : 's'}` : ''}.
+            </div>
+          )}
+
+          {supervisorCredentialExport?.available && (
+            <div className="mt-5 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <strong className="block">Supervisor credentials export is ready</strong>
+                  <span className="mt-1 block">{supervisorCredentialExport.security_note}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={downloadSupervisorCredentialsCsv}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700"
+                >
+                  <Download size={14} /> Credentials CSV
+                </button>
+              </div>
             </div>
           )}
 

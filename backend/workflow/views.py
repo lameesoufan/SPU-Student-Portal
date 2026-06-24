@@ -21,7 +21,7 @@ def _get_project_board(project_board_id):
         'proposal__student',
         'application__idea__doctor',
         'application__student',
-    ).get(id=project_board_id)
+    ).prefetch_related('proposal__co_supervisors').get(id=project_board_id)
 
 
 def _project_department_and_supervisor(project_board):
@@ -32,6 +32,16 @@ def _project_department_and_supervisor(project_board):
     return None, None
 
 
+def _user_is_project_supervisor(user, project_board):
+    if project_board.proposal:
+        if project_board.proposal.supervisor_id == user.id:
+            return True
+        return project_board.proposal.co_supervisors.filter(pk=user.pk).exists()
+    if project_board.application and project_board.application.idea:
+        return project_board.application.idea.doctor_id == user.id
+    return False
+
+
 def _user_can_access_project(user, project_board):
     department, supervisor = _project_department_and_supervisor(project_board)
     if user.role == 'dean':
@@ -39,7 +49,7 @@ def _user_can_access_project(user, project_board):
     if user.role == 'hod':
         return department == user.department
     if user.role == 'doctor':
-        return supervisor == user
+        return _user_is_project_supervisor(user, project_board)
     if user.role == 'student':
         return project_board.members.filter(pk=user.pk).exists()
     return False
@@ -50,7 +60,7 @@ def _user_can_apply_workflow(user, project_board):
     if user.role == 'hod':
         return department == user.department
     if user.role == 'doctor':
-        return supervisor == user
+        return _user_is_project_supervisor(user, project_board)
     return False
 
 
@@ -771,7 +781,7 @@ def review_workflow_stage(request, stage_instance_id):
         }, status=403)
     project_board = stage_instance.project_workflow.project_board
     department, supervisor = _project_department_and_supervisor(project_board)
-    if request.user.role == 'doctor' and supervisor != request.user:
+    if request.user.role == 'doctor' and not _user_is_project_supervisor(request.user, project_board):
         return Response({'error': 'You are not the supervisor of this project.'}, status=403)
     if request.user.role == 'hod' and department != request.user.department:
         return Response({'error': 'This project is not in your department.'}, status=403)
@@ -839,7 +849,7 @@ def get_available_projects(request):
             if department != request.user.department:
                 continue
         elif request.user.role == 'doctor':
-            if supervisor != request.user:
+            if not _user_is_project_supervisor(request.user, project):
                 continue
         else:
             continue
@@ -1132,7 +1142,7 @@ def get_projects_workflow_status(request):
             continue
         if request.user.role == 'hod' and department != request.user.department:
             continue
-        if request.user.role == 'doctor' and supervisor != request.user:
+        if request.user.role == 'doctor' and not _user_is_project_supervisor(request.user, project):
             continue
 
         workflow = active_workflows.get(project.id)

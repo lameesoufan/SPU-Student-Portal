@@ -226,7 +226,10 @@ def supervisor_pending_proposals(request):
 @permission_classes([IsAuthenticated, IsDoctorOrHod])
 def supervisor_review(request, proposal_id):
     try:
-        proposal = StudentIdeaProposal.objects.get(pk=proposal_id, supervisor=request.user)
+        proposal = StudentIdeaProposal.objects.filter(
+            Q(supervisor=request.user) | Q(co_supervisors=request.user),
+            pk=proposal_id,
+        ).distinct().get()
     except StudentIdeaProposal.DoesNotExist:
         return Response({'error': 'Proposal not found.'}, status=404)
 

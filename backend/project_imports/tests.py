@@ -18,6 +18,7 @@ from projects.models import ProjectApplication, ProposalInvitation, StudentIdeaP
 
 from .constants import HEADER_TO_FIELD, REQUIRED_HEADERS
 from .models import ImportRow, ImportSession
+from .name_utils import split_supervisor_names, strip_person_titles, username_base_from_name
 from .services import ImportService, ProjectCreator, UserMapper
 from .validators import FileValidator, ImportValidationError, RowValidator, ValidationIssue
 
@@ -106,6 +107,65 @@ class ImportRowModelTests(TestCase):
             session=self.session, row_number=3, status=ImportRow.STATUS_FAILED
         )
         self.assertEqual(str(row), 'Row 3: failed')
+
+
+class ArabicSupervisorNameTests(TestCase):
+    """Tests for Arabic-aware supervisor name parsing and usernames."""
+
+    def setUp(self):
+        self.mapper = UserMapper()
+
+    def assert_username_safe(self, value):
+        self.assertTrue(value)
+        self.assertTrue(value.isascii())
+        self.assertNotRegex(value, r'^doctor_[0-9a-f]{10}$')
+
+    def test_arabic_usernames_are_readable_and_stable(self):
+        cases = {
+            'م. أنس عبد العزيز': 'anas_abd_alaziz',
+            'عامر خورشيد': 'amir_khurshid',
+            'د. محمد أحمد': 'mohammad_ahmad',
+        }
+        for source, expected in cases.items():
+            with self.subTest(source=source):
+                first = self.mapper.normalize_username(source)
+                second = self.mapper.normalize_username(source)
+                self.assertEqual(first, expected)
+                self.assertEqual(first, second)
+                self.assert_username_safe(first)
+
+    def test_titles_are_removed_before_name_storage_and_username_generation(self):
+        first_name, last_name = self.mapper.parse_supervisor_name('م. أنس عبد العزيز')
+        self.assertEqual(first_name, 'أنس')
+        self.assertEqual(last_name, 'عبد العزيز')
+        self.assertEqual(strip_person_titles('دكتور محمد أحمد'), 'محمد أحمد')
+        self.assertEqual(username_base_from_name('أ.د. محمد أحمد'), 'mohammad_ahmad')
+
+    def test_split_multiple_supervisors(self):
+        cases = [
+            ('أنس عبد العزيز + عامر خورشيد', ['أنس عبد العزيز', 'عامر خورشيد']),
+            ('م. أنس / د. عامر', ['م. أنس', 'د. عامر']),
+            ('د. محمد أحمد، م. عامر خورشيد', ['د. محمد أحمد', 'م. عامر خورشيد']),
+            ('أنس عبد العزيز و عامر خورشيد', ['أنس عبد العزيز', 'عامر خورشيد']),
+            ('single supervisor only', ['single supervisor only']),
+            ('', []),
+            ('م. أنس + أنس', ['م. أنس']),
+        ]
+        for source, expected in cases:
+            with self.subTest(source=source):
+                self.assertEqual(split_supervisor_names(source), expected)
+
+    def test_split_newlines_and_excessive_whitespace(self):
+        cases = [
+            ('م. أنس عبد العزيز\nعامر خورشيد', ['م. أنس عبد العزيز', 'عامر خورشيد']),
+            ('م. أنس عبد العزيز\r\nد. عامر خورشيد', ['م. أنس عبد العزيز', 'د. عامر خورشيد']),
+            ('  م.   أنس   عبد العزيز   +   عامر   خورشيد  ', ['م. أنس عبد العزيز', 'عامر خورشيد']),
+            ('أنس عبد العزيز عامر خورشيد', ['أنس عبد العزيز عامر خورشيد']),
+            ('نور الدين', ['نور الدين']),
+        ]
+        for source, expected in cases:
+            with self.subTest(source=source):
+                self.assertEqual(split_supervisor_names(source), expected)
 
 
 class FileValidatorTests(TestCase):
@@ -490,13 +550,13 @@ class UserMapperTests(TestCase):
 
     def test_normalize_username(self):
         username = self.mapper.normalize_username('Dr. Ahmed Ali')
-        self.assertEqual(username, 'dr_ahmed_ali')
+        self.assertEqual(username, 'ahmed_ali')
 
     def test_normalize_username_duplicate(self):
-        User.objects.create_user(username='dr_test', password='Pass123', role='doctor')
+        User.objects.create_user(username='test', password='Pass123', role='doctor')
         username = self.mapper.normalize_username('Dr. Test')
-        self.assertNotEqual(username, 'dr_test')
-        self.assertTrue(username.startswith('dr_test_'))
+        self.assertNotEqual(username, 'test')
+        self.assertTrue(username.startswith('test_'))
 
     def test_find_supervisor_by_name(self):
         doctor = User.objects.create_user(
@@ -529,6 +589,42 @@ class UserMapperTests(TestCase):
         ]
         plan = self.mapper.build_plan(rows)
         self.assertEqual(plan['supervisor_map'][2], self.doctor)
+
+    def test_build_plan_splits_multiple_arabic_supervisors(self):
+        rows = [
+            {
+                'row_number': 2,
+                'university_id': '2021099',
+                'supervisor_name': 'م. أنس عبد العزيز + عامر خورشيد',
+                'supervisor_names': ['م. أنس عبد العزيز', 'عامر خورشيد'],
+                'department': 'software_engineering',
+                'title': 'Multi Supervisor Plan',
+            }
+        ]
+        plan = self.mapper.build_plan(rows)
+        usernames = {item['username'] for item in plan['supervisors_to_create']}
+        self.assertEqual(usernames, {'anas_abd_alaziz', 'amir_khurshid'})
+        self.assertNotIn('anas_abd_alaziz_amir_khurshid', usernames)
+        self.assertEqual(plan['supervisors_by_row'][2], ['anas_abd_alaziz', 'amir_khurshid'])
+
+    def test_build_plan_reports_ambiguous_supervisor_match(self):
+        User.objects.create_user(
+            username='arabic_doc_one', password='Pass123', role='doctor',
+            first_name='محمد', last_name='أحمد'
+        )
+        User.objects.create_user(
+            username='arabic_doc_two', password='Pass123', role='doctor',
+            first_name='محمد', last_name='أحمد'
+        )
+        rows = [{
+            'row_number': 2,
+            'university_id': '2021099',
+            'supervisor_name': 'د. محمد أحمد',
+            'department': 'software_engineering',
+            'title': 'Ambiguous Supervisor Project',
+        }]
+        plan = self.mapper.build_plan(rows)
+        self.assertTrue(any(issue.error_type == 'supervisor_match' for issue in plan['issues']))
 
 
 class ProjectCreatorTests(TestCase):
@@ -606,6 +702,32 @@ class ProjectCreatorTests(TestCase):
         invitation = ProposalInvitation.objects.get(proposal=created[0]['proposal'])
         self.assertEqual(invitation.invitee, member)
         self.assertEqual(invitation.status, 'accepted')
+
+    def test_create_project_with_co_supervisor(self):
+        co_supervisor = User.objects.create_user(
+            username='doctor_creator_co', password='Pass123', role='doctor'
+        )
+        rows = [
+            {
+                'row_number': 2,
+                'project_row_number': 2,
+                'is_project_leader': True,
+                'university_id': '2021050',
+                'title': 'Co Supervised Project',
+                'department': 'software_engineering',
+                'project_type': 'graduation_1',
+                'github_repo': '',
+            }
+        ]
+        user_map = {
+            'students': {'2021050': self.student},
+            'supervisors': {2: self.doctor},
+            'supervisors_by_row': {2: [self.doctor, co_supervisor]},
+        }
+        created = self.creator.create_projects(rows, user_map, self.dean)
+        proposal = created[0]['proposal']
+        self.assertEqual(proposal.supervisor, self.doctor)
+        self.assertEqual(list(proposal.co_supervisors.all()), [co_supervisor])
 
 
 class ImportServiceTests(TestCase):
@@ -707,6 +829,109 @@ class ImportServiceTests(TestCase):
         failed_row = session.rows.get(status=ImportRow.STATUS_FAILED)
         self.assertEqual(failed_row.row_number, 3)
         self.assertIn('University ID is required', failed_row.error_message)
+
+    def test_execute_import_creates_arabic_co_supervisors_and_exports_credentials(self):
+        rows = [
+            ['Arabic Supervisor Student', '2021310', 'Arabic Co Supervisor Project', 'software_engineering', 'م. أنس عبد العزيز + عامر خورشيد', 'graduation_1', ''],
+        ]
+        upload = create_test_excel(rows)
+        workbook_bytes = upload.getvalue()
+
+        def workbook_upload():
+            next_upload = io.BytesIO(workbook_bytes)
+            next_upload.name = upload.name
+            next_upload.size = len(workbook_bytes)
+            return next_upload
+
+        preview_result = self.service.execute_import(workbook_upload(), dry_run=True)
+        self.assertEqual(
+            {item['username'] for item in preview_result['users_to_create']['supervisors']},
+            {'anas_abd_alaziz', 'amir_khurshid'},
+        )
+
+        result = self.service.execute_import(
+            workbook_upload(),
+            dry_run=False,
+            preview_result_id=preview_result['preview_result_id'],
+        )
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['created_supervisors_count'], 2)
+        proposal = StudentIdeaProposal.objects.get(title='Arabic Co Supervisor Project')
+        self.assertEqual(proposal.supervisor.username, 'anas_abd_alaziz')
+        self.assertEqual(list(proposal.co_supervisors.values_list('username', flat=True)), ['amir_khurshid'])
+
+        export_rows = result['supervisor_credentials_export']['rows']
+        self.assertEqual({row['username'] for row in export_rows}, {'anas_abd_alaziz', 'amir_khurshid'})
+        self.assertTrue(all(row['generated_password'] for row in export_rows))
+        self.assertFalse(any('pbkdf2' in row['generated_password'] for row in export_rows))
+        self.assertEqual(User.objects.get(username='anas_abd_alaziz').first_name, 'أنس')
+        self.assertEqual(User.objects.get(username='anas_abd_alaziz').last_name, 'عبد العزيز')
+
+    def test_execute_import_reuses_existing_supervisor_without_exporting_password(self):
+        existing = User.objects.create_user(
+            username='anas_abd_alaziz',
+            password='ExistingSecret!123',
+            role='doctor',
+            first_name='أنس',
+            last_name='عبد العزيز',
+        )
+        rows = [
+            ['Mixed Supervisor Student', '2021311', 'Mixed Supervisor Project', 'software_engineering', 'م. أنس عبد العزيز + عامر خورشيد', 'graduation_2', ''],
+        ]
+        upload = create_test_excel(rows)
+        workbook_bytes = upload.getvalue()
+
+        def workbook_upload():
+            next_upload = io.BytesIO(workbook_bytes)
+            next_upload.name = upload.name
+            next_upload.size = len(workbook_bytes)
+            return next_upload
+
+        preview_result = self.service.execute_import(workbook_upload(), dry_run=True)
+        result = self.service.execute_import(
+            workbook_upload(),
+            dry_run=False,
+            preview_result_id=preview_result['preview_result_id'],
+        )
+
+        self.assertEqual(result['created_supervisors_count'], 1)
+        proposal = StudentIdeaProposal.objects.get(title='Mixed Supervisor Project')
+        self.assertEqual(proposal.supervisor, existing)
+        self.assertEqual(list(proposal.co_supervisors.values_list('username', flat=True)), ['amir_khurshid'])
+
+        export_by_username = {
+            row['username']: row
+            for row in result['supervisor_credentials_export']['rows']
+        }
+        self.assertEqual(export_by_username['anas_abd_alaziz']['created_or_reused'], 'reused_existing_no_password_exported')
+        self.assertEqual(export_by_username['anas_abd_alaziz']['generated_password'], '')
+        self.assertEqual(export_by_username['amir_khurshid']['created_or_reused'], 'created')
+        self.assertTrue(export_by_username['amir_khurshid']['generated_password'])
+        self.assertNotIn('ExistingSecret!123', str(result['supervisor_credentials_export']))
+        self.assertNotIn(existing.password, str(result['supervisor_credentials_export']))
+
+    def test_execute_import_reuses_new_supervisor_across_rows(self):
+        rows = [
+            ['First Repeated Supervisor Student', '2021312', 'Repeated Supervisor Project 1', 'software_engineering', 'عامر خورشيد', 'graduation_1', ''],
+            ['Second Repeated Supervisor Student', '2021313', 'Repeated Supervisor Project 2', 'software_engineering', 'م. عامر خورشيد', 'graduation_1', ''],
+        ]
+        upload = create_test_excel(rows)
+        workbook_bytes = upload.getvalue()
+
+        def workbook_upload():
+            next_upload = io.BytesIO(workbook_bytes)
+            next_upload.name = upload.name
+            next_upload.size = len(workbook_bytes)
+            return next_upload
+
+        preview_result = self.service.execute_import(workbook_upload(), dry_run=True)
+        result = self.service.execute_import(
+            workbook_upload(),
+            dry_run=False,
+            preview_result_id=preview_result['preview_result_id'],
+        )
+        self.assertEqual(result['created_supervisors_count'], 1)
+        self.assertEqual(User.objects.filter(username='amir_khurshid', role='doctor').count(), 1)
 
     def test_cache_preview(self):
         preview_id = self.service._cache_preview('file_hash_123', 5)

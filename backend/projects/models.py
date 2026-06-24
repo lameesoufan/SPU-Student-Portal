@@ -75,6 +75,12 @@ class StudentIdeaProposal(models.Model):
         related_name='supervised_proposals',
         limit_choices_to={'role': 'doctor'},
     )
+    co_supervisors   = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name='co_supervised_proposals',
+        blank=True,
+        limit_choices_to={'role': 'doctor'},
+    )
     title            = models.CharField(max_length=255)
     description      = models.TextField()
     department       = models.CharField(max_length=50, choices=DEPARTMENTS)

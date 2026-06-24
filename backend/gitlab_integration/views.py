@@ -46,6 +46,8 @@ def _assert_board_member(user, board):
     if role == 'doctor':
         if hasattr(board, 'proposal') and board.proposal and board.proposal.supervisor_id == user.id:
             return board
+        if hasattr(board, 'proposal') and board.proposal and board.proposal.co_supervisors.filter(pk=user.pk).exists():
+            return board
         if hasattr(board, 'application') and board.application and board.application.idea.doctor_id == user.id:
             return board
         return None
@@ -85,7 +87,12 @@ class IsProjectMemberOrSupervisor(permissions.BasePermission):
         if hasattr(board, 'members'):
             if board.members.filter(id=user.id).exists():
                 return True
-        if hasattr(board, 'supervisor') and board.supervisor == user:
+        if getattr(user, 'role', None) == 'doctor' and hasattr(board, 'proposal') and board.proposal:
+            if board.proposal.supervisor_id == user.id:
+                return True
+            if board.proposal.co_supervisors.filter(pk=user.pk).exists():
+                return True
+        if hasattr(board, 'application') and board.application and board.application.idea.doctor_id == user.id:
             return True
         return False
 

@@ -13,7 +13,8 @@ class ProjectIdeaAdmin(admin.ModelAdmin):
 class StudentIdeaProposalAdmin(admin.ModelAdmin):
     list_display  = ('title', 'student', 'supervisor', 'department', 'status', 'created_at')
     list_filter   = ('status', 'department')
-    search_fields = ('title', 'student__username', 'supervisor__username')
+    search_fields = ('title', 'student__username', 'supervisor__username', 'co_supervisors__username')
+    filter_horizontal = ('co_supervisors',)
 
 
 @admin.register(ProjectApplication)

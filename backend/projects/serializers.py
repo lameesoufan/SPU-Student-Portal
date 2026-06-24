@@ -57,6 +57,7 @@ class ProjectIdeaSerializer(serializers.ModelSerializer):
 
 class StudentIdeaProposalSerializer(serializers.ModelSerializer):
     supervisor_name = serializers.SerializerMethodField(read_only=True)
+    co_supervisor_names = serializers.SerializerMethodField(read_only=True)
     student_name    = serializers.SerializerMethodField(read_only=True)
     invitations     = serializers.SerializerMethodField(read_only=True)
 
@@ -64,13 +65,13 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
         model  = StudentIdeaProposal
         fields = [
             'id', 'title', 'description', 'department',
-            'supervisor', 'supervisor_name', 'student_name',
+            'supervisor', 'supervisor_name', 'co_supervisor_names', 'student_name',
             'team_size', 'team_size_reason', 'project_type',
             'status', 'rejection_reason', 'invitations',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['status', 'rejection_reason', 'created_at', 'updated_at',
-                            'supervisor_name', 'student_name', 'invitations']
+                            'supervisor_name', 'co_supervisor_names', 'student_name', 'invitations']
 
     def validate_supervisor(self, value):
         if value and getattr(value, 'role', None) not in ('doctor', 'hod'):
@@ -89,6 +90,12 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
         if obj.supervisor:
             return obj.supervisor.get_full_name() or obj.supervisor.username
         return None
+
+    def get_co_supervisor_names(self, obj):
+        return [
+            supervisor.get_full_name() or supervisor.username
+            for supervisor in obj.co_supervisors.all()
+        ]
 
     def get_student_name(self, obj):
         return obj.student.get_full_name() or obj.student.username

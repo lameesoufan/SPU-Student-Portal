@@ -78,6 +78,7 @@ def _board_detail_queryset():
         'application__idea__doctor',
         'application__student',
     ).prefetch_related(
+        'proposal__co_supervisors',
         'tasks__assignee',
         'tasks__created_by',
         'tasks__comments__author',
@@ -119,6 +120,8 @@ def _get_board_for_member(user, board_id):
 
     if user.role == 'doctor':
         if board.proposal and board.proposal.supervisor_id == user.id:
+            return board
+        if board.proposal and board.proposal.co_supervisors.filter(pk=user.pk).exists():
             return board
         if board.application and board.application.idea.doctor_id == user.id:
             return board
@@ -170,7 +173,11 @@ def supervisor_boards(request):
     from projects.models import StudentIdeaProposal, IdeaApplication
     boards = []
 
-    for proposal in StudentIdeaProposal.objects.filter(supervisor=request.user, status='assigned')[:MAX_BOARD_LIST_SIZE]:
+    proposals = StudentIdeaProposal.objects.filter(
+        Q(supervisor=request.user) | Q(co_supervisors=request.user),
+        status='assigned',
+    ).distinct()
+    for proposal in proposals[:MAX_BOARD_LIST_SIZE]:
         board, _ = ProjectBoard.objects.get_or_create(
             proposal=proposal, defaults={'title': proposal.title}
         )

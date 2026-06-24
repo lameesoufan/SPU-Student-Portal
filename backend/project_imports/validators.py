@@ -28,6 +28,7 @@ from .constants import (
     normalize_project_type,
     resolve_header_field,
 )
+from .name_utils import split_supervisor_names
 
 
 User = get_user_model()
@@ -248,9 +249,11 @@ class RowValidator:
         project_type = normalize_project_type(raw_project_type)
         github_repo = self._normalize_repo_url(row.get('github_repo', '').strip())
         supervisor_name = row.get('supervisor_name', '').strip()
+        supervisor_names = split_supervisor_names(supervisor_name)
         row['department'] = department
         row['project_type'] = project_type
         row['github_repo'] = github_repo
+        row['supervisor_names'] = supervisor_names
 
         if not university_id:
             issues.append(self._error(row_num, 'university_id', 'University ID is required', row))
@@ -274,7 +277,7 @@ class RowValidator:
             ))
         if github_repo and not self._valid_repo_url(github_repo):
             issues.append(self._error(row_num, 'github_repo', 'GitHub/GitLab repository must be a valid URL', row))
-        if not supervisor_name:
+        if not supervisor_names:
             issues.append(self._error(row_num, 'supervisor_name', 'Supervisor name is required', row))
 
         return issues
