@@ -14,7 +14,7 @@ from openpyxl import Workbook
 from rest_framework.test import APIClient
 
 from project_management.models import ProjectBoard
-from projects.models import ProjectApplication, StudentIdeaProposal
+from projects.models import ProjectApplication, ProposalInvitation, StudentIdeaProposal
 
 from .constants import HEADER_TO_FIELD, REQUIRED_HEADERS
 from .models import ImportRow, ImportSession
@@ -264,6 +264,36 @@ class FileValidatorTests(TestCase):
         self.assertEqual(parsed.rows[0]['supervisor_name'], 'dr_portal')
         self.assertEqual(parsed.rows[0]['project_type'], 'graduation_2')
 
+    def test_parse_workbook_groups_member_rows_and_skips_repeated_headers(self):
+        headers = [
+            'No.',
+            'أسماء الطلاب',
+            'الرقم الجامعي',
+            'رقم الجوال',
+            'اسم المشروع',
+            'رابط GitHub',
+            'مجال المشروع',
+            'اسم المشرف',
+            'نمط المشروع',
+        ]
+        excel_file = create_test_excel(
+            [
+                [1, 'Leader Student', '2022001', '', 'Grouped Project', 'github.com/example/grouped', 'أمن معلومات', 'د. وسيم', 'تخرج2'],
+                ['', 'Member Student', '2022002', '', '', '', '', '', ''],
+                ['مشروع تخرج1 (راسب)', '', '', '', '', '', '', '', ''],
+                ['', 'أسماء الطلاب', 'الرقم الجامعي', 'رقم الجوال', 'اسم المشروع', 'رابط GitHub', 'مجال المشروع', 'اسم المشرف', 'نمط المشروع'],
+                [2, 'Solo Student', '2022003', '', 'Solo Project', '', 'هندسة برمجيات', 'د. كادان', 'فصلي'],
+            ],
+            headers=headers,
+        )
+        parsed = self.validator.parse_workbook(excel_file)
+        self.assertEqual(len(parsed.rows), 3)
+        self.assertTrue(parsed.rows[0]['is_project_leader'])
+        self.assertFalse(parsed.rows[1]['is_project_leader'])
+        self.assertEqual(parsed.rows[1]['title'], 'Grouped Project')
+        self.assertEqual(parsed.rows[1]['project_row_number'], parsed.rows[0]['row_number'])
+        self.assertEqual(parsed.rows[2]['title'], 'Solo Project')
+
     def test_parse_workbook_missing_headers(self):
         wb = Workbook()
         ws = wb.active
@@ -374,6 +404,22 @@ class RowValidatorTests(TestCase):
         }
         issues = self.validator.validate_row(row)
         self.assertTrue(any('must be a valid URL' in i.error_message for i in issues))
+
+    def test_validate_row_normalizes_arabic_values(self):
+        row = {
+            'row_number': 2,
+            'university_id': '2021002',
+            'title': 'Project',
+            'department': 'أمن معلومات',
+            'project_type': 'تخرج2',
+            'supervisor_name': 'Dr. Ahmed',
+            'github_repo': 'github.com/test/repo',
+        }
+        issues = self.validator.validate_row(row)
+        self.assertFalse(any(i.level == 'error' for i in issues))
+        self.assertEqual(row['department'], 'information_security')
+        self.assertEqual(row['project_type'], 'graduation_2')
+        self.assertEqual(row['github_repo'], 'https://github.com/test/repo')
 
     def test_check_duplicates_in_file(self):
         rows = [
@@ -522,6 +568,44 @@ class ProjectCreatorTests(TestCase):
         self.assertIn('board', created[0])
         self.assertEqual(created[0]['proposal'].title, 'Test Project')
         self.assertEqual(created[0]['proposal'].status, 'assigned')
+
+    def test_create_grouped_project_members(self):
+        member = User.objects.create_user(
+            username='2021051', password='Pass123', role='student'
+        )
+        rows = [
+            {
+                'row_number': 2,
+                'project_row_number': 2,
+                'is_project_leader': True,
+                'university_id': '2021050',
+                'title': 'Grouped Project',
+                'department': 'software_engineering',
+                'project_type': 'graduation_2',
+                'github_repo': '',
+            },
+            {
+                'row_number': 3,
+                'project_row_number': 2,
+                'is_project_leader': False,
+                'university_id': '2021051',
+                'title': 'Grouped Project',
+                'department': 'software_engineering',
+                'project_type': 'graduation_2',
+                'github_repo': '',
+            },
+        ]
+        user_map = {
+            'students': {'2021050': self.student, '2021051': member},
+            'supervisors': {2: self.doctor, 3: self.doctor},
+        }
+        created = self.creator.create_projects(rows, user_map, self.dean)
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0]['proposal'].team_size, 2)
+        self.assertEqual(created[0]['proposal'].student, self.student)
+        invitation = ProposalInvitation.objects.get(proposal=created[0]['proposal'])
+        self.assertEqual(invitation.invitee, member)
+        self.assertEqual(invitation.status, 'accepted')
 
 
 class ImportServiceTests(TestCase):

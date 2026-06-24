@@ -16,7 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from project_management.models import ProjectBoard
-from projects.models import ProjectApplication, StudentIdeaProposal
+from projects.models import ProjectApplication, ProposalInvitation, StudentIdeaProposal
 
 from .constants import DEFAULT_TEMP_PASSWORD_FORMAT
 from .models import ImportRow, ImportSession
@@ -196,7 +196,9 @@ class ProjectCreator:
     def create_projects(self, rows, user_map, super_admin):
         created = []
         now = timezone.localtime(timezone.now()).strftime('%Y-%m-%d')
-        for row in rows:
+        for group_rows in self._group_project_rows(rows):
+            row = self._leader_row(group_rows)
+            members = [member_row for member_row in group_rows if member_row is not row]
             student = user_map['students'][row['university_id']]
             supervisor = user_map['supervisors'][row['row_number']]
             proposal = StudentIdeaProposal.objects.create(
@@ -205,11 +207,17 @@ class ProjectCreator:
                 title=row['title'],
                 description=f'Imported by {super_admin.username} on {now}',
                 department=row['department'],
-                team_size=1,
+                team_size=len(group_rows),
                 team_size_reason='Bulk import by super admin',
                 project_type=row['project_type'],
                 status='assigned',
             )
+            for member_row in members:
+                ProposalInvitation.objects.create(
+                    proposal=proposal,
+                    invitee=user_map['students'][member_row['university_id']],
+                    status='accepted',
+                )
             application = ProjectApplication.objects.create(
                 proposal=proposal,
                 student=student,
@@ -221,8 +229,20 @@ class ProjectCreator:
                 title=row['title'],
                 github_repo=row.get('github_repo') or None,
             )
-            created.append({'proposal': proposal, 'application': application, 'board': board})
+            created.append({'proposal': proposal, 'application': application, 'board': board, 'rows': group_rows})
         return created
+
+    def _group_project_rows(self, rows):
+        grouped = defaultdict(list)
+        for row in rows:
+            grouped[row.get('project_row_number') or row['row_number']].append(row)
+        return [grouped[key] for key in sorted(grouped.keys())]
+
+    def _leader_row(self, rows):
+        for row in rows:
+            if row.get('is_project_leader'):
+                return row
+        return rows[0]
 
 
 class ImportService:
@@ -385,10 +405,10 @@ class ImportService:
         session.save(update_fields=['failed_rows', 'successful_rows', 'status', 'error_summary', 'completed_at'])
 
     def _mark_success(self, session, rows, created, user_map):
-        proposals_by_row = {
-            row['row_number']: created_item['proposal']
-            for row, created_item in zip(rows, created)
-        }
+        proposals_by_row = {}
+        for created_item in created:
+            for row in created_item.get('rows', []):
+                proposals_by_row[row['row_number']] = created_item['proposal']
         ImportRow.objects.bulk_create([
             ImportRow(
                 session=session,
@@ -408,6 +428,12 @@ class ImportService:
         session.save(update_fields=['successful_rows', 'failed_rows', 'status', 'completed_at'])
         logger.info('Project import completed: session=%s user=%s rows=%s', session.id, self.super_admin.username, len(rows))
 
+    def _project_count(self, rows):
+        return len({
+            row.get('project_row_number') or row.get('row_number')
+            for row in rows
+        })
+
     def _build_result(self, *, parsed, session, issues, dry_run, execution_time, plan, created, preview_result_id=None):
         errors = [issue.to_dict() for issue in issues if issue.level == 'error']
         warnings = [issue.to_dict() for issue in issues if issue.level == 'warning']
@@ -415,6 +441,12 @@ class ImportService:
 
         total_rows = len(parsed.rows)
         invalid_rows = len({error['row_number'] for error in errors if error.get('row_number')})
+        valid_rows_count = max(total_rows - invalid_rows, 0)
+        valid_rows = self._remove_error_rows(parsed.rows, [ValidationIssue(
+            row_number=error.get('row_number'),
+            field_name=error.get('field_name', ''),
+            error_message=error.get('error_message', ''),
+        ) for error in errors])
         result = {
             'import_session_id': str(session.id) if session else None,
             'preview_result_id': preview_result_id,
@@ -422,7 +454,7 @@ class ImportService:
             'dry_run': dry_run,
             'status': 'preview' if dry_run and not errors else ('failed' if errors else 'success'),
             'total_rows_processed': total_rows,
-            'valid_rows_count': max(total_rows - invalid_rows, 0),
+            'valid_rows_count': valid_rows_count,
             'invalid_rows_count': invalid_rows,
             'successful_imports': len(created['projects']),
             'failed_imports': invalid_rows,
@@ -433,7 +465,7 @@ class ImportService:
                 'students': plan.get('students_to_create', []),
                 'supervisors': plan.get('supervisors_to_create', []),
             },
-            'projects_to_create': max(total_rows - invalid_rows, 0) if dry_run else 0,
+            'projects_to_create': self._project_count(valid_rows) if dry_run else 0,
             'validation_errors': errors,
             'warnings': warnings,
             'errors_by_type': group_issues([issue for issue in issues if issue.level == 'error']),

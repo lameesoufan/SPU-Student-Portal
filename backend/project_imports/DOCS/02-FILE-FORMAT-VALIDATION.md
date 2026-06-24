@@ -19,6 +19,8 @@ The project imports module accepts Excel (.xlsx) files with a specific structure
 
 The first row may use Arabic template headers, English field-name headers, or bilingual cells such as `اسم الطالب: student_name`. Common Arabic variants such as `أسماء الطلاب` and Git link labels such as `رابط GitHub` are accepted. Extra columns, for example `رقم الجوال`, are ignored by the project importer.
 
+Grouped project sheets are supported. When a project spans multiple student rows, the first row carries the project title, department, supervisor, type, and GitHub link; continuation rows may contain only student name and university ID. The importer creates one assigned project for the group and accepted member records for the additional students.
+
 | Arabic Header | English Header | Type | Required | Description |
 |--------------|----------------|------|----------|-------------|
 | اسم الطالب | student_name | Text | Yes | Full student name (first and last) |
@@ -50,6 +52,8 @@ VALID_PROJECT_TYPES = [
     'graduation_2'
 ]
 ```
+
+Arabic/display values are normalized before validation. Examples: `أمن معلومات` -> `information_security`, `هندسة برمجيات` -> `software_engineering`, `تخرج2` -> `graduation_2`, and `فصلي` -> `seasonal`.
 
 ## 📊 Template Structure
 
