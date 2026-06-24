@@ -24,6 +24,17 @@ const formatFileSize = (bytes) => {
 
 const normalizeHistory = (payload) => payload?.results || payload || [];
 
+const formatImportError = (payload, fallback) => {
+  if (!payload) return fallback;
+  let message = payload.error || fallback;
+  const details = Array.isArray(payload.details) ? payload.details[0] : payload.details;
+  const receivedHeaders = details?.received_headers?.filter(Boolean);
+  if (receivedHeaders?.length) {
+    message += ` Received headers: ${receivedHeaders.join(', ')}`;
+  }
+  return message;
+};
+
 export default function ImportProjects({ onBack }) {
   const [file, setFile] = useState(null);
   const [dragOver, setDragOver] = useState(false);
@@ -74,7 +85,7 @@ export default function ImportProjects({ onBack }) {
     } catch (err) {
       const payload = err.response?.data;
       setPreview(payload?.validation_errors ? payload : null);
-      setError(payload?.error || 'Preview failed. Please review the file and try again.');
+      setError(formatImportError(payload, 'Preview failed. Please review the file and try again.'));
     } finally {
       setLoading(false);
     }
@@ -97,7 +108,7 @@ export default function ImportProjects({ onBack }) {
     } catch (err) {
       const payload = err.response?.data;
       setResult(payload?.validation_errors ? payload : null);
-      setError(payload?.error || 'Import failed. No changes were saved.');
+      setError(formatImportError(payload, 'Import failed. No changes were saved.'));
     } finally {
       setLoading(false);
     }

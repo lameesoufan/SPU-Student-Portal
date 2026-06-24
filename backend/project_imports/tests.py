@@ -210,6 +210,26 @@ class FileValidatorTests(TestCase):
         self.assertEqual(parsed.rows[0]['department'], 'information_security')
         self.assertEqual(parsed.rows[0]['project_type'], 'graduation_1')
 
+    def test_parse_workbook_accepts_student_name_header_variants(self):
+        excel_file = create_test_excel(
+            [
+                ['Leen Omar', '2021005', 'Robotics Project', 'control_robotics', 'dr_robot', 'seasonal', '']
+            ],
+            headers=[
+                '\ufeffStudent-Name',
+                'university id',
+                'project-title',
+                'project department',
+                'doctor name',
+                'project type',
+                'git repository',
+            ],
+        )
+        parsed = self.validator.parse_workbook(excel_file)
+        self.assertEqual(parsed.rows[0]['student_name'], 'Leen Omar')
+        self.assertEqual(parsed.rows[0]['university_id'], '2021005')
+        self.assertEqual(parsed.rows[0]['github_repo'], '')
+
     def test_parse_workbook_missing_headers(self):
         wb = Workbook()
         ws = wb.active
