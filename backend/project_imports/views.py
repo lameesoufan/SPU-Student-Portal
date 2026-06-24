@@ -1,4 +1,5 @@
 from django.http import HttpResponse
+from django.core.cache import cache
 from django.utils.dateparse import parse_date
 from rest_framework import status
 from rest_framework.generics import ListAPIView
@@ -27,6 +28,12 @@ class ImportProjectsView(APIView):
 
         dry_run = str(request.query_params.get('dry_run', request.data.get('dry_run', 'false'))).lower() == 'true'
         preview_result_id = request.data.get('preview_result_id') or request.query_params.get('preview_result_id')
+        lock_key = f'project_import_in_progress_{request.user.id}'
+        if not cache.add(lock_key, True, timeout=3600):
+            return Response(
+                {'error': 'Import already in progress. Please wait for completion.'},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         service = ImportService(request.user)
         try:
@@ -45,6 +52,8 @@ class ImportProjectsView(APIView):
                 {'error': f'Import failed. No changes were saved. Error: {str(exc)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        finally:
+            cache.delete(lock_key)
 
         has_errors = bool(result.get('validation_errors'))
         if has_errors:
@@ -68,6 +77,7 @@ class DownloadTemplateView(APIView):
 class ImportHistoryView(ListAPIView):
     permission_classes = [IsSuperAdmin]
     serializer_class = ImportSessionSerializer
+    pagination_class = None
 
     def get_queryset(self):
         queryset = ImportSession.objects.filter(super_admin=self.request.user)
@@ -86,6 +96,7 @@ class ImportHistoryView(ListAPIView):
 class ImportRowsView(ListAPIView):
     permission_classes = [IsSuperAdmin]
     serializer_class = ImportRowSerializer
+    pagination_class = None
 
     def get_queryset(self):
         session_id = self.kwargs['session_id']

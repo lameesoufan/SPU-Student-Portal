@@ -14,24 +14,49 @@ HEADER_SUPERVISOR_NAME = 'اسم المشرف'
 HEADER_PROJECT_TYPE = 'نمط المشروع'
 HEADER_GIT_REPO = 'رابط الـ Git'
 
-REQUIRED_HEADERS = [
-    HEADER_STUDENT_NAME,
-    HEADER_UNIVERSITY_ID,
-    HEADER_PROJECT_TITLE,
-    HEADER_DEPARTMENT,
-    HEADER_SUPERVISOR_NAME,
-    HEADER_PROJECT_TYPE,
-    HEADER_GIT_REPO,
-]
+FIELD_HEADERS = {
+    'student_name': HEADER_STUDENT_NAME,
+    'university_id': HEADER_UNIVERSITY_ID,
+    'title': HEADER_PROJECT_TITLE,
+    'department': HEADER_DEPARTMENT,
+    'supervisor_name': HEADER_SUPERVISOR_NAME,
+    'project_type': HEADER_PROJECT_TYPE,
+    'github_repo': HEADER_GIT_REPO,
+}
+
+REQUIRED_FIELDS = list(FIELD_HEADERS.keys())
+REQUIRED_HEADERS = [FIELD_HEADERS[field] for field in REQUIRED_FIELDS]
+
+HEADER_ALIASES = {
+    'student_name': (HEADER_STUDENT_NAME, 'student_name'),
+    'university_id': (HEADER_UNIVERSITY_ID, 'university_id'),
+    'title': (HEADER_PROJECT_TITLE, 'title'),
+    'department': (HEADER_DEPARTMENT, 'department'),
+    'supervisor_name': (HEADER_SUPERVISOR_NAME, 'supervisor_name'),
+    'project_type': (HEADER_PROJECT_TYPE, 'project_type'),
+    'github_repo': (
+        HEADER_GIT_REPO,
+        'github_repo',
+        'git_repo',
+        'git_repository',
+        'git repo',
+        'رابط Git',
+        'رابط ال Git',
+        'رابط الـGit',
+    ),
+}
+
+
+def normalize_header_name(value):
+    normalized = ' '.join(str(value or '').strip().split())
+    normalized = normalized.replace('ـ', '')
+    return normalized.casefold()
+
 
 HEADER_TO_FIELD = {
-    HEADER_STUDENT_NAME: 'student_name',
-    HEADER_UNIVERSITY_ID: 'university_id',
-    HEADER_PROJECT_TITLE: 'title',
-    HEADER_DEPARTMENT: 'department',
-    HEADER_SUPERVISOR_NAME: 'supervisor_name',
-    HEADER_PROJECT_TYPE: 'project_type',
-    HEADER_GIT_REPO: 'github_repo',
+    normalize_header_name(header): field
+    for field, aliases in HEADER_ALIASES.items()
+    for header in aliases
 }
 
 VALID_DEPARTMENTS = [value for value, _label in DEPARTMENTS]

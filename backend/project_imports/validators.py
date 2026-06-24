@@ -1,6 +1,5 @@
 import hashlib
 import html
-import re
 import zipfile
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -8,7 +7,6 @@ from io import BytesIO
 from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
-from django.db.models import Q
 from openpyxl import load_workbook
 
 from projects.models import (
@@ -20,12 +18,14 @@ from projects.models import (
 )
 
 from .constants import (
+    FIELD_HEADERS,
     HEADER_TO_FIELD,
     MAX_FILE_SIZE_BYTES,
     MAX_ROWS,
-    REQUIRED_HEADERS,
+    REQUIRED_FIELDS,
     VALID_DEPARTMENTS,
     VALID_PROJECT_TYPES,
+    normalize_header_name,
 )
 
 
@@ -76,10 +76,6 @@ def normalize_cell_value(value):
     return str(value).strip()
 
 
-def sanitize_text(value):
-    return html.escape(normalize_cell_value(value), quote=True)
-
-
 class FileValidator:
     allowed_extensions = ('.xlsx',)
 
@@ -120,18 +116,20 @@ class FileValidator:
             worksheet = workbook.worksheets[0]
             header_cells = list(next(worksheet.iter_rows(min_row=1, max_row=1), []))
             headers = [normalize_cell_value(cell.value) for cell in header_cells]
-            missing = [header for header in REQUIRED_HEADERS if header not in headers]
-            if missing:
+
+            header_positions = {}
+            for index, header in enumerate(headers):
+                field = HEADER_TO_FIELD.get(normalize_header_name(header))
+                if field and field not in header_positions:
+                    header_positions[field] = index
+
+            missing_fields = [field for field in REQUIRED_FIELDS if field not in header_positions]
+            if missing_fields:
+                missing = [FIELD_HEADERS[field] for field in missing_fields]
                 raise ImportValidationError(
                     f"Missing required headers: {', '.join(missing)}",
                     details=[{'missing_headers': missing}],
                 )
-
-            header_positions = {
-                HEADER_TO_FIELD[header]: index
-                for index, header in enumerate(headers)
-                if header in HEADER_TO_FIELD
-            }
 
             rows = []
             for excel_row in worksheet.iter_rows(min_row=2):
@@ -148,7 +146,7 @@ class FileValidator:
                         raise ImportValidationError(
                             f"Row {row_data['row_number']}: Formula cells are not allowed in imported fields"
                         )
-                    row_data[field_name] = sanitize_text(cell.value if cell is not None else '')
+                    row_data[field_name] = normalize_cell_value(cell.value if cell is not None else '')
                 rows.append(row_data)
 
             if not rows:
@@ -382,6 +380,3 @@ def group_issues(issues):
     for issue in issues:
         grouped[issue.error_type].append(issue.to_dict())
     return dict(grouped)
-
-
-USERNAME_RE = re.compile(r'[^A-Za-z0-9_]+')

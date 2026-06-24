@@ -4,7 +4,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from .constants import REQUIRED_HEADERS, VALID_DEPARTMENTS, VALID_PROJECT_TYPES
+from .constants import FIELD_HEADERS, REQUIRED_HEADERS, VALID_DEPARTMENTS, VALID_PROJECT_TYPES
 
 
 class TemplateGenerator:
@@ -58,14 +58,14 @@ class TemplateGenerator:
         worksheet = workbook.create_sheet('Instructions')
         worksheet.sheet_view.rightToLeft = True
         rows = [
-            ['Field', 'Description'],
-            ['اسم الطالب', 'Full student name. It will be split into first and last name.'],
-            ['الرقم الجامعي', 'Student university ID. This becomes the student username.'],
-            ['اسم المشروع', 'Project title. Maximum 255 characters.'],
-            ['مجال المشروع', f"One of: {', '.join(VALID_DEPARTMENTS)}"],
-            ['اسم المشرف', 'Doctor username or unique full/partial doctor name.'],
-            ['نمط المشروع', f"One of: {', '.join(VALID_PROJECT_TYPES)}"],
-            ['رابط الـ Git', 'Optional GitHub or GitLab URL.'],
+            ['Arabic Header', 'English Header', 'Description'],
+            [FIELD_HEADERS['student_name'], 'student_name', 'Full student name. It will be split into first and last name.'],
+            [FIELD_HEADERS['university_id'], 'university_id', 'Student university ID. This becomes the student username.'],
+            [FIELD_HEADERS['title'], 'title', 'Project title. Maximum 255 characters.'],
+            [FIELD_HEADERS['department'], 'department', f"One of: {', '.join(VALID_DEPARTMENTS)}"],
+            [FIELD_HEADERS['supervisor_name'], 'supervisor_name', 'Doctor username or unique full/partial doctor name.'],
+            [FIELD_HEADERS['project_type'], 'project_type', f"One of: {', '.join(VALID_PROJECT_TYPES)}"],
+            [FIELD_HEADERS['github_repo'], 'github_repo', 'Optional GitHub or GitLab URL.'],
         ]
         for row in rows:
             worksheet.append(row)
@@ -73,4 +73,5 @@ class TemplateGenerator:
             cell.font = Font(bold=True)
             cell.fill = PatternFill('solid', fgColor='DCFCE7')
         worksheet.column_dimensions['A'].width = 24
-        worksheet.column_dimensions['B'].width = 90
+        worksheet.column_dimensions['B'].width = 24
+        worksheet.column_dimensions['C'].width = 90

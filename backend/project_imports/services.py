@@ -279,7 +279,15 @@ class ImportService:
                 preview_result_id=preview_id,
             )
 
-        self._validate_preview(parsed.file_hash, preview_result_id)
+        try:
+            self._validate_preview(parsed.file_hash, preview_result_id)
+        except ImportValidationError as exc:
+            if session:
+                session.status = ImportSession.STATUS_FAILED
+                session.error_summary = exc.message[:1000]
+                session.completed_at = timezone.now()
+                session.save(update_fields=['status', 'error_summary', 'completed_at'])
+            raise
 
         try:
             with transaction.atomic():

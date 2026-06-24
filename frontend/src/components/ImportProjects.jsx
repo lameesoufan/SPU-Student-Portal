@@ -212,6 +212,11 @@ export default function ImportProjects({ onBack }) {
             <span className="mt-1 text-xs text-[var(--text-secondary,#64748b)]">
               {file ? formatFileSize(file.size) : 'Maximum 10 MB. Legacy .xls is intentionally disabled.'}
             </span>
+            {!file && (
+              <span className="mt-3 max-w-xl text-xs leading-5 text-[var(--text-secondary,#64748b)]">
+                Headers may use the Arabic template labels or English keys. project_type must be one of: seasonal, graduation_1, graduation_2.
+              </span>
+            )}
             <input
               ref={fileInputRef}
               type="file"
