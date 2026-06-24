@@ -32,6 +32,20 @@ REQUIRED_HEADERS = [FIELD_HEADERS[field] for field in REQUIRED_FIELDS]
 HEADER_ALIASES = {
     'student_name': (
         HEADER_STUDENT_NAME,
+        'أسماء الطلاب',
+        'اسماء الطلاب',
+        'أسماء الطلبة',
+        'اسماء الطلبة',
+        'أسماء الطالبات',
+        'اسماء الطالبات',
+        'اسم الطلاب',
+        'اسم الطلبة',
+        'اسم الطالبات',
+        'اسم الطالبة',
+        'اسم الطالب والطالبة',
+        'اسم الطالب أو الطالبة',
+        'الاسم الكامل للطالب',
+        'الاسم الكامل',
         'student_name',
         'student name',
         'student-name',
@@ -54,8 +68,19 @@ HEADER_ALIASES = {
     'project_type': (HEADER_PROJECT_TYPE, 'project_type', 'project type', 'type'),
     'github_repo': (
         HEADER_GIT_REPO,
+        'رابط GitHub',
+        'رابط Github',
+        'رابط github',
+        'رابط جيت هب',
+        'رابط المستودع',
+        'رابط مستودع Git',
+        'رابط مستودع GitHub',
+        'رابط المشروع على GitHub',
         'github_repo',
         'github repo',
+        'github',
+        'github url',
+        'github link',
         'git_repo',
         'git_repository',
         'git repo',
@@ -69,6 +94,17 @@ HEADER_ALIASES = {
 }
 
 HEADER_INVISIBLE_CHARS = str.maketrans('', '', '\ufeff\u061c\u200b\u200c\u200d\u200e\u200f')
+HEADER_ARABIC_CHAR_TRANSLATION = str.maketrans({
+    'أ': 'ا',
+    'إ': 'ا',
+    'آ': 'ا',
+    'ٱ': 'ا',
+    'ى': 'ي',
+    'ؤ': 'و',
+    'ئ': 'ي',
+    'ة': 'ه',
+})
+HEADER_ARABIC_DIACRITICS_RE = re.compile(r'[\u064b-\u065f\u0670]')
 HEADER_SEPARATOR_RE = re.compile(r'[:：|/\\\r\n]+')
 HEADER_WORD_SEPARATOR_RE = re.compile(r'[\s_\-–—:：|/\\()\[\]{}]+')
 HEADER_COMPACT_RE = re.compile(r'[\W_]+', re.UNICODE)
@@ -79,6 +115,8 @@ def normalize_header_name(value):
     normalized = str(value or '').translate(HEADER_INVISIBLE_CHARS)
     normalized = normalized.replace('\xa0', ' ')
     normalized = normalized.replace('ـ', '')
+    normalized = normalized.translate(HEADER_ARABIC_CHAR_TRANSLATION)
+    normalized = HEADER_ARABIC_DIACRITICS_RE.sub('', normalized)
     normalized = HEADER_WORD_SEPARATOR_RE.sub(' ', normalized)
     normalized = ' '.join(normalized.strip().split())
     return normalized.casefold()

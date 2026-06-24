@@ -230,6 +230,40 @@ class FileValidatorTests(TestCase):
         self.assertEqual(parsed.rows[0]['university_id'], '2021005')
         self.assertEqual(parsed.rows[0]['github_repo'], '')
 
+    def test_parse_workbook_accepts_received_portal_headers(self):
+        excel_file = create_test_excel(
+            [
+                [
+                    'Maya Nasser',
+                    '2021006',
+                    '0999999999',
+                    'Portal Import Project',
+                    'https://github.com/example/portal-import',
+                    'software_engineering',
+                    'dr_portal',
+                    'graduation_2',
+                ]
+            ],
+            headers=[
+                'أسماء الطلاب',
+                'الرقم الجامعي',
+                'رقم الجوال',
+                'اسم المشروع',
+                'رابط GitHub',
+                'مجال المشروع',
+                'اسم المشرف',
+                'نمط المشروع',
+            ],
+        )
+        parsed = self.validator.parse_workbook(excel_file)
+        self.assertEqual(parsed.rows[0]['student_name'], 'Maya Nasser')
+        self.assertEqual(parsed.rows[0]['university_id'], '2021006')
+        self.assertEqual(parsed.rows[0]['title'], 'Portal Import Project')
+        self.assertEqual(parsed.rows[0]['github_repo'], 'https://github.com/example/portal-import')
+        self.assertEqual(parsed.rows[0]['department'], 'software_engineering')
+        self.assertEqual(parsed.rows[0]['supervisor_name'], 'dr_portal')
+        self.assertEqual(parsed.rows[0]['project_type'], 'graduation_2')
+
     def test_parse_workbook_missing_headers(self):
         wb = Workbook()
         ws = wb.active

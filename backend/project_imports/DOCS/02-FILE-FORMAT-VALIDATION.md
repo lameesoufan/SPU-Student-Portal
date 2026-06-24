@@ -17,7 +17,7 @@ The project imports module accepts Excel (.xlsx) files with a specific structure
 
 ### Required Columns (Arabic or English Headers)
 
-The first row may use Arabic template headers, English field-name headers, or bilingual cells such as `اسم الطالب: student_name`.
+The first row may use Arabic template headers, English field-name headers, or bilingual cells such as `اسم الطالب: student_name`. Common Arabic variants such as `أسماء الطلاب` and Git link labels such as `رابط GitHub` are accepted. Extra columns, for example `رقم الجوال`, are ignored by the project importer.
 
 | Arabic Header | English Header | Type | Required | Description |
 |--------------|----------------|------|----------|-------------|
