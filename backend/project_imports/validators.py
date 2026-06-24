@@ -19,13 +19,12 @@ from projects.models import (
 
 from .constants import (
     FIELD_HEADERS,
-    HEADER_TO_FIELD,
     MAX_FILE_SIZE_BYTES,
     MAX_ROWS,
     REQUIRED_FIELDS,
     VALID_DEPARTMENTS,
     VALID_PROJECT_TYPES,
-    normalize_header_name,
+    resolve_header_field,
 )
 
 
@@ -119,7 +118,7 @@ class FileValidator:
 
             header_positions = {}
             for index, header in enumerate(headers):
-                field = HEADER_TO_FIELD.get(normalize_header_name(header))
+                field = resolve_header_field(header)
                 if field and field not in header_positions:
                     header_positions[field] = index
 
@@ -128,7 +127,10 @@ class FileValidator:
                 missing = [FIELD_HEADERS[field] for field in missing_fields]
                 raise ImportValidationError(
                     f"Missing required headers: {', '.join(missing)}",
-                    details=[{'missing_headers': missing}],
+                    details=[{
+                        'missing_headers': missing,
+                        'received_headers': headers,
+                    }],
                 )
 
             rows = []

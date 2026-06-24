@@ -189,6 +189,27 @@ class FileValidatorTests(TestCase):
         self.assertEqual(parsed.rows[0]['department'], 'artificial_intelligence')
         self.assertEqual(parsed.rows[0]['project_type'], 'seasonal')
 
+    def test_parse_workbook_accepts_bilingual_headers(self):
+        excel_file = create_test_excel(
+            [
+                ['Ali Hassan', '2021004', 'Security Project', 'information_security', 'dr_security', 'graduation_1', '']
+            ],
+            headers=[
+                f'{REQUIRED_HEADERS[0]}: student_name',
+                f'{REQUIRED_HEADERS[1]}: university_id',
+                f'{REQUIRED_HEADERS[2]}: title',
+                f'{REQUIRED_HEADERS[3]}: department',
+                f'{REQUIRED_HEADERS[4]}: supervisor_name',
+                f'{REQUIRED_HEADERS[5]}: project_type',
+                f'{REQUIRED_HEADERS[6]}: github_repo',
+            ],
+        )
+        parsed = self.validator.parse_workbook(excel_file)
+        self.assertEqual(parsed.rows[0]['student_name'], 'Ali Hassan')
+        self.assertEqual(parsed.rows[0]['university_id'], '2021004')
+        self.assertEqual(parsed.rows[0]['department'], 'information_security')
+        self.assertEqual(parsed.rows[0]['project_type'], 'graduation_1')
+
     def test_parse_workbook_missing_headers(self):
         wb = Workbook()
         ws = wb.active

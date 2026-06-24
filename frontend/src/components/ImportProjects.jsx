@@ -214,7 +214,7 @@ export default function ImportProjects({ onBack }) {
             </span>
             {!file && (
               <span className="mt-3 max-w-xl text-xs leading-5 text-[var(--text-secondary,#64748b)]">
-                Headers may use the Arabic template labels or English keys. project_type must be one of: seasonal, graduation_1, graduation_2.
+                Headers may use Arabic labels, English keys, or both together. project_type must be one of: seasonal, graduation_1, graduation_2.
               </span>
             )}
             <input
