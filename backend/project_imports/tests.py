@@ -637,6 +637,20 @@ class ImportServiceTests(TestCase):
         self.assertGreater(len(result['validation_errors']), 0)
         self.assertEqual(result['status'], 'failed')
 
+    def test_execute_import_dry_run_allows_partial_preview(self):
+        excel_file = create_test_excel([
+            ['Valid Student', '2021300', 'Partial Preview Valid Project', 'software_engineering', 'Dr Partial Preview', 'graduation_1', ''],
+            ['Missing Id Student', '', 'Partial Preview Invalid Project', 'software_engineering', 'Dr Partial Preview', 'graduation_1', ''],
+        ])
+        result = self.service.execute_import(excel_file, dry_run=True)
+        self.assertEqual(result['status'], 'partial_preview')
+        self.assertTrue(result['partial_import'])
+        self.assertIsNotNone(result['preview_result_id'])
+        self.assertEqual(result['valid_rows_count'], 1)
+        self.assertEqual(result['invalid_rows_count'], 1)
+        self.assertEqual(result['projects_to_create'], 1)
+        self.assertGreater(len(result['validation_errors']), 0)
+
     def test_execute_import_real_import(self):
         excel_file = create_test_excel([
             ['ظ…ط­ظ…ط¯ ط§ط­ظ…ط¯', '2021101', 'ظ…ط´ط±ظˆط¹ ط§ظ„طھط®ط±ط¬', 'software_engineering', 'ط¯. ط§ط­ظ…ط¯', 'graduation_1', '']
@@ -655,6 +669,44 @@ class ImportServiceTests(TestCase):
             session = ImportSession.objects.first()
             self.assertEqual(session.status, ImportSession.STATUS_SUCCESS)
             self.assertEqual(session.successful_rows, 1)
+
+    def test_execute_import_real_import_imports_valid_rows_and_records_failed_rows(self):
+        rows = [
+            ['Valid Partial Student', '2021301', 'Partial Real Valid Project', 'software_engineering', 'Dr Partial Real', 'graduation_2', ''],
+            ['Missing Partial Id', '', 'Partial Real Invalid Project', 'software_engineering', 'Dr Partial Real', 'graduation_2', ''],
+        ]
+        upload = create_test_excel(rows)
+        workbook_bytes = upload.getvalue()
+
+        def workbook_upload():
+            next_upload = io.BytesIO(workbook_bytes)
+            next_upload.name = upload.name
+            next_upload.size = len(workbook_bytes)
+            return next_upload
+
+        preview_result = self.service.execute_import(workbook_upload(), dry_run=True)
+        result = self.service.execute_import(
+            workbook_upload(),
+            dry_run=False,
+            preview_result_id=preview_result.get('preview_result_id'),
+        )
+        self.assertEqual(result['status'], 'partial_success')
+        self.assertTrue(result['partial_import'])
+        self.assertEqual(result['successful_imports'], 1)
+        self.assertEqual(result['failed_imports'], 1)
+        self.assertEqual(result['created_projects_count'], 1)
+        self.assertEqual(StudentIdeaProposal.objects.filter(title='Partial Real Valid Project').count(), 1)
+        self.assertFalse(StudentIdeaProposal.objects.filter(title='Partial Real Invalid Project').exists())
+
+        session = ImportSession.objects.get()
+        self.assertEqual(session.status, ImportSession.STATUS_SUCCESS)
+        self.assertEqual(session.successful_rows, 1)
+        self.assertEqual(session.failed_rows, 1)
+        self.assertIn('skipped 1 invalid row', session.error_summary)
+        self.assertEqual(session.rows.filter(status=ImportRow.STATUS_SUCCESS).count(), 1)
+        failed_row = session.rows.get(status=ImportRow.STATUS_FAILED)
+        self.assertEqual(failed_row.row_number, 3)
+        self.assertIn('University ID is required', failed_row.error_message)
 
     def test_cache_preview(self):
         preview_id = self.service._cache_preview('file_hash_123', 5)
@@ -697,6 +749,24 @@ class ImportProjectsAPITests(TestCase):
             self.assertTrue(response.data['dry_run'])
             self.assertIn('preview_result_id', response.data)
 
+    def test_import_projects_partial_dry_run_returns_200(self):
+        self.client.force_authenticate(user=self.dean)
+        excel_file = create_test_excel([
+            ['API Partial Student', '2021302', 'API Partial Valid Project', 'software_engineering', 'Dr API Partial', 'graduation_1', ''],
+            ['API Missing Id', '', 'API Partial Invalid Project', 'software_engineering', 'Dr API Partial', 'graduation_1', ''],
+        ])
+        response = self.client.post(
+            '/api/import/projects/?dry_run=true',
+            {'file': excel_file},
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'partial_preview')
+        self.assertTrue(response.data['partial_import'])
+        self.assertIsNotNone(response.data['preview_result_id'])
+        self.assertEqual(response.data['valid_rows_count'], 1)
+        self.assertEqual(response.data['invalid_rows_count'], 1)
+
     def test_import_projects_without_file(self):
         self.client.force_authenticate(user=self.dean)
         response = self.client.post('/api/import/projects/')
@@ -720,24 +790,29 @@ class ImportProjectsAPITests(TestCase):
         excel_file = create_test_excel([
             ['ظ…ط­ظ…ط¯ ط§ط­ظ…ط¯', '2021202', 'ظ…ط´ط±ظˆط¹ ط§ظ„طھط®ط±ط¬', 'software_engineering', 'ط¯. ط§ط­ظ…ط¯', 'graduation_1', '']
         ])
+        upload_name = excel_file.name
+        workbook_bytes = excel_file.getvalue()
+
+        def workbook_upload():
+            next_upload = io.BytesIO(workbook_bytes)
+            next_upload.name = upload_name
+            next_upload.size = len(workbook_bytes)
+            return next_upload
+
         preview_response = self.client.post(
             '/api/import/projects/',
-            {'file': excel_file, 'dry_run': 'true'},
+            {'file': workbook_upload(), 'dry_run': 'true'},
             format='multipart',
         )
         if preview_response.status_code == 200 and 'preview_result_id' in preview_response.data:
             preview_id = preview_response.data['preview_result_id']
-            excel_file = create_test_excel([
-                ['ظ…ط­ظ…ط¯ ط§ط­ظ…ط¯', '2021202', 'ظ…ط´ط±ظˆط¹ ط§ظ„طھط®ط±ط¬', 'software_engineering', 'ط¯. ط§ط­ظ…ط¯', 'graduation_1', '']
-            ])
             response = self.client.post(
                 '/api/import/projects/',
-                {'file': excel_file, 'preview_result_id': preview_id},
+                {'file': workbook_upload(), 'preview_result_id': preview_id},
                 format='multipart',
             )
-            self.assertIn(response.status_code, [200, 201])
-            if response.status_code == 201:
-                self.assertEqual(response.data['status'], 'success')
+            self.assertEqual(response.status_code, 201)
+            self.assertEqual(response.data['status'], 'success')
 
     @override_settings(CACHES={'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}})
     def test_import_projects_concurrent_lock(self):

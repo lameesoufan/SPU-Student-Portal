@@ -271,9 +271,24 @@ class ImportService:
         plan = self.user_mapper.build_plan(valid_rows)
         issues.extend(plan['issues'])
         valid_rows = self._remove_error_rows(valid_rows, issues)
+        if plan['issues']:
+            plan = self.user_mapper.build_plan(valid_rows)
         errors = [issue for issue in issues if issue.level == 'error']
 
-        if errors:
+        if dry_run:
+            preview_id = self._cache_preview(parsed.file_hash, len(valid_rows)) if valid_rows else None
+            return self._build_result(
+                parsed=parsed,
+                session=session,
+                issues=issues,
+                dry_run=dry_run,
+                execution_time=time.perf_counter() - started,
+                plan=plan,
+                created=None,
+                preview_result_id=preview_id,
+            )
+
+        if errors and not valid_rows:
             if session:
                 self._mark_failed(session, parsed.rows, issues)
             return self._build_result(
@@ -284,19 +299,6 @@ class ImportService:
                 execution_time=time.perf_counter() - started,
                 plan=plan,
                 created=None,
-            )
-
-        if dry_run:
-            preview_id = self._cache_preview(parsed.file_hash, len(valid_rows))
-            return self._build_result(
-                parsed=parsed,
-                session=None,
-                issues=issues,
-                dry_run=True,
-                execution_time=time.perf_counter() - started,
-                plan=plan,
-                created=None,
-                preview_result_id=preview_id,
             )
 
         try:
@@ -313,7 +315,7 @@ class ImportService:
             with transaction.atomic():
                 user_map = self.user_mapper.resolve_users(valid_rows)
                 created = self.project_creator.create_projects(valid_rows, user_map, self.super_admin)
-                self._mark_success(session, valid_rows, created, user_map)
+                self._mark_success(session, parsed.rows, valid_rows, created, user_map, issues)
         except Exception as exc:
             if session:
                 session.status = ImportSession.STATUS_FAILED
@@ -385,6 +387,11 @@ class ImportService:
         for issue in issues:
             if issue.row_number:
                 by_row[issue.row_number].append(issue.error_message)
+        failed_row_numbers = {
+            issue.row_number
+            for issue in issues
+            if issue.level == 'error' and issue.row_number is not None
+        }
 
         ImportRow.objects.bulk_create([
             ImportRow(
@@ -397,36 +404,60 @@ class ImportService:
             )
             for row in rows
         ])
-        session.failed_rows = len([issue for issue in issues if issue.level == 'error'])
+        session.failed_rows = len(failed_row_numbers)
         session.successful_rows = 0
         session.status = ImportSession.STATUS_FAILED
         session.error_summary = f'{session.failed_rows} validation error(s)'
         session.completed_at = timezone.now()
         session.save(update_fields=['failed_rows', 'successful_rows', 'status', 'error_summary', 'completed_at'])
 
-    def _mark_success(self, session, rows, created, user_map):
+    def _mark_success(self, session, all_rows, valid_rows, created, user_map, issues):
+        issue_messages_by_row = defaultdict(list)
+        failed_row_numbers = set()
+        for issue in issues:
+            if issue.level == 'error' and issue.row_number is not None:
+                failed_row_numbers.add(issue.row_number)
+                issue_messages_by_row[issue.row_number].append(issue.error_message)
+
+        valid_row_numbers = {row['row_number'] for row in valid_rows}
         proposals_by_row = {}
         for created_item in created:
             for row in created_item.get('rows', []):
                 proposals_by_row[row['row_number']] = created_item['proposal']
-        ImportRow.objects.bulk_create([
-            ImportRow(
+
+        import_rows = []
+        for row in all_rows:
+            row_number = row['row_number']
+            is_success = row_number in valid_row_numbers
+            import_rows.append(ImportRow(
                 session=session,
-                row_number=row['row_number'],
+                row_number=row_number,
                 university_id=row.get('university_id', ''),
                 project_title=row.get('title', ''),
-                status=ImportRow.STATUS_SUCCESS,
-                created_student=user_map['students'].get(row['university_id']),
-                created_project=proposals_by_row.get(row['row_number']),
-            )
-            for row in rows
-        ])
-        session.successful_rows = len(rows)
-        session.failed_rows = 0
+                status=ImportRow.STATUS_SUCCESS if is_success else ImportRow.STATUS_FAILED,
+                error_message='' if is_success else '; '.join(issue_messages_by_row.get(row_number, []))[:2000],
+                created_student=user_map['students'].get(row.get('university_id')) if is_success else None,
+                created_project=proposals_by_row.get(row_number) if is_success else None,
+            ))
+
+        ImportRow.objects.bulk_create(import_rows)
+        session.successful_rows = len(valid_rows)
+        session.failed_rows = len(failed_row_numbers)
         session.status = ImportSession.STATUS_SUCCESS
+        session.error_summary = (
+            f'Imported {session.successful_rows} row(s); skipped {session.failed_rows} invalid row(s)'
+            if session.failed_rows
+            else ''
+        )
         session.completed_at = timezone.now()
-        session.save(update_fields=['successful_rows', 'failed_rows', 'status', 'completed_at'])
-        logger.info('Project import completed: session=%s user=%s rows=%s', session.id, self.super_admin.username, len(rows))
+        session.save(update_fields=['successful_rows', 'failed_rows', 'status', 'error_summary', 'completed_at'])
+        logger.info(
+            'Project import completed: session=%s user=%s success_rows=%s failed_rows=%s',
+            session.id,
+            self.super_admin.username,
+            session.successful_rows,
+            session.failed_rows,
+        )
 
     def _project_count(self, rows):
         return len({
@@ -440,19 +471,35 @@ class ImportService:
         created = created or {'projects': [], 'students': [], 'supervisors': []}
 
         total_rows = len(parsed.rows)
-        invalid_rows = len({error['row_number'] for error in errors if error.get('row_number')})
-        valid_rows_count = max(total_rows - invalid_rows, 0)
-        valid_rows = self._remove_error_rows(parsed.rows, [ValidationIssue(
-            row_number=error.get('row_number'),
-            field_name=error.get('field_name', ''),
-            error_message=error.get('error_message', ''),
-        ) for error in errors])
+        invalid_row_numbers = {
+            error['row_number']
+            for error in errors
+            if error.get('row_number') is not None
+        }
+        invalid_rows = len(invalid_row_numbers)
+        valid_rows = self._remove_error_rows(parsed.rows, [
+            ValidationIssue(
+                row_number=error.get('row_number'),
+                field_name=error.get('field_name', ''),
+                error_message=error.get('error_message', ''),
+            )
+            for error in errors
+        ])
+        valid_rows_count = len(valid_rows)
+        has_errors = bool(errors)
+        partial_import = has_errors and valid_rows_count > 0
+        if dry_run:
+            result_status = 'partial_preview' if partial_import else ('failed' if has_errors else 'preview')
+        else:
+            result_status = 'partial_success' if partial_import else ('failed' if has_errors else 'success')
+
         result = {
             'import_session_id': str(session.id) if session else None,
             'preview_result_id': preview_result_id,
             'file_hash': parsed.file_hash if dry_run else None,
             'dry_run': dry_run,
-            'status': 'preview' if dry_run and not errors else ('failed' if errors else 'success'),
+            'status': result_status,
+            'partial_import': partial_import,
             'total_rows_processed': total_rows,
             'valid_rows_count': valid_rows_count,
             'invalid_rows_count': invalid_rows,

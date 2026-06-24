@@ -56,7 +56,8 @@ class ImportProjectsView(APIView):
             cache.delete(lock_key)
 
         has_errors = bool(result.get('validation_errors'))
-        if has_errors:
+        has_valid_rows = result.get('valid_rows_count', 0) > 0
+        if has_errors and not has_valid_rows:
             return Response(result, status=status.HTTP_400_BAD_REQUEST)
         return Response(result, status=status.HTTP_200_OK if dry_run else status.HTTP_201_CREATED)
 

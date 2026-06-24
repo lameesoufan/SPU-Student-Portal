@@ -45,7 +45,7 @@ export default function ImportProjects({ onBack }) {
   const [history, setHistory] = useState([]);
   const fileInputRef = useRef(null);
 
-  const canExecute = Boolean(file && preview?.preview_result_id && !preview?.validation_errors?.length);
+  const canExecute = Boolean(file && preview?.preview_result_id && preview?.valid_rows_count > 0);
   const errors = result?.validation_errors || preview?.validation_errors || [];
   const warnings = result?.warnings || preview?.warnings || [];
 
@@ -140,15 +140,16 @@ export default function ImportProjects({ onBack }) {
   const downloadErrorCsv = () => {
     if (!errors.length) return;
     const rows = [
-      ['row_number', 'field_name', 'error_type', 'message'],
+      ['row_number', 'field_name', 'value', 'error_type', 'message'],
       ...errors.map((item) => [
         item.row_number || '',
         item.field_name || '',
+        item.row_data?.[item.field_name] ?? '',
         item.error_type || '',
-        String(item.error_message || '').replaceAll('"', '""'),
+        item.error_message || '',
       ]),
     ];
-    const csv = rows.map((row) => row.map((cell) => `"${cell}"`).join(',')).join('\n');
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
@@ -178,7 +179,7 @@ export default function ImportProjects({ onBack }) {
           </div>
           <h1 className="text-2xl font-bold text-[var(--text,#1e293b)]">Import Projects</h1>
           <p className="mt-1 max-w-2xl text-sm text-[var(--text-secondary,#64748b)]">
-            Preview and import assigned student projects from a structured XLSX file. The preview writes nothing; execution is atomic.
+            Preview and import assigned student projects from a structured XLSX file. Valid rows can be imported while invalid rows remain downloadable for correction.
           </p>
         </div>
         <button
@@ -252,7 +253,7 @@ export default function ImportProjects({ onBack }) {
               disabled={!canExecute || loading}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <PlayCircle size={18} /> Execute Import
+              <PlayCircle size={18} /> {preview?.partial_import ? 'Execute Valid Rows' : 'Execute Import'}
             </button>
           </div>
 
@@ -265,10 +266,19 @@ export default function ImportProjects({ onBack }) {
             </div>
           )}
 
-          {result?.status === 'success' && (
+          {preview?.partial_import && (
+            <div className="mt-5 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+              <span>
+                {preview.valid_rows_count} valid row{preview.valid_rows_count === 1 ? '' : 's'} can be imported now. {preview.invalid_rows_count} invalid row{preview.invalid_rows_count === 1 ? '' : 's'} will be skipped and kept in the error report.
+              </span>
+            </div>
+          )}
+
+          {(result?.status === 'success' || result?.status === 'partial_success') && (
             <div className="mt-5 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
               <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
-              Imported {result.created_projects_count} project{result.created_projects_count === 1 ? '' : 's'} successfully.
+              Imported {result.created_projects_count} project{result.created_projects_count === 1 ? '' : 's'} successfully{result.partial_import ? ` and skipped ${result.failed_imports} invalid row${result.failed_imports === 1 ? '' : 's'}` : ''}.
             </div>
           )}
 
