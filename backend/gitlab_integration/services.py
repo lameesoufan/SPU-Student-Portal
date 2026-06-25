@@ -175,7 +175,7 @@ def gitlab_api_post(endpoint: str, data: dict = None, token: str = None) -> dict
     headers = _gitlab_headers(token)
 
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=15)
+        response = requests.post(url, headers=headers, json=data, timeout=30)
 
         if response.status_code in [200, 201, 202]:
             return _safe_json_parse(response)

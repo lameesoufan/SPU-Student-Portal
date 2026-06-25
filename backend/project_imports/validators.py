@@ -1,5 +1,6 @@
 import hashlib
 import html
+import re
 import zipfile
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -7,6 +8,7 @@ from io import BytesIO
 from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from openpyxl import load_workbook
 
 from projects.models import (
@@ -18,17 +20,13 @@ from projects.models import (
 )
 
 from .constants import (
-    FIELD_HEADERS,
+    HEADER_TO_FIELD,
     MAX_FILE_SIZE_BYTES,
     MAX_ROWS,
-    REQUIRED_FIELDS,
+    REQUIRED_HEADERS,
     VALID_DEPARTMENTS,
     VALID_PROJECT_TYPES,
-    normalize_department,
-    normalize_project_type,
-    resolve_header_field,
 )
-from .name_utils import split_supervisor_names
 
 
 User = get_user_model()
@@ -78,6 +76,10 @@ def normalize_cell_value(value):
     return str(value).strip()
 
 
+def sanitize_text(value):
+    return normalize_cell_value(value).strip()
+
+
 class FileValidator:
     allowed_extensions = ('.xlsx',)
 
@@ -118,72 +120,35 @@ class FileValidator:
             worksheet = workbook.worksheets[0]
             header_cells = list(next(worksheet.iter_rows(min_row=1, max_row=1), []))
             headers = [normalize_cell_value(cell.value) for cell in header_cells]
-
-            header_positions = {}
-            for index, header in enumerate(headers):
-                field = resolve_header_field(header)
-                if field and field not in header_positions:
-                    header_positions[field] = index
-
-            missing_fields = [field for field in REQUIRED_FIELDS if field not in header_positions]
-            if missing_fields:
-                missing = [FIELD_HEADERS[field] for field in missing_fields]
+            missing = [header for header in REQUIRED_HEADERS if header not in headers]
+            if missing:
                 raise ImportValidationError(
                     f"Missing required headers: {', '.join(missing)}",
-                    details=[{
-                        'missing_headers': missing,
-                        'received_headers': headers,
-                    }],
+                    details=[{'missing_headers': missing}],
                 )
 
+            header_positions = {
+                HEADER_TO_FIELD[header]: index
+                for index, header in enumerate(headers)
+                if header in HEADER_TO_FIELD
+            }
+
             rows = []
-            current_project = {}
-            current_project_row_number = None
             for excel_row in worksheet.iter_rows(min_row=2):
-                row_values = [normalize_cell_value(cell.value) for cell in excel_row]
-                if all(value == '' for value in row_values):
-                    continue
-                if self._is_repeated_header_row(row_values):
+                if all(normalize_cell_value(cell.value) == '' for cell in excel_row):
                     continue
 
                 if len(rows) >= MAX_ROWS:
                     raise ImportValidationError('File exceeds maximum of 1000 rows')
 
-                mapped_values = {}
+                row_data = {'row_number': excel_row[0].row if excel_row else len(rows) + 2}
                 for field_name, index in header_positions.items():
                     cell = excel_row[index] if index < len(excel_row) else None
                     if cell is not None and (cell.data_type == 'f' or str(cell.value or '').startswith('=')):
                         raise ImportValidationError(
-                            f"Row {excel_row[0].row if excel_row else len(rows) + 2}: Formula cells are not allowed in imported fields"
+                            f"Row {row_data['row_number']}: Formula cells are not allowed in imported fields"
                         )
-                    mapped_values[field_name] = normalize_cell_value(cell.value if cell is not None else '')
-
-                has_student_identity = bool(mapped_values.get('student_name') or mapped_values.get('university_id'))
-                is_project_start = any(
-                    mapped_values.get(field)
-                    for field in ('title', 'department', 'project_type', 'github_repo')
-                )
-
-                if is_project_start:
-                    current_project_row_number = excel_row[0].row if excel_row else len(rows) + 2
-                    current_project = {
-                        field: mapped_values.get(field, '')
-                        for field in ('title', 'department', 'supervisor_name', 'project_type', 'github_repo')
-                    }
-
-                if not has_student_identity:
-                    continue
-
-                row_number = excel_row[0].row if excel_row else len(rows) + 2
-                row_data = {
-                    'row_number': row_number,
-                    'project_row_number': current_project_row_number or row_number,
-                    'is_project_leader': bool(is_project_start or not current_project),
-                    'student_name': mapped_values.get('student_name', ''),
-                    'university_id': mapped_values.get('university_id', ''),
-                }
-                for field in ('title', 'department', 'supervisor_name', 'project_type', 'github_repo'):
-                    row_data[field] = current_project.get(field, mapped_values.get(field, ''))
+                    row_data[field_name] = sanitize_text(cell.value if cell is not None else '')
                 rows.append(row_data)
 
             if not rows:
@@ -204,14 +169,6 @@ class FileValidator:
                 return any(name.lower().endswith('vbaproject.bin') for name in archive.namelist())
         except zipfile.BadZipFile:
             return False
-
-    def _is_repeated_header_row(self, values):
-        fields = {
-            field
-            for field in (resolve_header_field(value) for value in values if value)
-            if field
-        }
-        return len(fields) >= 3 and ('university_id' in fields or 'title' in fields)
 
 
 class RowValidator:
@@ -243,17 +200,10 @@ class RowValidator:
 
         university_id = row.get('university_id', '').strip()
         title = row.get('title', '').strip()
-        raw_department = row.get('department', '').strip()
-        raw_project_type = row.get('project_type', '').strip()
-        department = normalize_department(raw_department)
-        project_type = normalize_project_type(raw_project_type)
-        github_repo = self._normalize_repo_url(row.get('github_repo', '').strip())
+        department = row.get('department', '').strip()
+        project_type = row.get('project_type', '').strip()
+        github_repo = row.get('github_repo', '').strip()
         supervisor_name = row.get('supervisor_name', '').strip()
-        supervisor_names = split_supervisor_names(supervisor_name)
-        row['department'] = department
-        row['project_type'] = project_type
-        row['github_repo'] = github_repo
-        row['supervisor_names'] = supervisor_names
 
         if not university_id:
             issues.append(self._error(row_num, 'university_id', 'University ID is required', row))
@@ -263,7 +213,7 @@ class RowValidator:
             issues.append(self._error(
                 row_num,
                 'department',
-                f"Invalid department '{raw_department}'. Must be one of: {', '.join(VALID_DEPARTMENTS)}",
+                f"Invalid department. Must be one of: {', '.join(VALID_DEPARTMENTS)}",
                 row,
                 error_type='invalid_value',
             ))
@@ -271,13 +221,13 @@ class RowValidator:
             issues.append(self._error(
                 row_num,
                 'project_type',
-                f"Invalid project type '{raw_project_type}'. Must be one of: {', '.join(VALID_PROJECT_TYPES)}",
+                f"Invalid project type. Must be one of: {', '.join(VALID_PROJECT_TYPES)}",
                 row,
                 error_type='invalid_value',
             ))
         if github_repo and not self._valid_repo_url(github_repo):
             issues.append(self._error(row_num, 'github_repo', 'GitHub/GitLab repository must be a valid URL', row))
-        if not supervisor_names:
+        if not supervisor_name:
             issues.append(self._error(row_num, 'supervisor_name', 'Supervisor name is required', row))
 
         return issues
@@ -293,7 +243,7 @@ class RowValidator:
             if university_id:
                 by_university_id[university_id].append(row)
             if title:
-                by_title[(row.get('project_row_number') or row.get('row_number'), title)].append(row)
+                by_title[title].append(row)
 
         for university_id, duplicate_rows in by_university_id.items():
             if len(duplicate_rows) > 1:
@@ -307,11 +257,7 @@ class RowValidator:
                         error_type='duplicate',
                     ))
 
-        titles_by_project = defaultdict(list)
-        for (_project_row_number, title), title_rows in by_title.items():
-            titles_by_project[title].append(title_rows[0])
-
-        for _title_key, duplicate_rows in titles_by_project.items():
+        for _title_key, duplicate_rows in by_title.items():
             if len(duplicate_rows) > 1:
                 title = duplicate_rows[0].get('title', '')
                 row_numbers = ', '.join(str(row['row_number']) for row in duplicate_rows)
@@ -421,19 +367,6 @@ class RowValidator:
         host = parsed.netloc.lower()
         return host == 'github.com' or host.endswith('.github.com') or host == 'gitlab.com' or host.endswith('.gitlab.com')
 
-    def _normalize_repo_url(self, value):
-        value = str(value or '').strip()
-        if not value:
-            return ''
-        if value.lower() in {'-', 'n/a', 'na', 'none', 'null', 'no repo', 'no repository'}:
-            return ''
-        if value in {'لا يوجد', 'لايوجد', 'بدون', 'لا يوجد رابط'}:
-            return ''
-        value = ''.join(value.split())
-        if value.startswith(('github.com/', 'gitlab.com/', 'www.github.com/', 'www.gitlab.com/')):
-            return f'https://{value}'
-        return value
-
     def _error(self, row_number, field_name, message, row_data, *, error_type='validation'):
         return ValidationIssue(
             row_number=row_number,
@@ -449,3 +382,6 @@ def group_issues(issues):
     for issue in issues:
         grouped[issue.error_type].append(issue.to_dict())
     return dict(grouped)
+
+
+USERNAME_RE = re.compile(r'[^A-Za-z0-9_]+')

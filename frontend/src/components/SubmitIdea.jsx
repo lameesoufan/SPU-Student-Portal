@@ -28,10 +28,14 @@ export default function SubmitIdea({ onBack }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    e.stopPropagation();   // ← منع انتشار الحدث
+    if (loading) return;   // ← حماية إضافية
     setError('');
     setLoading(true);
     try {
-      await submitProjectIdea({ ...form, max_team_size: Number(form.max_team_size) });
+            await submitProjectIdea({ ...form, max_team_size: Number(form.max_team_size) });
+      // تأخير بسيط لمنع الإرسال المتكرر من React StrictMode
+      await new Promise(r => setTimeout(r, 300));
       setSuccess(true);
       setForm(EMPTY);
     } catch (err) {

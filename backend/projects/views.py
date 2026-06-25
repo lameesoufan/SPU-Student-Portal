@@ -57,12 +57,24 @@ def _save_form_response(student, form_id, field_responses, proposal_id=None, app
 # ── UC-01: Doctor ideas ───────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsDoctorOrHod])
+@permission_classes([IsAuthenticated, IsDoctor])
 def submit_idea(request):
     serializer = ProjectIdeaSerializer(data=request.data)
     if not serializer.is_valid():
         return _validation_error_response(serializer.errors)
-    result = create_project_idea(doctor=request.user, **serializer.validated_data)
+    
+    # Extract only the fields create_project_idea accepts
+    data = serializer.validated_data
+    result = create_project_idea(
+        doctor=request.user,
+        title=data['title'],
+        description=data['description'],
+        department=data['department'],
+        required_skills=data.get('required_skills', ''),
+        max_team_size=data.get('max_team_size', 2),
+    )
+    if not result.get('ok'):
+        return Response({'error': result.get('error', 'Duplicate submission.')}, status=409)
     return Response(
         {'message': 'Idea submitted successfully.', 'idea': ProjectIdeaSerializer(result['idea']).data},
         status=201,

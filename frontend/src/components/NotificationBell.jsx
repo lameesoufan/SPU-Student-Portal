@@ -48,7 +48,7 @@ export default function NotificationBell() {
 usePolling(async () => {
   try {
     var res = await fetchUnreadCount();
-    setUnreadCount(res.data?.unread_count ?? res.data?.count ?? 0);
+    setCount(res.data?.unread_count ?? res.data?.count ?? 0);
   } catch (e) {
     // Ignore
   }

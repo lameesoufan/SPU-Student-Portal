@@ -50,7 +50,7 @@ export default function HodProjects({ onBack, user }) {
             <Eye size={12} />
             Read-Only View
           </span>
-          {board.github_repo && board.github_repo.startsWith('http') && (
+          {selectedBoard.github_repo && selectedBoard.github_repo.startsWith('http') && (
             <a 
               href={selectedBoard.github_repo} 
               target="_blank" 

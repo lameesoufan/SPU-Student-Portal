@@ -42,7 +42,7 @@ class ProjectBoard(models.Model):
 
     def __str__(self):
         return f"Board: {self.title}"
-
+    
     @property
     def members(self):
         if hasattr(self, '_members_cache'):

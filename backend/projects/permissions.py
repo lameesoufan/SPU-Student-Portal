@@ -1,9 +1,16 @@
 from rest_framework.permissions import BasePermission
 
 
-class IsDoctorOrHod(BasePermission):
+class IsDoctor(BasePermission):
+    """Allow doctors AND HoDs (who are also doctors) to submit ideas."""
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.role in ['doctor', 'hod'])
+        return bool(request.user and request.user.is_authenticated and request.user.role in ('doctor', 'hod'))
+
+
+class IsDoctorOrHod(BasePermission):
+    """Allow doctors or HoDs."""
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.role in ('doctor', 'hod'))
 
 
 class IsStudent(BasePermission):
@@ -14,7 +21,3 @@ class IsStudent(BasePermission):
 class IsHod(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.role == 'hod')
-class IsDoctor(BasePermission):
-    """Allow Doctor users only."""
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.role == 'doctor')

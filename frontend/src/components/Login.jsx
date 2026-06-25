@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { login } from '../api';
+import { login, setAccessToken } from '../api';
 import { useTheme } from '../ThemeContext';
 import campusBg from '../assets/campus-bg.png';
 import { GraduationCap, Eye, EyeOff, ArrowRight, Sun, Moon, User, Lock, XCircle, LayoutGrid, Settings, GitBranch } from 'lucide-react';
@@ -52,18 +52,22 @@ export default function Login({ onLogin, onRegister }) {
     }
 
     setLoading(true);
-  try {
+    try {
       const res = await login(form.username, form.password);
       const data = res.data;
-      // Tokens now in HttpOnly cookies — no localStorage needed
+
+      // حفظ الـ access token بالإضافة للكوكيز
+      if (data.access) {
+        setAccessToken(data.access);
+      }
+
       onLogin({
         username: data.username || form.username,
         role: data.role,
         must_change_password: data.must_change_password,
-       department: data.department,
+        department: data.department,
       });
-    }
-    catch (err) {
+    } catch (err) {
       setServerError(err.response?.data?.detail || 'Invalid credentials. Please try again.');
       setShaking(true);
       setTimeout(() => setShaking(false), 400);

@@ -4,17 +4,27 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: API_BASE,
-  withCredentials: true,  // ← مهم: يبعث الـ cookies مع كل request
+  withCredentials: true,
 });
-let refreshPromise = null;
 
-// No need for request interceptor — cookies are sent automatically!
-// But keep a fallback for any edge cases
-api.interceptors.request.use((config) => {
-  // مع HttpOnly cookies، ما نحتاج نحط Authorization header يدوي
-  // الـ JWTCookieMiddleware بالـ backend بيقري الـ cookie وبيحط الـ header
-  return config;
-});
+// ── In-memory access token (fallback if cookies don't work) ──
+let _accessToken = null;
+
+export function setAccessToken(token) {
+  _accessToken = token;
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common['Authorization'];
+  }
+}
+
+export function clearAccessToken() {
+  _accessToken = null;
+  delete api.defaults.headers.common['Authorization'];
+}
+
+let refreshPromise = null;
 
 api.interceptors.response.use(
   (response) => response,
@@ -31,14 +41,17 @@ api.interceptors.response.use(
     try {
       if (!refreshPromise) {
         refreshPromise = axios.post(`${API_BASE}/api/token/refresh/`, {}, {
-          withCredentials: true,  // ← يبعث الـ refresh cookie
+          withCredentials: true,
+        }).then((res) => {
+          const newAccess = res.data?.access;
+          if (newAccess) setAccessToken(newAccess);
+          return res;
         }).finally(() => { refreshPromise = null; });
       }
       await refreshPromise;
-      // الـ backend بيضبط الـ cookies الجديدة تلقائياً
       return api(original);
     } catch (refreshError) {
-      // Refresh فشل — الـ cookies انحذفت أو انتهت
+      clearAccessToken();
       return Promise.reject(refreshError);
     }
   }

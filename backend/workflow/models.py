@@ -38,7 +38,10 @@ WORKFLOW_STATUS = [
 class WorkflowTemplate(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    department = models.CharField(max_length=50, choices=DEPARTMENTS)
+    department = models.CharField(
+    max_length=50, choices=DEPARTMENTS, null=True, blank=True,
+    help_text='Leave empty for a global template accessible to all departments'
+)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -56,8 +59,8 @@ class WorkflowTemplate(models.Model):
             models.Index(fields=['created_by', 'status']),
         ]
 
-    def __str__(self):
-        return f"{self.name} ({self.department})"
+def __str__(self):
+    return f"{self.name} ({self.department or 'Global'})"
 
 
 class WorkflowStage(models.Model):

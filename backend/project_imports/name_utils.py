@@ -12,6 +12,25 @@ SUPERVISOR_SEPARATOR_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Pattern that matches a title prefix at a mid-string boundary — i.e. preceded by
+# whitespace and NOT at the start of the string.  Used to split cells where two
+# supervisor names are separated only by spaces, e.g.:
+#   "م. أنس عبد العزيز      م.عامر خورشيد"
+#   "د.كادان الجمعة        م.خزامى اليوسف"
+# Match only the whitespace that precedes a title prefix in the middle of the
+# string.  The title prefix itself is kept via a lookahead so it is not consumed.
+TITLE_BOUNDARY_RE = re.compile(
+    r'(?<=\S)\s+'
+    r'(?='
+    r'(?:أ|ا)\s*\.\s*د\s*\.?|(?:أ|ا)\s+د\s+|'  # أ.د. / ا.د.
+    r'د\s*\.|دكتور|الدكتور|'
+    r'م\s*\.|مهندس|المهندس|'
+    r'(?:أ|ا)\s*\.|أستاذ|استاذ|الأستاذ|الاستاذ|'
+    r'prof\.?|dr\.?|eng\.?'
+    r')',
+    re.IGNORECASE,
+)
+
 ARABIC_CHAR_TRANSLATION = str.maketrans({
     'أ': 'ا',
     'إ': 'ا',
@@ -136,13 +155,22 @@ def strip_person_titles(value):
 def split_supervisor_names(value):
     """Split one spreadsheet supervisor cell into deterministic supervisor names.
 
-    Newlines and explicit punctuation split names. A plain space never splits names
-    because Arabic names naturally contain spaces. Standalone Arabic "و" is a
-    separator only when surrounded by whitespace.
+    Newlines, explicit punctuation, and title-prefix boundaries split names.
+    A plain space never splits names because Arabic names naturally contain
+    spaces; however, when a title prefix (د., م., أ.د., etc.) appears after
+    whitespace in the middle of the text it signals the start of a new
+    supervisor name.  Standalone Arabic "و" is a separator only when
+    surrounded by whitespace.
     """
     normalized = normalize_person_spacing(value, keep_line_breaks=True)
     if not normalized:
         return []
+
+    # Step 1: Insert a newline before any title prefix that appears after
+    # whitespace in the middle of the string, so that the existing separator
+    # regex can split on it.  We keep the title prefix itself by using a
+    # lookbehind for the preceding whitespace rather than consuming it.
+    normalized = TITLE_BOUNDARY_RE.sub(r'\n', normalized)
 
     fragments = SUPERVISOR_SEPARATOR_RE.split(normalized)
     names = []

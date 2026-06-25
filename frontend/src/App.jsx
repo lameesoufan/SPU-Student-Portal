@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import usePageHistory from './hooks/usePageHistory';
 import './index.css';
 
-import { logoutUser } from './api';
+import { logoutUser, clearAccessToken } from './api';
 import Login from './components/Login';
 import SelfRegister from './components/SelfRegister';
 import Navbar from './components/Navbar';
@@ -24,9 +24,9 @@ function AppInner() {
   const handleLogin      = (u) => { setUser(u); setPage('dashboard'); setScreen('login'); };
   const handleRegistered = (u) => { setUser(u); setPage('dashboard'); };
 
-const handleLogout = async () => {
+  const handleLogout = async () => {
     try { await logoutUser(); } catch { /* proceed */ }
-    // Cookies are cleared by the backend — no localStorage to clean
+    clearAccessToken();  // ← مسح الـ token من الذاكرة
     setUser(null);
     setScreen('login');
     setPage('dashboard');

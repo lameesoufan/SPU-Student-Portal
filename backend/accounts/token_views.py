@@ -8,7 +8,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 from django.conf import settings
 
-# ← استخدم CustomTokenObtainPairView بدل الـ default
 from .serializers import CustomTokenObtainPairView
 
 
@@ -27,8 +26,8 @@ def _clear_cookie(response, key):
     response.delete_cookie(key, path='/', samesite=settings.JWT_COOKIE_SAMESITE)
 
 
-class CookieTokenObtainPairView(CustomTokenObtainPairView):  # ← غيّرنا الـ parent
-    """Login — returns tokens as HttpOnly cookies + user info in body."""
+class CookieTokenObtainPairView(CustomTokenObtainPairView):
+    """Login — returns tokens as HttpOnly cookies + access token + user info in body."""
 
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
@@ -53,6 +52,7 @@ class CookieTokenObtainPairView(CustomTokenObtainPairView):  # ← غيّرنا 
 
             response.data = {
                 'message': 'Login successful',
+                'access': access,   # ← أضفناه عشان الـ frontend يقدر يرسلو بـ Authorization header
                 'username': payload.get('username', request.data.get('username', '')),
                 'role': payload.get('role', ''),
                 'must_change_password': payload.get('must_change_password', False),
@@ -63,7 +63,7 @@ class CookieTokenObtainPairView(CustomTokenObtainPairView):  # ← غيّرنا 
 
 
 class CookieTokenRefreshView(TokenRefreshView):
-    """Refresh — reads refresh token from cookie, sets new cookies."""
+    """Refresh — reads refresh token from cookie, sets new cookies + returns access in body."""
 
     def post(self, request, *args, **kwargs):
         refresh_token = request.COOKIES.get('refresh_token')
@@ -81,7 +81,11 @@ class CookieTokenRefreshView(TokenRefreshView):
             if refresh:
                 _set_cookie(response, 'refresh_token', refresh, settings.JWT_COOKIE_REFRESH_MAX_AGE)
 
-            response.data = {'message': 'Token refreshed'}
+            # ← أضفنا الـ access token بالـ response عشان الـ frontend يحفظو
+            response.data = {
+                'message': 'Token refreshed',
+                'access': access,
+            }
 
         return response
 

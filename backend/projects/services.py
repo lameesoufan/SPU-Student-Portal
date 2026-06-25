@@ -55,36 +55,36 @@ def _student_is_active(student):
 
 # ── UC-01 ─────────────────────────────────────────────────────────────────────
 
-def create_project_idea(*, doctor, title, description, department, required_skills, max_team_size, project_type):
-    # ── HoD auto-approval: if the submitter is HoD, skip review ──
-    if doctor.role == 'hod':
-        initial_status = 'approved'
-    else:
-        initial_status = 'pending_review'
+def create_project_idea(*, doctor, title, description, department, required_skills, max_team_size):
+    # ── Duplicate guard: same doctor + same title within 60 seconds ──
+    from django.utils import timezone
+    from datetime import timedelta
+    cutoff = timezone.now() - timedelta(seconds=60)
+    if ProjectIdea.objects.filter(
+        doctor=doctor, title=title, created_at__gte=cutoff
+    ).exists():
+        return {'ok': False, 'error': 'Duplicate idea — you already submitted this recently.'}
+
+    # ── Auto-approve if the submitter is an HoD ──
+    initial_status = 'approved' if doctor.role == 'hod' else 'pending_review'
 
     idea = ProjectIdea.objects.create(
         doctor=doctor, title=title, description=description,
         department=department, required_skills=required_skills,
-        max_team_size=max_team_size, project_type=project_type, status=initial_status,
+        max_team_size=max_team_size, status=initial_status,
     )
 
-    formatted_ptype = project_type.replace('_', ' ').title()
-
     if initial_status == 'pending_review':
-        # Notify HoD of the department for regular doctor ideas
-        from django.contrib.auth import get_user_model
-        U = get_user_model()
-        hods = U.objects.filter(role='hod', department=department)
+        # Notify HoD of the department
+        hods = User.objects.filter(role='hod', department=department)
         notify_many(hods, 'idea_submitted',
-                    f'New {formatted_ptype} Project Idea',
-                    f'Dr. {doctor.get_full_name() or doctor.username} submitted a new {formatted_ptype} idea: "{title}".')
+                    'New Project Idea Submitted',
+                    f'Dr. {doctor.get_full_name() or doctor.username} submitted a new idea: "{title}".')
     else:
-        # HoD idea — auto-approved notification
-        notify(doctor, 'idea_auto_approved',
-               f'{formatted_ptype} Project Idea Auto-Approved',
-               f'Your {formatted_ptype} idea "{title}" has been auto-approved (HoD privilege) and is now visible to students.')
+        # HoD's own idea — auto-approved, no notification needed
+        pass
 
-        return {'ok': True, 'idea': idea}
+    return {'ok': True, 'idea': idea}
 
 # ── UC-02 ─────────────────────────────────────────────────────────────────────
 

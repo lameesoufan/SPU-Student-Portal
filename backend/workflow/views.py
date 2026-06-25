@@ -1,10 +1,9 @@
+from httpcore import request
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import IntegrityError, transaction
 from datetime import datetime, timedelta
-
-from .models import WorkflowTemplate, WorkflowStage, ProjectWorkflow, WorkflowStageInstance
 from .serializers import (
     WorkflowTemplateSerializer, WorkflowStageSerializer,
     ProjectWorkflowSerializer, WorkflowStageInstanceSerializer
@@ -12,6 +11,7 @@ from .serializers import (
 from .permissions import IsHodOrDoctor, IsHod, IsStudent
 from accounts.throttles import WorkflowSubmitThrottle
 
+from .models import WorkflowTemplate, WorkflowStage, ProjectWorkflow, WorkflowStageInstance, WorkflowStageField, WorkflowFieldResponse
 def _get_project_board(project_board_id):
     from project_management.models import ProjectBoard
     if isinstance(project_board_id, ProjectBoard):
@@ -63,16 +63,29 @@ def _user_can_apply_workflow(user, project_board):
         return _user_is_project_supervisor(user, project_board)
     return False
 
+def _template_queryset_for_user(user):
+    """Get the base WorkflowTemplate queryset visible to this user.
+    - HoD: sees templates for their department + global templates (department=null).
+    - Doctor: sees templates they created + global templates.
+    """
+    from django.db.models import Q
+    if user.role == 'hod':
+        return WorkflowTemplate.objects.filter(
+            Q(department=user.department) | Q(department__isnull=True)
+        )
+    else:
+        # Doctor: their own templates + global templates
+       return WorkflowTemplate.objects.filter(created_by=user)
 
 # ── HoD/Doctor: Manage Workflow Templates ────────────────────────────────────
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsHodOrDoctor])
 def list_workflow_templates(request):
-    """List all workflow templates for the user's department."""
-    templates = WorkflowTemplate.objects.filter(
-        department=request.user.department
-    ).prefetch_related('stages', 'stages__fields')[:100]
+    """List all workflow templates visible to the user."""
+    templates = _template_queryset_for_user(request.user).prefetch_related(
+        'stages', 'stages__fields'
+    )[:100]
     return Response(WorkflowTemplateSerializer(templates, many=True).data)
 
 
@@ -81,37 +94,49 @@ def list_workflow_templates(request):
 def get_workflow_template(request, template_id):
     """Get a specific workflow template."""
     try:
-        template = WorkflowTemplate.objects.prefetch_related(
+        template = _template_queryset_for_user(request.user).prefetch_related(
             'stages', 'stages__fields'
-        ).get(id=template_id, department=request.user.department)
+        ).get(id=template_id)
         return Response(WorkflowTemplateSerializer(template).data)
     except WorkflowTemplate.DoesNotExist:
         return Response({'error': 'Template not found'}, status=404)
 
-
+def _get_user_department(user, request_data=None):
+    """Get department for a user.
+    - HoD: MUST have a department (required for their role).
+    - Doctor: department is optional — they can create global templates.
+    Returns (department_or_None, error_response_or_None).
+    """
+    department = (request_data or {}).get('department') or user.department
+    if not department and user.role == 'hod':
+        return None, Response({
+            'error': 'HoD must have a department assigned. Please contact the administrator.',
+        }, status=400)
+    return department, None
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsHodOrDoctor])
 def create_workflow_template(request):
-    """Create a new workflow template."""
-    from .serializers import WorkflowTemplateCreateSerializer
+    """Create a new workflow template.
+    - HoD: template is tied to their department.
+    - Doctor: template is global (department=null) unless they specify one.
+    """
+    data = request.data
 
-    serializer = WorkflowTemplateCreateSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=400)
-
-    validated = serializer.validated_data
+    department, err = _get_user_department(request.user, data)
+    if err:
+        return err
 
     with transaction.atomic():
         template = WorkflowTemplate.objects.create(
-            name=validated['name'],
-            description=validated.get('description', ''),
-            department=request.user.department,
+            name=data.get('name'),
+            description=data.get('description', ''),
+            department=department,  # None for doctors without department = global template
             created_by=request.user,
             status='active'
         )
 
-        for stage_data in validated.get('stages', []):
+        for stage_data in data.get('stages', []):
             stage = WorkflowStage.objects.create(
                 template=template,
                 name=stage_data['name'],
@@ -130,7 +155,7 @@ def create_workflow_template(request):
                 max_occurrences=stage_data.get('max_occurrences'),
             )
 
-            from .models import WorkflowStageField
+            
             for field_data in stage_data.get('fields', []):
                 WorkflowStageField.objects.create(
                     stage=stage,
@@ -146,18 +171,12 @@ def create_workflow_template(request):
     ).data, status=201)
 
 
-
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated, IsHodOrDoctor])
 def update_workflow_template(request, template_id):
-    """Update a workflow template with smart diff - preserves existing data."""
-    from .models import WorkflowStageField, WorkflowFieldResponse
-
+    
     try:
-        template = WorkflowTemplate.objects.get(
-            id=template_id,
-            department=request.user.department
-        )
+        template = _template_queryset_for_user(request.user).get(id=template_id)
     except WorkflowTemplate.DoesNotExist:
         return Response({'error': 'Template not found'}, status=404)
 
@@ -408,10 +427,7 @@ def update_workflow_template(request, template_id):
 def delete_workflow_template(request, template_id):
     """Delete a workflow template."""
     try:
-        template = WorkflowTemplate.objects.get(
-            id=template_id,
-            department=request.user.department
-        )
+      template = _template_queryset_for_user(request.user).get(id=template_id)
     except WorkflowTemplate.DoesNotExist:
         return Response({'error': 'Template not found'}, status=404)
 
@@ -441,15 +457,13 @@ def delete_workflow_template(request, template_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsHodOrDoctor])
 def apply_workflow_to_project(request):
-    
     """Apply a workflow template to a project."""
     project_board_id = request.data.get('project_board_id')
     template_id = request.data.get('template_id')
-    
+
     try:
-        template = WorkflowTemplate.objects.prefetch_related('stages').get(
-            id=template_id,
-            department=request.user.department
+        template = _template_queryset_for_user(request.user).prefetch_related('stages').get(
+            id=template_id
         )
     except WorkflowTemplate.DoesNotExist:
         return Response({'error': 'Template not found'}, status=404)
@@ -635,7 +649,7 @@ def submit_workflow_stage(request, stage_instance_id):
             if error:
                 return Response({'error': error}, status=400)
     with transaction.atomic():
-        from .models import WorkflowFieldResponse
+       
         stage_instance = WorkflowStageInstance.objects.select_for_update().get(pk=stage_instance.pk)
 
         # ── Upsert: تحديث أو إنشاء الردود ──
@@ -690,8 +704,8 @@ def cleanup_duplicate_stages(request):
     with transaction.atomic():
      
         # ✅ لو HOD/Doctor: بس قوالب قسمو
-        if request.user.role in ('hod', 'doctor') and request.user.department:
-            templates = WorkflowTemplate.objects.filter(department=request.user.department)
+        if request.user.role in ('hod', 'doctor'):
+            templates = _template_queryset_for_user(request.user)
         else:
             # Dean/Admin: كل القوالب
             templates = WorkflowTemplate.objects.all()
@@ -783,7 +797,7 @@ def review_workflow_stage(request, stage_instance_id):
     department, supervisor = _project_department_and_supervisor(project_board)
     if request.user.role == 'doctor' and not _user_is_project_supervisor(request.user, project_board):
         return Response({'error': 'You are not the supervisor of this project.'}, status=403)
-    if request.user.role == 'hod' and department != request.user.department:
+    if request.user.role == 'hod' and request.user.department and department != request.user.department:
         return Response({'error': 'This project is not in your department.'}, status=403)
     
     action = request.data.get('action')
@@ -846,8 +860,8 @@ def get_available_projects(request):
             continue
 
         if request.user.role == 'hod':
-            if department != request.user.department:
-                continue
+            if request.user.department and department != request.user.department:
+             continue
         elif request.user.role == 'doctor':
             if not _user_is_project_supervisor(request.user, project):
                 continue
@@ -912,9 +926,8 @@ def apply_workflow_bulk(request):
         return Response({'error': 'Cannot apply to more than 100 projects at once'}, status=400)
 
     try:
-        template = WorkflowTemplate.objects.prefetch_related('stages').get(
-            id=template_id,
-            department=request.user.department
+        template = _template_queryset_for_user(request.user).prefetch_related('stages').get(
+            id=template_id
         )
     except WorkflowTemplate.DoesNotExist:
         return Response({'error': 'Template not found'}, status=404)
@@ -1019,9 +1032,8 @@ def replace_workflow_for_project(request, project_board_id):
         return Response({'error': 'new_template_id is required'}, status=400)
 
     try:
-        new_template = WorkflowTemplate.objects.prefetch_related('stages').get(
-            id=new_template_id,
-            department=request.user.department
+        new_template = _template_queryset_for_user(request.user).prefetch_related('stages').get(
+            id=new_template_id
         )
     except WorkflowTemplate.DoesNotExist:
         return Response({'error': 'New template not found'}, status=404)
