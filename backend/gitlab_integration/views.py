@@ -57,7 +57,15 @@ def _assert_board_member(user, board):
         return None
     return None
 
-
+def _user_is_project_supervisor(user, board):
+    """Check if the user is the supervisor (or co-supervisor) of the board's project."""
+    if hasattr(board, 'proposal') and board.proposal:
+        if board.proposal.supervisor_id == user.id:
+            return True
+        return board.proposal.co_supervisors.filter(pk=user.pk).exists()
+    if hasattr(board, 'application') and board.application and board.application.idea:
+        return board.application.idea.doctor_id == user.id
+    return False
 # ==========================================
 # BASE VIEWSETS
 # ==========================================
@@ -481,6 +489,13 @@ class FixBoardGitLabAccessView(views.APIView):
                 'message': 'المشروع غير موجود',
             }, status=status.HTTP_404_NOT_FOUND)
 
+        # Board-scoped auth: only members/supervisors/admins may fix access
+        if not _assert_board_member(request.user, board):
+            return Response({
+                'success': False,
+                'message': 'غير مصرح — لست عضواً في هذا المشروع',
+            }, status=status.HTTP_403_FORBIDDEN)
+
         try:
             gitlab_project = GitLabProject.objects.get(board=board)
         except GitLabProject.DoesNotExist:
@@ -627,6 +642,18 @@ class AddBoardMemberView(views.APIView):
                 'message': 'المشروع غير موجود',
             }, status=status.HTTP_404_NOT_FOUND)
 
+        # Board-scoped auth: only the project supervisor, HoD, dean or admin may add members
+        if not _assert_board_member(request.user, board):
+            return Response({
+                'success': False,
+                'message': 'غير مصرح — لست عضواً في هذا المشروع',
+            }, status=status.HTTP_403_FORBIDDEN)
+        if request.user.role not in ('dean', 'admin', 'hod') and not _user_is_project_supervisor(request.user, board):
+            return Response({
+                'success': False,
+                'message': 'فقط المشرف على المشروع يمكنه إدارة أعضاء GitLab.',
+            }, status=status.HTTP_403_FORBIDDEN)
+
         serializer = AddMemberSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -692,6 +719,18 @@ class RemoveBoardMemberView(views.APIView):
                 'success': False,
                 'message': 'المشروع غير موجود',
             }, status=status.HTTP_404_NOT_FOUND)
+
+        # Board-scoped auth: only the project supervisor, HoD, dean or admin may remove members
+        if not _assert_board_member(request.user, board):
+            return Response({
+                'success': False,
+                'message': 'غير مصرح — لست عضواً في هذا المشروع',
+            }, status=status.HTTP_403_FORBIDDEN)
+        if request.user.role not in ('dean', 'admin', 'hod') and not _user_is_project_supervisor(request.user, board):
+            return Response({
+                'success': False,
+                'message': 'فقط المشرف على المشروع يمكنه إدارة أعضاء GitLab.',
+            }, status=status.HTTP_403_FORBIDDEN)
 
         serializer = RemoveMemberSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -817,9 +856,14 @@ class BoardCommitsView(views.APIView):
         if author:
             queryset = queryset.filter(author_name=author)
 
-        page = int(request.query_params.get('page', 1))
-        limit = int(request.query_params.get('limit', 20))
-        limit = min(limit, 100)
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+            limit = min(100, max(1, int(request.query_params.get('limit', 20))))
+        except (TypeError, ValueError):
+            return Response({
+                'success': False,
+                'message': 'page and limit must be valid integers',
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         total = queryset.count()
         start = (page - 1) * limit

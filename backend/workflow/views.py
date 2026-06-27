@@ -1,4 +1,4 @@
-from httpcore import request
+
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -8,9 +8,10 @@ from .serializers import (
     WorkflowTemplateSerializer, WorkflowStageSerializer,
     ProjectWorkflowSerializer, WorkflowStageInstanceSerializer
 )
+from django.db.models import Q
 from .permissions import IsHodOrDoctor, IsHod, IsStudent
 from accounts.throttles import WorkflowSubmitThrottle
-
+from django.db.models import Count
 from .models import WorkflowTemplate, WorkflowStage, ProjectWorkflow, WorkflowStageInstance, WorkflowStageField, WorkflowFieldResponse
 def _get_project_board(project_board_id):
     from project_management.models import ProjectBoard
@@ -75,7 +76,7 @@ def _template_queryset_for_user(user):
         )
     else:
         # Doctor: their own templates + global templates
-       return WorkflowTemplate.objects.filter(created_by=user)
+        return WorkflowTemplate.objects.filter(created_by=user)
 
 # ── HoD/Doctor: Manage Workflow Templates ────────────────────────────────────
 
@@ -550,7 +551,24 @@ def get_project_workflow(request, project_board_id):
 @permission_classes([IsAuthenticated, IsStudent])
 def get_pending_stages(request):
     """Get all pending workflow stages for the student's projects."""
-    return Response({'message': 'To be implemented with project integration'})
+    from project_management.models import ProjectBoard
+
+    # الخطوة 1: لقى كل المشاريع اللي الطالب عضو فيها
+    board_ids = ProjectBoard.objects.filter(
+        members=request.user
+    ).values_list('id', flat=True)
+
+    # الخطوة 2: لقى كل المراحل المعلّقة بهاد المشاريع
+    stages = WorkflowStageInstance.objects.filter(
+        project_workflow__project_board_id__in=board_ids,
+        status='pending',
+    ).select_related(
+        'stage', 'project_workflow', 'project_workflow__project_board'
+    )
+
+    # الخطوة 3: رجّع البيانات متسلسلة
+    serializer = WorkflowStageInstanceSerializer(stages, many=True)
+    return Response(serializer.data)
 def _validate_field_response(field, value):
     """Validate a single field response against its type and options."""
     from datetime import datetime as dt
@@ -787,18 +805,19 @@ def review_workflow_stage(request, stage_instance_id):
     except WorkflowStageInstance.DoesNotExist:
         return Response({'error': 'Stage instance not found'}, status=404)
     
-    template_creator = stage_instance.project_workflow.template.created_by
-    
-    if request.user != template_creator:
-        return Response({
-            'error': f'Only {template_creator.username} (workflow creator) can review this submission'
-        }, status=403)
     project_board = stage_instance.project_workflow.project_board
-    department, supervisor = _project_department_and_supervisor(project_board)
-    if request.user.role == 'doctor' and not _user_is_project_supervisor(request.user, project_board):
-        return Response({'error': 'You are not the supervisor of this project.'}, status=403)
-    if request.user.role == 'hod' and request.user.department and department != request.user.department:
-        return Response({'error': 'This project is not in your department.'}, status=403)
+
+    # السماح بالمراجعة لمنشئ التمبلت أو لأي مشرف على المشروع (أساسي أو ثانوي)
+    template_creator = stage_instance.project_workflow.template.created_by
+    is_template_creator = (request.user == template_creator)
+    is_project_supervisor = (request.user.role == 'doctor' and _user_is_project_supervisor(request.user, project_board))
+    is_hod_of_department = (request.user.role == 'hod' and _project_department_and_supervisor(project_board)[0] == request.user.department)
+
+    if not (is_template_creator or is_project_supervisor or is_hod_of_department):
+        return Response({
+            'error': 'Only the workflow creator, project supervisor, or department HOD can review this submission'
+        }, status=403)
+
     
     action = request.data.get('action')
     feedback = request.data.get('feedback', '')
@@ -827,8 +846,9 @@ def get_available_projects(request):
         'application__idea__doctor',
         'application__student'
     ).prefetch_related(
-        'proposal__invitations',
-        'application__invitations'
+        'proposal__invitations__invitee',
+        'proposal__co_supervisors',
+        'application__invitations__invitee',
     )
 
     project_list = list(projects[:500])
@@ -891,6 +911,8 @@ def get_available_projects(request):
                 workflow_status = 'COMPLETED'
 
         workflow_created_by_user = bool(workflow and workflow.template.created_by == request.user)
+        is_project_supervisor = _user_is_project_supervisor(request.user, project)
+        can_review = workflow_created_by_user or is_project_supervisor
 
         filtered_projects.append({
             'id': project.id,
@@ -902,7 +924,7 @@ def get_available_projects(request):
             'workflow_status': workflow_status,
             'completed_stages': completed_stages,
             'total_stages': total_stages,
-            'can_review': workflow_created_by_user,
+            'can_review': can_review,
         })
     return Response(filtered_projects)
 
@@ -1124,6 +1146,9 @@ def get_projects_workflow_status(request):
     projects = ProjectBoard.objects.select_related(
         'proposal__supervisor',
         'application__idea__doctor'
+    ).prefetch_related(
+        'proposal__co_supervisors',
+        
     )[:500]
 
     project_list = list(projects)
@@ -1193,23 +1218,65 @@ def get_projects_workflow_status(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsHodOrDoctor])
 def get_reviewable_projects(request):
-    """Get projects with workflows created by the current user (for review)."""
+    """Get projects with workflows that the current user can review."""
     from project_management.models import ProjectBoard
+    from projects.models import StudentIdeaProposal
     
-    workflows = ProjectWorkflow.objects.filter(
-        template__created_by=request.user,
-        is_active=True
-    ).select_related('template').values_list('project_board_id', flat=True)[:500]
+    # ① مشاريع اللي المستخدم منشئ تمبلت الوورك فلو تبعها
+    workflows_by_creator = set(
+        ProjectWorkflow.objects.filter(
+            template__created_by=request.user,
+            is_active=True
+        ).values_list('project_board_id', flat=True)
+    )
+
+    # ② مشاريع اللي المستخدم مشرف عليها (أساسي أو ثانوي)
+    supervised_board_ids = set(
+        StudentIdeaProposal.objects.filter(
+            Q(supervisor=request.user) | Q(co_supervisors=request.user),
+            status='assigned',
+        ).values_list('board__id', flat=True)
+    )
+
+    all_board_ids = list(workflows_by_creator | supervised_board_ids)[:500]
     
     projects = ProjectBoard.objects.filter(
-        id__in=workflows
+        id__in=all_board_ids
     ).select_related(
         'proposal__supervisor',
         'application__idea__doctor'
+    ).prefetch_related(
+        'proposal__co_supervisors',
+    )
+
+    # نحسب عدد المراحل المعلّقة لكل مشروع
+    workflow_map = {
+        w.project_board_id: w
+        for w in ProjectWorkflow.objects.filter(
+            project_board_id__in=all_board_ids,
+            is_active=True
+        )
+    }
+    
+    workflow_ids = [w.id for w in workflow_map.values()]
+    pending_counts = dict(
+        WorkflowStageInstance.objects.filter(
+            project_workflow_id__in=workflow_ids,
+            status='submitted',
+        ).values('project_workflow_id').annotate(
+            count=Count('id')
+        ).values_list('project_workflow_id', 'count')
     )
     
     data = []
     for project in projects:
+        # التأكد إنو المستخدم فعلاً يقدر يراجع هاي المشروع
+        if request.user.role == 'doctor' and not _user_is_project_supervisor(request.user, project):
+            # يقدر يراجع إذا كان منشئ التمبلت
+            workflow = workflow_map.get(project.id)
+            if not workflow or workflow.template.created_by != request.user:
+                continue
+
         team_members = []
         for member in project.members:
             team_members.append({
@@ -1223,11 +1290,18 @@ def get_reviewable_projects(request):
         elif project.application:
             supervisor_name = project.application.idea.doctor.username if project.application.idea else None
         
+        # حساب عدد المراحل المعلّقة
+        workflow = workflow_map.get(project.id)
+        pending_reviews = 0
+        if workflow:
+            pending_reviews = pending_counts.get(workflow.id, 0)
+        
         data.append({
             'id': project.id,
             'title': project.title,
             'supervisor_name': supervisor_name,
             'team_members': team_members,
+            'pending_reviews': pending_reviews,
         })
     
     return Response(data)

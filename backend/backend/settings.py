@@ -77,6 +77,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'accounts_login': '10/minute',
         'accounts_register': '5/minute',
+         'password_reset': '3/hour', 
         'propose_idea': '10/hour',
         'workflow_submit': '30/hour',
         'file_upload': '20/hour',
@@ -205,7 +206,7 @@ SIMPLE_JWT = {
 }
 
 # JWT Cookie Settings (HttpOnly cookies)
-JWT_COOKIE_SECURE = False          # True لما تستخدمي HTTPS
+JWT_COOKIE_SECURE = not DEBUG         # True في production (HTTPS)
 JWT_COOKIE_HTTPONLY = True         # لا يقدر JavaScript يقرأه
 JWT_COOKIE_SAMESITE = 'Lax'        # حماية من CSRF
 JWT_COOKIE_ACCESS_MAX_AGE = 60 * 60 * 24       # يوم واحد (بالثواني)
@@ -214,11 +215,21 @@ JWT_COOKIE_REFRESH_MAX_AGE = 60 * 60 * 24 * 7  # أسبوع
 # ── CORS Settings ─────────────────────────────────────────────────────────────
 # MUST NOT use CORS_ALLOW_ALL_ORIGINS with credentials
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173').split(',')
-    if origin.strip()
-]
+# في settings.py
+if DEBUG:
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+    ]
+else:
+    # في production، يجب أن تكون من .env فقط
+    origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
+    if not origins or 'localhost' in origins:
+        raise ImproperlyConfigured(
+            'CORS_ALLOWED_ORIGINS must be set in production and must not include localhost'
+        )
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in origins.split(',') if o.strip()]
+
 
 # ── Production Security Settings ──────────────────────────────────────────────
 # تتفعل تلقائياً لما DEBUG=False (إنتاج)، وتتنفصل لما DEBUG=True (تطوير)

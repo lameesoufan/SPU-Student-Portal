@@ -7,14 +7,16 @@ from rest_framework_simplejwt.exceptions import TokenError
 from openpyxl import load_workbook
 from django.contrib.auth import authenticate
 from django.conf import settings
-
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
 from .models import DEPARTMENTS
 from .permissions import IsDeanOrAdmin
 from .selectors import get_doctors
-from .throttles import RegisterRateThrottle
+from .throttles import RegisterRateThrottle, PasswordResetThrottle
 from .services import (
     create_user_from_import, change_user_password, assign_hod,
     lookup_student_in_reference, register_verified_student,
+    change_user_username, generate_username_suggestions,
 )
 
 
@@ -61,6 +63,26 @@ def logout(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetThrottle])  # 3/hour
+def request_password_reset(request):
+    email = request.data.get('email')
+    try:
+        user = User.objects.get(email=email)
+        token = default_token_generator.make_token(user)
+        # أرسل email مع الرابط
+        send_mail(
+            'Password Reset',
+            f'Reset link: /reset/{user.pk}/{token}/',
+            'noreply@spu.edu',
+            [email],
+        )
+    except User.DoesNotExist:
+        pass  # لا تكشف وجود email
+    return Response({'message': 'If email exists, reset link was sent.'})
+
+
+@api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def change_password(request):
     new_password     = request.data.get('new_password', '')
@@ -73,6 +95,35 @@ def change_password(request):
     if not result['ok']:
         return Response({'error': result['error']}, status=400)
     return Response({'message': 'Password changed successfully.'})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def username_suggestions(request):
+    """Return username suggestions for the current user (first-login flow)."""
+    suggestions = generate_username_suggestions(user=request.user)
+    return Response({
+        'suggestions': suggestions,
+        'current_username': request.user.username,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_username(request):
+    """Change the authenticated user's username. Only allowed once."""
+    new_username = request.data.get('new_username', '').strip()
+    if not new_username:
+        return Response({'error': 'New username is required.'}, status=400)
+
+    result = change_user_username(user=request.user, new_username=new_username)
+    if not result['ok']:
+        return Response({'error': result['error']}, status=400)
+
+    return Response({
+        'message': 'Username changed successfully.',
+        'new_username': result['new_username'],
+    })
 
 
 @api_view(['POST'])
@@ -121,11 +172,10 @@ def import_users(request):
                 username=username, email=email, role=role,
                 password=username, department=department,
             )
-            if result.get('ok'):
-                user_obj = result['user']
+            if result:
                 if full_name:
-                    user_obj.first_name = str(full_name)
-                    user_obj.save(update_fields=['first_name'])
+                    result.first_name = str(full_name)
+                    result.save(update_fields=['first_name'])
                 created_users.append({'username': username})
     except Exception as exc:
         return Response({'error': f'Import failed. Please try again.'}, status=400)
@@ -215,6 +265,7 @@ def student_self_register(request):
     refresh['role']                 = user.role
     refresh['username']             = user.username
     refresh['must_change_password'] = user.must_change_password
+    refresh['must_change_username'] = user.must_change_username
     refresh['department']           = user.department
 
     access_token = str(refresh.access_token)
@@ -225,6 +276,7 @@ def student_self_register(request):
         'username': user.username,
         'role': user.role,
         'must_change_password': user.must_change_password,
+        'must_change_username': user.must_change_username,
         'department': user.department,
     })
 

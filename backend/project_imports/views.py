@@ -1,3 +1,5 @@
+import logging
+
 from django.http import HttpResponse
 from django.core.cache import cache
 from django.utils.dateparse import parse_date
@@ -8,6 +10,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import ImportRow, ImportSession
+
+logger = logging.getLogger('project_imports')
+
 from .permissions import IsSuperAdmin
 from .serializers import ImportRowSerializer, ImportSessionSerializer
 from .services import ImportService
@@ -48,8 +53,9 @@ class ImportProjectsView(APIView):
                 status=exc.status_code,
             )
         except Exception as exc:
+            logger.exception('Import failed for user %s', request.user.username)
             return Response(
-                {'error': f'Import failed. No changes were saved. Error: {str(exc)}'},
+                {'error': 'Import failed. No changes were saved.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         finally:

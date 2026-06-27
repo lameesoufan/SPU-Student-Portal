@@ -46,3 +46,11 @@ class FileUploadThrottle(SimpleRateThrottle):
         if request.user and request.user.is_authenticated:
             return self.cache_format % {'scope': self.scope, 'ident': request.user.pk}
         return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+class PasswordResetThrottle(SimpleRateThrottle):
+    """Rate limit for password change/reset: 3 per hour per user."""
+    scope = 'password_reset'
+
+    def get_cache_key(self, request, view):
+        if request.user and request.user.is_authenticated:
+            return self.cache_format % {'scope': self.scope, 'ident': request.user.pk}
+        return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}

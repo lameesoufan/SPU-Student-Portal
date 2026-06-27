@@ -22,8 +22,9 @@ class User(AbstractUser):
 
     role                 = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
     must_change_password = models.BooleanField(default=False)
-    department           = models.CharField(max_length=50, choices=DEPARTMENTS, null=True, blank=True)
-
+    must_change_username = models.BooleanField(default=False)
+    department = models.CharField(max_length=50, choices=DEPARTMENTS, null=True, blank=True)
+    has_changed_username = models.BooleanField(default=False)
     class Meta:
         verbose_name = 'user'
         verbose_name_plural = 'users'
@@ -46,4 +47,3 @@ class User(AbstractUser):
             self.is_superuser = True
             self.is_staff = True
         super().save(*args, **kwargs)
-

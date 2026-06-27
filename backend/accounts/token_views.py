@@ -52,10 +52,11 @@ class CookieTokenObtainPairView(CustomTokenObtainPairView):
 
             response.data = {
                 'message': 'Login successful',
-                'access': access,   # ← أضفناه عشان الـ frontend يقدر يرسلو بـ Authorization header
+                'access': access,
                 'username': payload.get('username', request.data.get('username', '')),
                 'role': payload.get('role', ''),
                 'must_change_password': payload.get('must_change_password', False),
+                'must_change_username': payload.get('must_change_username', False),
                 'department': payload.get('department', ''),
             }
 
@@ -81,7 +82,6 @@ class CookieTokenRefreshView(TokenRefreshView):
             if refresh:
                 _set_cookie(response, 'refresh_token', refresh, settings.JWT_COOKIE_REFRESH_MAX_AGE)
 
-            # ← أضفنا الـ access token بالـ response عشان الـ frontend يحفظو
             response.data = {
                 'message': 'Token refreshed',
                 'access': access,

@@ -470,8 +470,14 @@ def hod_review_app(request, app_id):
 def my_invitations(request):
     invitations = TeamInvitation.objects.filter(
         invitee=request.user, status='pending',
-    ).select_related('application__idea__doctor', 'application__student')
+    ).select_related(
+        'application__idea__doctor',
+        'application__student',
+    ).prefetch_related(
+        'application__invitations__invitee',
+    )
     return Response(TeamInvitationSerializer(invitations, many=True).data)
+
 
 
 @api_view(['POST'])
