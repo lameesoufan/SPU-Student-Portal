@@ -51,6 +51,7 @@ export default function ImportProjects({ onBack }) {
 
   const summary = useMemo(() => result || preview, [result, preview]);
   const supervisorCredentialExport = result?.supervisor_credentials_export;
+  const studentCredentialExport = result?.student_credentials_export;
 
   useEffect(() => {
     loadHistory();
@@ -184,6 +185,35 @@ export default function ImportProjects({ onBack }) {
     const link = document.createElement('a');
     link.href = url;
     link.download = exportData.filename || 'supervisor_credentials.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadStudentCredentialsCsv = () => {
+    const exportData = studentCredentialExport;
+    if (!exportData?.rows?.length) return;
+    const columns = exportData.columns || [
+      'university_id',
+      'project_title',
+      'department',
+      'full_name',
+      'username',
+      'generated_password',
+      'created_or_reused',
+      'created_at',
+      'notes',
+    ];
+    const rows = [
+      columns,
+      ...exportData.rows.map((item) => columns.map((column) => item[column] ?? '')),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = exportData.filename || 'student_credentials.csv';
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -324,7 +354,25 @@ export default function ImportProjects({ onBack }) {
                   onClick={downloadSupervisorCredentialsCsv}
                   className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700"
                 >
-                  <Download size={14} /> Credentials CSV
+                  <Download size={14} /> Supervisor Credentials
+                </button>
+              </div>
+            </div>
+          )}
+
+          {studentCredentialExport?.available && (
+            <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <strong className="block">Student credentials export is ready</strong>
+                  <span className="mt-1 block">{studentCredentialExport.security_note}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={downloadStudentCredentialsCsv}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                >
+                  <Download size={14} /> Student Credentials
                 </button>
               </div>
             </div>

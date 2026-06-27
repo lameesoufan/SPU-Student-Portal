@@ -13,8 +13,9 @@ import DoctorDashboard from './components/DoctorDashboard';
 import HodDashboard from './components/HodDashboard';
 import DeanDashboard from './components/DeanDashboard';
 import AssignHod from './components/AssignHod';
-
 import ChangePassword from './components/ChangePassword';
+import ChangeUsername from './components/ChangeUsername';
+
 
 function AppInner() {
   const [user, setUser]     = useState(null);
@@ -23,7 +24,8 @@ function AppInner() {
 
   const handleLogin      = (u) => { setUser(u); setPage('dashboard'); setScreen('login'); };
   const handleRegistered = (u) => { setUser(u); setPage('dashboard'); };
-
+  const handlePasswordChanged = () => setUser({ ...user, must_change_password: false });
+  const handleUsernameChanged = (newUsername) => setUser({ ...user, username: newUsername, must_change_username: false });
   const handleLogout = async () => {
     try { await logoutUser(); } catch { /* proceed */ }
     clearAccessToken();  // ← مسح الـ token من الذاكرة
@@ -32,7 +34,7 @@ function AppInner() {
     setPage('dashboard');
   };
 
-  const handlePasswordChanged = () => setUser({ ...user, must_change_password: false });
+
 
   if (!user) {
     if (screen === 'register')
@@ -42,7 +44,13 @@ function AppInner() {
 
   if (user.must_change_password)
     return <ChangePassword user={user} onSuccess={handlePasswordChanged} />;
+  if (user.must_change_password)
+    return <ChangePassword user={user} onSuccess={handlePasswordChanged} />;
 
+  if (user.must_change_username)
+    return <ChangeUsername user={user} onSuccess={handleUsernameChanged} />;
+
+  if (user.role === 'student') return <StudentDashboard user={user} onLogout={handleLogout} />;
   if (user.role === 'student') return <StudentDashboard user={user} onLogout={handleLogout} />;
   if (user.role === 'doctor')  return <DoctorDashboard  user={user} onLogout={handleLogout} />;
   if (user.role === 'hod')     return <HodDashboard     user={user} onLogout={handleLogout} />;

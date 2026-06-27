@@ -92,7 +92,11 @@ export const logoutUser = () =>
 
 export const changePassword = (new_password, confirm_password) =>
   api.post('/api/change-password/', { new_password, confirm_password });
+export const changeUsername = (new_username) =>
+  api.post('/api/change-username/', { new_username });
 
+export const fetchUsernameSuggestions = () =>
+  api.get('/api/username-suggestions/');
 export const fetchDoctors = () => api.get('/api/doctors/');
 export const fetchDepartments = () => api.get('/api/departments/');
 export const assignHod = (doctor_id, department) =>

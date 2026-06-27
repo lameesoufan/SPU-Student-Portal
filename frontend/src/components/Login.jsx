@@ -61,12 +61,13 @@ export default function Login({ onLogin, onRegister }) {
         setAccessToken(data.access);
       }
 
-      onLogin({
-        username: data.username || form.username,
-        role: data.role,
-        must_change_password: data.must_change_password,
-        department: data.department,
-      });
+  onLogin({
+    username: data.username || form.username,
+    role: data.role,
+    must_change_password: data.must_change_password,
+    must_change_username: data.must_change_username ?? true,
+    department: data.department,
+    });
     } catch (err) {
       setServerError(err.response?.data?.detail || 'Invalid credentials. Please try again.');
       setShaking(true);
