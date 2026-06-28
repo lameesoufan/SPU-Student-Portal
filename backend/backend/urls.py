@@ -29,6 +29,7 @@ urlpatterns = [
     path('', include('project_management.urls')),
     path('api/workflow/', include('workflow.urls')),
     path('api/import/', include('project_imports.urls')),
+    path('api/committees/', include('committees.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
