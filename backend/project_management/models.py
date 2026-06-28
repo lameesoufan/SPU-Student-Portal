@@ -51,26 +51,68 @@ class ProjectBoard(models.Model):
         from django.contrib.auth import get_user_model
         User = get_user_model()
         from projects.models import ProposalInvitation, TeamInvitation
+        from projects.participation_services import get_project_participations
 
         ids = set()
         if self.proposal:
-            ids.add(self.proposal.student_id)
-            ids.update(
-                ProposalInvitation.objects.filter(
-                    proposal=self.proposal, status='accepted'
-                ).values_list('invitee_id', flat=True)
-            )
+            participations = list(get_project_participations(self.proposal))
+            if participations:
+                ids.update(p.student_id for p in participations if p.status == 'active')
+            else:
+                ids.add(self.proposal.student_id)
+                ids.update(
+                    ProposalInvitation.objects.filter(
+                        proposal=self.proposal, status='accepted'
+                    ).values_list('invitee_id', flat=True)
+                )
         elif self.application:
-            ids.add(self.application.student_id)
-            ids.update(
-                TeamInvitation.objects.filter(
-                    application=self.application, status='accepted'
-                ).values_list('invitee_id', flat=True)
-            )
+            participations = list(get_project_participations(self.application))
+            if participations:
+                ids.update(p.student_id for p in participations if p.status == 'active')
+            else:
+                ids.add(self.application.student_id)
+                ids.update(
+                    TeamInvitation.objects.filter(
+                        application=self.application, status='accepted'
+                    ).values_list('invitee_id', flat=True)
+                )
 
         result = User.objects.filter(id__in=ids)
         self._members_cache = result
         return result
+
+    @property
+    def participants_with_status(self):
+        from projects.participation_services import get_project_participations, user_display_name
+
+        project = self.proposal or self.application
+        if not project:
+            return []
+        participations = list(get_project_participations(project))
+        if not participations:
+            return [
+                {
+                    'id': member.id,
+                    'username': member.username,
+                    'name': member.get_full_name() or member.username,
+                    'status': 'active',
+                    'is_active': True,
+                }
+                for member in self.members
+            ]
+        return [
+            {
+                'id': participation.student_id,
+                'username': participation.student.username,
+                'name': user_display_name(participation.student),
+                'role': participation.role,
+                'status': participation.status,
+                'is_active': participation.status == 'active',
+                'designation_date': participation.status_changed_at,
+                'reason': participation.status_reason,
+            }
+            for participation in participations
+        ]
 
 
 class Task(models.Model):

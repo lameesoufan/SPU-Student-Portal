@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from project_management.models import ProjectBoard
 from projects.models import ProjectApplication, ProposalInvitation, StudentIdeaProposal
+from projects.participation_services import create_participations_for_student_proposal
 
 from .constants import DEFAULT_TEMP_PASSWORD_FORMAT
 from .models import ImportRow, ImportSession
@@ -36,6 +37,7 @@ class UserMapper:
     def __init__(self):
         self._all_supervisors_cache = None
         self._existing_usernames = set(User.objects.values_list('username', flat=True))
+        self._generated_usernames_by_identity = {}
         # ✅ Cache supervisor identities to avoid N+1 queries
         self._supervisor_identity_cache = self._build_supervisor_identity_cache()
 
@@ -46,6 +48,15 @@ class UserMapper:
             DEFAULT_TEMP_PASSWORD_FORMAT,
         )
         return fmt.format(identifier=identifier)
+
+    def parse_supervisor_name(self, name):
+        return parse_person_name(strip_person_titles(name))
+
+    def parse_student_name(self, name):
+        parts = str(name or '').split(None, 1)
+        if not parts:
+            return '', ''
+        return parts[0], parts[1] if len(parts) > 1 else ''
 
     def _build_supervisor_identity_cache(self):
         """Build identity_key -> User mapping for O(1) supervisor lookups."""
@@ -85,6 +96,7 @@ class UserMapper:
         # ── Supervisor planning with identity_key dedup ──
         supervisor_map = {}
         supervisors_to_create = {}
+        supervisors_by_row = defaultdict(list)
         all_supervisor_keys_in_plan = []
 
         for row in rows:
@@ -92,7 +104,7 @@ class UserMapper:
             if not raw_name:
                 continue
 
-            names = split_supervisor_names(raw_name)
+            names = row.get('supervisor_names') or split_supervisor_names(raw_name)
             if not names:
                 continue
 
@@ -136,6 +148,11 @@ class UserMapper:
                             'department': row.get('department', ''),
                         }
 
+                if len(existing) >= 1:
+                    supervisors_by_row[row['row_number']].append(existing[0].username)
+                elif identity_key in supervisors_to_create:
+                    supervisors_by_row[row['row_number']].append(supervisors_to_create[identity_key]['username'])
+
                 if is_primary:
                     if len(existing) >= 1:
                         supervisor_map[row['row_number']] = existing[0]
@@ -149,6 +166,7 @@ class UserMapper:
             'students_to_create': sorted(set(students_to_create)),
             'supervisors_to_create': list(supervisors_to_create.values()),
             'supervisor_map': supervisor_map,
+            'supervisors_by_row': dict(supervisors_by_row),
             'all_supervisor_keys': all_supervisor_keys_in_plan,
         }
 
@@ -199,7 +217,7 @@ class UserMapper:
             if not raw_name:
                 continue
 
-            names = split_supervisor_names(raw_name)
+            names = row.get('supervisor_names') or split_supervisor_names(raw_name)
             if not names:
                 continue
 
@@ -283,6 +301,13 @@ class UserMapper:
         first_part, last_part = parse_person_name(needle)
         all_supervisors = self._get_all_supervisors(lock=lock)
 
+        username_matches = [
+            u for u in all_supervisors
+            if u.username.casefold() == needle.casefold()
+        ]
+        if username_matches:
+            return username_matches
+
         # Step 1: exact matches on first_name + last_name
         exact_matches = [
             u for u in all_supervisors
@@ -305,21 +330,32 @@ class UserMapper:
         needle_lower = clean_needle.lower()
         return [
             u for u in all_supervisors
-            if needle_lower in (u.get_full_name() or '').strip().lower()
-            or (u.get_full_name() or '').strip().lower() in needle_lower
+            if (u.get_full_name() or '').strip()
+            and (
+                needle_lower in (u.get_full_name() or '').strip().lower()
+                or (u.get_full_name() or '').strip().lower() in needle_lower
+            )
         ]
 
     def normalize_username(self, name):
+        identity_key = supervisor_identity_key(name) or str(name).strip().casefold()
+        if identity_key in self._generated_usernames_by_identity:
+            return self._generated_usernames_by_identity[identity_key]
+
         base = username_base_from_name(name)
         if not base:
             base = f'doctor_{uuid.uuid5(uuid.NAMESPACE_DNS, str(name)).hex[:10]}'
         username = base[:120]
         candidate = username
         suffix = 1
-        while candidate.lower() in self._existing_usernames:
+        while (
+            candidate.lower() in self._existing_usernames
+            or User.objects.filter(username__iexact=candidate).exists()
+        ):
             suffix += 1
             candidate = f'{username[:110]}_{suffix}'
         self._existing_usernames.add(candidate.lower())
+        self._generated_usernames_by_identity[identity_key] = candidate
         return candidate
 
 
@@ -328,6 +364,7 @@ class ProjectCreator:
         created = []
         now = timezone.localtime(timezone.now()).strftime('%Y-%m-%d')
         co_supervisors_map = user_map.get('co_supervisors_map', {})
+        supervisors_by_row = user_map.get('supervisors_by_row', {})
 
         for group_rows in self._group_project_rows(rows):
             row = self._leader_row(group_rows)
@@ -351,6 +388,10 @@ class ProjectCreator:
             for gr in group_rows:
                 for co_sup in co_supervisors_map.get(gr['row_number'], []):
                     project_co_supervisors.add(co_sup)
+                row_supervisors = supervisors_by_row.get(gr['row_number'], [])
+                for co_sup in row_supervisors[1:]:
+                    if co_sup != supervisor:
+                        project_co_supervisors.add(co_sup)
             if project_co_supervisors:
                 proposal.co_supervisors.set(project_co_supervisors)
 
@@ -371,6 +412,7 @@ class ProjectCreator:
                 title=row['title'],
                 github_repo=row.get('github_repo') or None,
             )
+            create_participations_for_student_proposal(proposal)
             created.append({'proposal': proposal, 'application': application, 'board': board, 'rows': group_rows})
         return created
 
@@ -553,6 +595,7 @@ class ImportService:
             title=row['title'],
             github_repo=row.get('github_repo') or None,
         )
+        create_participations_for_student_proposal(proposal)
         
         return {
             'proposal': proposal, 
@@ -773,7 +816,7 @@ class ImportService:
             raw_name = row.get('supervisor_name', '').strip()
             if not raw_name:
                 continue
-            names = split_supervisor_names(raw_name)
+            names = row.get('supervisor_names') or split_supervisor_names(raw_name)
             for name in names:
                 identity_key = supervisor_identity_key(name)
                 supervisor_projects[identity_key].append({
@@ -831,11 +874,11 @@ class ImportService:
             rows_data.append({
                 'full_name': supervisor.get_full_name() or cred.get('full_name', ''),
                 'username': supervisor.username,
-                'generated_password': cred.get('password', '') if is_created else '(existing user)',
+                'generated_password': cred.get('password', '') if is_created else '',
                 'role_in_project': role_in_project,
                 'project_titles': '; '.join(dict.fromkeys(info['projects'])),
                 'department': '; '.join(sorted(info['departments'])) if info['departments'] else '',
-                'created_or_reused': 'created' if is_created else 'reused',
+                'created_or_reused': 'created' if is_created else 'reused_existing_no_password_exported',
                 'notes': 'Must change password and username on first login' if is_created else 'Already existed in system',
             })
 

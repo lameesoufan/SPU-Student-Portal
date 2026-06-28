@@ -32,6 +32,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.http import HttpResponse
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import (
@@ -190,10 +191,22 @@ class CommitteeViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Target committee not found.'},
                             status=status.HTTP_404_NOT_FOUND)
 
+        from projects.models import IdeaApplication, StudentIdeaProposal
+
         if source == 'IdeaApplication':
+            project = IdeaApplication.objects.filter(pk=pid).first()
+            if not project:
+                return Response({'detail': 'Project not found.'}, status=status.HTTP_404_NOT_FOUND)
+            if project.operational_status in ('fully_withdrawn', 'fully_failed', 'inactive'):
+                return Response({'detail': 'Inactive projects cannot be moved into active committee assignments.'}, status=status.HTTP_400_BAD_REQUEST)
             c.applications.remove(pid)
             target.applications.add(pid)
         else:
+            project = StudentIdeaProposal.objects.filter(pk=pid).first()
+            if not project:
+                return Response({'detail': 'Project not found.'}, status=status.HTTP_404_NOT_FOUND)
+            if project.operational_status in ('fully_withdrawn', 'fully_failed', 'inactive'):
+                return Response({'detail': 'Inactive projects cannot be moved into active committee assignments.'}, status=status.HTTP_400_BAD_REQUEST)
             c.proposals.remove(pid)
             target.proposals.add(pid)
         return Response({'moved': True, 'to': target.id})
@@ -258,9 +271,20 @@ class DashboardView(APIView):
 
         total_projects = sum(c.projects_count for c in committees_qs)
 
-        from projects.models import IdeaApplication, StudentIdeaProposal
-        unassigned_apps = IdeaApplication.objects.filter(status='registered').count()
-        unassigned_props = StudentIdeaProposal.objects.filter(status='assigned').count()
+        from projects.models import IdeaApplication, ProjectParticipation, StudentIdeaProposal
+        active_project_statuses = ['active', 'partial_team', 'solo']
+        unassigned_apps = IdeaApplication.objects.filter(
+            status='registered',
+            operational_status__in=active_project_statuses,
+        ).count()
+        unassigned_props = StudentIdeaProposal.objects.filter(
+            status='assigned',
+            operational_status__in=active_project_statuses,
+        ).count()
+        participation_qs = ProjectParticipation.objects.filter(
+            Q(idea_application__status='registered')
+            | Q(student_proposal__status='assigned')
+        )
 
         # Composition groups for the dashboard cards
         compositions = []
@@ -325,6 +349,17 @@ class DashboardView(APIView):
                 'projects_distributed':   total_projects,
                 'projects_unassigned':    unassigned_apps + unassigned_props,
                 'warnings_count':         len(get_dashboard_warnings(semester=semester)),
+                'active_students':        participation_qs.filter(status='active').count(),
+                'failed_students':        participation_qs.filter(status='failed').count(),
+                'withdrawn_students':     participation_qs.filter(status='withdrawn').count(),
+                'partial_projects':       IdeaApplication.objects.filter(status='registered', operational_status='partial_team').count()
+                                          + StudentIdeaProposal.objects.filter(status='assigned', operational_status='partial_team').count(),
+                'solo_projects':          IdeaApplication.objects.filter(status='registered', operational_status='solo').count()
+                                          + StudentIdeaProposal.objects.filter(status='assigned', operational_status='solo').count(),
+                'fully_withdrawn_projects': IdeaApplication.objects.filter(status='registered', operational_status='fully_withdrawn').count()
+                                            + StudentIdeaProposal.objects.filter(status='assigned', operational_status='fully_withdrawn').count(),
+                'fully_failed_projects':  IdeaApplication.objects.filter(status='registered', operational_status='fully_failed').count()
+                                          + StudentIdeaProposal.objects.filter(status='assigned', operational_status='fully_failed').count(),
             },
             'compositions':  compositions,
             'warnings':      get_dashboard_warnings(semester=semester),
@@ -430,6 +465,10 @@ class ProjectsAssignmentView(APIView):
                     {
                         'name': student['name'],
                         'is_leader': student.get('is_leader', False),
+                        'status': student.get('status', 'active'),
+                        'is_active': student.get('is_active', student.get('status', 'active') == 'active'),
+                        'designation_date': student.get('designation_date'),
+                        'reason': student.get('reason', ''),
                     }
                     for student in students_data
                 ]
@@ -450,8 +489,12 @@ class ProjectsAssignmentView(APIView):
                     'project_source': project['source'],
                     'project_title': project['title'],
                     'students': students_formatted,  # List of all team members
+                    'active_students': project.get('active_students', []),
+                    'inactive_students': project.get('inactive_students', []),
                     'supervisors': supervisors_formatted,  # List of all supervisors
                     'team_size': project.get('team_size', 1),
+                    'team_size_stats': project.get('team_size_stats'),
+                    'operational_status': project.get('operational_status'),
                 })
 
         return Response({

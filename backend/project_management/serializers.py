@@ -99,17 +99,21 @@ class TaskSerializer(serializers.ModelSerializer):
 class ProjectBoardSerializer(serializers.ModelSerializer):
     tasks        = TaskSerializer(many=True, read_only=True)
     members      = serializers.SerializerMethodField()
+    participants = serializers.SerializerMethodField()
     project_type = serializers.SerializerMethodField()
 
     class Meta:
         model  = ProjectBoard
-        fields = ['id', 'title', 'created_at', 'tasks', 'members', 'project_type', 'github_repo']
+        fields = ['id', 'title', 'created_at', 'tasks', 'members', 'participants', 'project_type', 'github_repo']
 
     def get_members(self, obj):
         return [
             {'id': m.id, 'username': m.username, 'name': m.get_full_name() or m.username}
             for m in obj.members
         ]
+
+    def get_participants(self, obj):
+        return obj.participants_with_status
 
     def get_project_type(self, obj):
         if obj.proposal and obj.proposal.project_type:

@@ -33,7 +33,33 @@ MIME_WHITELIST = {
 
 
 def _get_student_board(student):
-    from projects.models import StudentIdeaProposal, IdeaApplication, ProposalInvitation, TeamInvitation
+    from projects.models import ProjectParticipation, StudentIdeaProposal, IdeaApplication, ProposalInvitation, TeamInvitation
+
+    participations = ProjectParticipation.objects.filter(
+        student=student,
+    ).filter(
+        Q(idea_application__status='registered')
+        | Q(student_proposal__status='assigned')
+    ).select_related('idea_application__idea', 'student_proposal')
+    if participations.exists():
+        participation = participations.filter(status='active').first()
+        if not participation:
+            return None
+        if participation.student_proposal_id:
+            proposal = participation.student_proposal
+            board, _ = ProjectBoard.objects.get_or_create(
+                proposal=proposal,
+                defaults={'title': proposal.title}
+            )
+            return board
+        if participation.idea_application_id:
+            application = participation.idea_application
+            board_title = application.idea.title if application.idea_id else f'Project {application.id}'
+            board, _ = ProjectBoard.objects.get_or_create(
+                application=application,
+                defaults={'title': board_title}
+            )
+            return board
 
     proposal = StudentIdeaProposal.objects.filter(student=student, status='assigned').first()
     if not proposal:
@@ -88,6 +114,14 @@ def _board_detail_queryset():
 
 def _is_board_member(board, user):
     """M-06 Fix: فحص عضوية مباشر بدون تحميل كل الأعضاء"""
+    from projects.participation_services import get_project_participations
+
+    project = board.proposal or board.application
+    if project:
+        participations = list(get_project_participations(project))
+        if participations:
+            return any(p.student_id == user.id and p.status == 'active' for p in participations)
+
     from projects.models import ProposalInvitation, TeamInvitation
     if board.proposal:
         if board.proposal.student_id == user.id:
@@ -172,10 +206,12 @@ def supervisor_boards(request):
 
     from projects.models import StudentIdeaProposal, IdeaApplication
     boards = []
+    active_project_statuses = ['active', 'partial_team', 'solo']
 
     proposals = StudentIdeaProposal.objects.filter(
         Q(supervisor=request.user) | Q(co_supervisors=request.user),
         status='assigned',
+        operational_status__in=active_project_statuses,
     ).distinct()
     for proposal in proposals[:MAX_BOARD_LIST_SIZE]:
         board, _ = ProjectBoard.objects.get_or_create(
@@ -408,17 +444,18 @@ def hod_boards(request):
 
     boards = []
     department = request.user.department
+    active_project_statuses = ['active', 'partial_team', 'solo']
 
     if request.user.role == 'hod':
         proposals = StudentIdeaProposal.objects.filter(
-            department=department, status='assigned'
+            department=department, status='assigned', operational_status__in=active_project_statuses
         ).select_related('supervisor')
         applications = IdeaApplication.objects.filter(
-            idea__department=department, status='registered'
+            idea__department=department, status='registered', operational_status__in=active_project_statuses
         ).select_related('idea__doctor')
     else:
-        proposals = StudentIdeaProposal.objects.filter(status='assigned').select_related('supervisor')
-        applications = IdeaApplication.objects.filter(status='registered').select_related('idea__doctor')
+        proposals = StudentIdeaProposal.objects.filter(status='assigned', operational_status__in=active_project_statuses).select_related('supervisor')
+        applications = IdeaApplication.objects.filter(status='registered', operational_status__in=active_project_statuses).select_related('idea__doctor')
 
     for proposal in proposals[:MAX_BOARD_LIST_SIZE]:
         board, _ = ProjectBoard.objects.get_or_create(
@@ -448,28 +485,30 @@ def hod_stats(request):
     from projects.models import StudentIdeaProposal, IdeaApplication
 
     department = request.user.department
+    active_project_statuses = ['active', 'partial_team', 'solo']
 
     if request.user.role == 'hod':
         proposals_count = StudentIdeaProposal.objects.filter(
-            department=department, status='assigned'
+            department=department, status='assigned', operational_status__in=active_project_statuses
         ).count()
         applications_count = IdeaApplication.objects.filter(
-            idea__department=department, status='registered'
+            idea__department=department, status='registered', operational_status__in=active_project_statuses
         ).count()
     else:
-        proposals_count = StudentIdeaProposal.objects.filter(status='assigned').count()
-        applications_count = IdeaApplication.objects.filter(status='registered').count()
+        proposals_count = StudentIdeaProposal.objects.filter(status='assigned', operational_status__in=active_project_statuses).count()
+        applications_count = IdeaApplication.objects.filter(status='registered', operational_status__in=active_project_statuses).count()
 
     total_projects = proposals_count + applications_count
 
     if request.user.role == 'hod':
         boards_qs = ProjectBoard.objects.filter(
-            Q(proposal__department=department, proposal__status='assigned') |
-            Q(application__idea__department=department, application__status='registered')
+            Q(proposal__department=department, proposal__status='assigned', proposal__operational_status__in=active_project_statuses) |
+            Q(application__idea__department=department, application__status='registered', application__operational_status__in=active_project_statuses)
         )
     else:
         boards_qs = ProjectBoard.objects.filter(
-            Q(proposal__status='assigned') | Q(application__status='registered')
+            Q(proposal__status='assigned', proposal__operational_status__in=active_project_statuses)
+            | Q(application__status='registered', application__operational_status__in=active_project_statuses)
         )
 
     total_progress = 0

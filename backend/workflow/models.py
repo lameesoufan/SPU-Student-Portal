@@ -59,8 +59,8 @@ class WorkflowTemplate(models.Model):
             models.Index(fields=['created_by', 'status']),
         ]
 
-def __str__(self):
-    return f"{self.name} ({self.department or 'Global'})"
+    def __str__(self):
+        return f"{self.name} ({self.department or 'Global'})"
 
 
 class WorkflowStage(models.Model):

@@ -34,6 +34,28 @@ function renderChairName(chair) {
   return String(chair);
 }
 
+function distributionExclusionMessage(exclusions) {
+  const total = Number(exclusions?.excluded_students_total || 0);
+  const failed = Number(exclusions?.excluded_failed_students || 0);
+  const withdrawn = Number(exclusions?.excluded_withdrawn_students || 0);
+  const zeroActiveProjects = Number(exclusions?.excluded_projects_zero_active || 0);
+
+  if (!total && !zeroActiveProjects) return '';
+
+  const statusParts = [];
+  if (withdrawn) statusParts.push(`${withdrawn} withdrawn`);
+  if (failed) statusParts.push(`${failed} failed`);
+
+  const studentPart = total
+    ? `${total} students excluded from distribution: ${statusParts.join(', ') || 'inactive status'}.`
+    : '';
+  const projectPart = zeroActiveProjects
+    ? `${zeroActiveProjects} projects with zero active students skipped.`
+    : '';
+
+  return [studentPart, projectPart].filter(Boolean).join(' ');
+}
+
 export default function CommitteesDashboard({ onNavigate, user }) {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
@@ -77,10 +99,11 @@ export default function CommitteesDashboard({ onNavigate, user }) {
       const distributed    = res.data?.distributed_projects    ?? 0;
       const undistributed  = res.data?.undistributed_projects  ?? 0;
       const processed      = res.data?.processed_templates     ?? 0;
+      const exclusionMsg   = distributionExclusionMessage(res.data?.exclusions);
       const msg = undistributed > 0
         ? `تم توزيع ${distributed} مشروع على ${processed} تركيبة. (${undistributed} مشروع بدون لجنة مناسبة — راجع التنبيهات.)`
         : `تم توزيع ${distributed} مشروع على ${processed} تركيبة بنجاح.`;
-      setToast({ type: 'success', msg });
+      setToast({ type: 'success', msg: [msg, exclusionMsg].filter(Boolean).join(' ') });
       await load();
     } catch (err) {
       setToast({

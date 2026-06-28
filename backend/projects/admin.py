@@ -1,5 +1,14 @@
 from django.contrib import admin
-from .models import ProjectIdea, StudentIdeaProposal, ProjectApplication, IdeaApplication, TeamInvitation, ProposalInvitation
+from .models import (
+    ProjectIdea,
+    StudentIdeaProposal,
+    ProjectApplication,
+    IdeaApplication,
+    TeamInvitation,
+    ProposalInvitation,
+    ProjectParticipation,
+    ProjectParticipationStatusLog,
+)
 
 
 @admin.register(ProjectIdea)
@@ -34,3 +43,62 @@ class IdeaApplicationAdmin(admin.ModelAdmin):
 class ProposalInvitationAdmin(admin.ModelAdmin):
     list_display  = ('invitee', 'proposal', 'status', 'created_at')
     list_filter   = ('status',)
+
+
+@admin.register(ProjectParticipation)
+class ProjectParticipationAdmin(admin.ModelAdmin):
+    list_display = (
+        'student',
+        'project_source',
+        'project_id_display',
+        'role',
+        'status',
+        'status_changed_at',
+        'status_changed_by',
+    )
+    list_filter = ('project_source', 'role', 'status')
+    search_fields = (
+        'student__username',
+        'student__first_name',
+        'student__last_name',
+        'idea_application__idea__title',
+        'student_proposal__title',
+    )
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(ProjectParticipationStatusLog)
+class ProjectParticipationStatusLogAdmin(admin.ModelAdmin):
+    list_display = (
+        'student',
+        'project_source',
+        'previous_status',
+        'new_status',
+        'action_type',
+        'changed_by',
+        'changed_at',
+    )
+    list_filter = ('project_source', 'previous_status', 'new_status', 'action_type')
+    search_fields = (
+        'student__username',
+        'student__first_name',
+        'student__last_name',
+        'idea_application__idea__title',
+        'student_proposal__title',
+        'reason',
+    )
+    readonly_fields = (
+        'participation',
+        'student',
+        'project_source',
+        'idea_application',
+        'student_proposal',
+        'previous_status',
+        'new_status',
+        'reason',
+        'notes',
+        'changed_by',
+        'changed_at',
+        'action_type',
+        'metadata',
+    )

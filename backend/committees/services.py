@@ -30,6 +30,7 @@ from .models import (
     COMMITTEE_TYPE_CHOICES, PROJECT_TYPE_CHOICES,
     ALL_COMMITTEE_TYPES,
 )
+from projects.participation_services import get_project_participations, user_display_name
 
 
 User = get_user_model()
@@ -84,6 +85,11 @@ class CollectedProject:
     student_id: int
     student_name: str
     team_size: int
+    active_students: list[dict] = field(default_factory=list)
+    inactive_students: list[dict] = field(default_factory=list)
+    active_team_size: int = 0
+    original_team_size: int = 0
+    operational_status: str = 'active'
 
 
 def collect_projects_for_template(template: CommitteeTemplate) -> list[CollectedProject]:
@@ -104,17 +110,67 @@ def _collect_projects(department: str, project_type: str | None) -> list[Collect
     """Lower-level collector — used by both template-based and (dept, ptype)-based flows."""
     result: list[CollectedProject] = []
 
+    def participation_payloads(project, legacy_students):
+        participations = list(get_project_participations(project))
+        if not participations:
+            return legacy_students, []
+
+        active_students = []
+        inactive_students = []
+        for participation in participations:
+            payload = {
+                'id': participation.student_id,
+                'name': user_display_name(participation.student),
+                'university_id': participation.student.username,
+                'role': participation.role,
+                'is_leader': participation.role == 'leader',
+                'status': participation.status,
+                'designation_date': participation.status_changed_at.isoformat() if participation.status_changed_at else None,
+                'reason': participation.status_reason,
+            }
+            if participation.status == 'active':
+                active_students.append(payload)
+            else:
+                inactive_students.append(payload)
+        return active_students, inactive_students
+
     # ── IdeaApplication source ────────────────────────────────────────────────
     from projects.models import IdeaApplication
     idea_apps = (
         IdeaApplication.objects
         .filter(status='registered',
                 idea__department=department)
+        .exclude(operational_status__in=['fully_withdrawn', 'fully_failed', 'inactive'])
         .select_related('idea', 'idea__doctor', 'student')
+        .prefetch_related('invitations__invitee', 'participations__student')
     )
     for app in idea_apps:
-        ptype = getattr(app.idea, 'project_type', None)
+        ptype = getattr(app, 'project_type', None) or getattr(app.idea, 'project_type', None)
         if project_type and ptype and ptype != project_type:
+            continue
+        legacy_students = []
+        if app.student_id:
+            legacy_students.append({
+                'id': app.student_id,
+                'name': app.student.get_full_name() or app.student.username,
+                'university_id': app.student.username,
+                'role': 'leader',
+                'is_leader': True,
+                'status': 'active',
+            })
+        for invitation in app.invitations.filter(status='accepted'):
+            if invitation.invitee_id:
+                legacy_students.append({
+                    'id': invitation.invitee_id,
+                    'name': invitation.invitee.get_full_name() or invitation.invitee.username,
+                    'university_id': invitation.invitee.username,
+                    'role': 'member',
+                    'is_leader': False,
+                    'status': 'active',
+                })
+
+        active_students, inactive_students = participation_payloads(app, legacy_students)
+        if not active_students:
             continue
         result.append(CollectedProject(
             source          = 'IdeaApplication',
@@ -125,10 +181,14 @@ def _collect_projects(department: str, project_type: str | None) -> list[Collect
             supervisor_id   = app.idea.doctor_id,
             supervisor_name = (app.idea.doctor.get_full_name() or app.idea.doctor.username)
                               if app.idea.doctor_id else '',
-            student_id      = app.student_id,
-            student_name    = app.student.get_full_name() or app.student.username
-                              if app.student_id else '',
-            team_size       = app.team_size,
+            student_id      = active_students[0]['id'],
+            student_name    = active_students[0]['name'],
+            team_size       = len(active_students) + len(inactive_students),
+            active_students = active_students,
+            inactive_students = inactive_students,
+            active_team_size = len(active_students),
+            original_team_size = len(active_students) + len(inactive_students),
+            operational_status = app.operational_status,
         ))
 
     # ── StudentIdeaProposal source ────────────────────────────────────────────
@@ -137,7 +197,9 @@ def _collect_projects(department: str, project_type: str | None) -> list[Collect
         StudentIdeaProposal.objects
         .filter(status='assigned',
                 department=department)
+        .exclude(operational_status__in=['fully_withdrawn', 'fully_failed', 'inactive'])
         .select_related('student', 'supervisor')
+        .prefetch_related('invitations__invitee', 'participations__student')
     )
     for prop in proposals:
         ptype = getattr(prop, 'project_type', None)
@@ -146,6 +208,30 @@ def _collect_projects(department: str, project_type: str | None) -> list[Collect
         sup_name = ''
         if prop.supervisor_id:
             sup_name = prop.supervisor.get_full_name() or prop.supervisor.username
+        legacy_students = []
+        if prop.student_id:
+            legacy_students.append({
+                'id': prop.student_id,
+                'name': prop.student.get_full_name() or prop.student.username,
+                'university_id': prop.student.username,
+                'role': 'leader',
+                'is_leader': True,
+                'status': 'active',
+            })
+        for invitation in prop.invitations.filter(status='accepted'):
+            if invitation.invitee_id:
+                legacy_students.append({
+                    'id': invitation.invitee_id,
+                    'name': invitation.invitee.get_full_name() or invitation.invitee.username,
+                    'university_id': invitation.invitee.username,
+                    'role': 'member',
+                    'is_leader': False,
+                    'status': 'active',
+                })
+
+        active_students, inactive_students = participation_payloads(prop, legacy_students)
+        if not active_students:
+            continue
         result.append(CollectedProject(
             source          = 'StudentIdeaProposal',
             id              = prop.id,
@@ -154,10 +240,14 @@ def _collect_projects(department: str, project_type: str | None) -> list[Collect
             project_type    = ptype,
             supervisor_id   = prop.supervisor_id,
             supervisor_name = sup_name,
-            student_id      = prop.student_id,
-            student_name    = prop.student.get_full_name() or prop.student.username
-                              if prop.student_id else '',
-            team_size       = prop.team_size,
+            student_id      = active_students[0]['id'],
+            student_name    = active_students[0]['name'],
+            team_size       = len(active_students) + len(inactive_students),
+            active_students = active_students,
+            inactive_students = inactive_students,
+            active_team_size = len(active_students),
+            original_team_size = len(active_students) + len(inactive_students),
+            operational_status = prop.operational_status,
         ))
 
     return result
@@ -175,6 +265,52 @@ def _collect_projects(department: str, project_type: str | None) -> list[Collect
 #       (with wrap-around if projects > committees; extras load the first committees)
 #
 # Each project is therefore assigned to up to 4 committees (one per type).
+
+def _distribution_exclusion_summary(department: str, project_type: str | None) -> dict:
+    from projects.models import IdeaApplication, StudentIdeaProposal
+
+    summary = {
+        'excluded_students_total': 0,
+        'excluded_failed_students': 0,
+        'excluded_withdrawn_students': 0,
+        'excluded_projects_zero_active': 0,
+    }
+
+    def add_project(project, ptype):
+        if project_type and ptype and ptype != project_type:
+            return
+        participations = list(get_project_participations(project))
+        if not participations:
+            return
+        active_count = sum(1 for p in participations if p.status == 'active')
+        failed_count = sum(1 for p in participations if p.status == 'failed')
+        withdrawn_count = sum(1 for p in participations if p.status == 'withdrawn')
+
+        summary['excluded_failed_students'] += failed_count
+        summary['excluded_withdrawn_students'] += withdrawn_count
+        summary['excluded_students_total'] += failed_count + withdrawn_count
+        if active_count == 0:
+            summary['excluded_projects_zero_active'] += 1
+
+    idea_apps = (
+        IdeaApplication.objects
+        .filter(status='registered', idea__department=department)
+        .select_related('idea')
+        .prefetch_related('participations')
+    )
+    for app in idea_apps:
+        add_project(app, getattr(app, 'project_type', None) or getattr(app.idea, 'project_type', None))
+
+    proposals = (
+        StudentIdeaProposal.objects
+        .filter(status='assigned', department=department)
+        .prefetch_related('participations')
+    )
+    for prop in proposals:
+        add_project(prop, getattr(prop, 'project_type', None))
+
+    return summary
+
 
 @dataclass
 class TypeDistribution:
@@ -298,7 +434,11 @@ def apply_distribution_plan(plan: DistributionPlan) -> int:
         for a in td.assignments:
             committee_ids.add(a['committee_id'])
 
-    committees = Committee.objects.filter(id__in=committee_ids)
+    committees = Committee.objects.filter(
+        committee_type__in=[td.committee_type for td in plan.by_type],
+        department=plan.department,
+        project_type=plan.project_type,
+    )
     by_id = {c.id: c for c in committees}
 
     # Clear existing project assignments on these committees
@@ -357,8 +497,18 @@ def distribute_projects_to_committees(template_ids: list[int] | None = None,
     plans: list[DistributionPlan] = []
     total_distributed   = 0
     total_undistributed = 0
+    exclusion_totals = {
+        'excluded_students_total': 0,
+        'excluded_failed_students': 0,
+        'excluded_withdrawn_students': 0,
+        'excluded_projects_zero_active': 0,
+    }
 
     for dept, ptype in combos:
+        summary = _distribution_exclusion_summary(dept, ptype)
+        for key, value in summary.items():
+            exclusion_totals[key] += value
+
         projects = _collect_projects(dept, ptype)
         if not projects:
             # No projects for this combo — skip but still build an empty plan
@@ -379,6 +529,7 @@ def distribute_projects_to_committees(template_ids: list[int] | None = None,
         'processed_templates'   : len(plans),
         'distributed_projects'  : total_distributed,
         'undistributed_projects': total_undistributed,
+        'exclusions'            : exclusion_totals,
         'plans'                 : [_plan_to_dict(p) for p in plans],
         'dry_run'               : dry_run,
         'executed_at'           : timezone.now().isoformat(),
@@ -397,6 +548,11 @@ def _project_to_dict(p: CollectedProject) -> dict:
         'student_id':      p.student_id,
         'student_name':    p.student_name,
         'team_size':       p.team_size,
+        'active_students': p.active_students,
+        'inactive_students': p.inactive_students,
+        'active_team_size': p.active_team_size,
+        'original_team_size': p.original_team_size,
+        'operational_status': p.operational_status,
     }
 
 
@@ -480,10 +636,17 @@ def get_dashboard_warnings(semester: str | None = None) -> list[dict]:
     from projects.models import IdeaApplication, StudentIdeaProposal
 
     dept_pt_with_projects = set()
-    for app in IdeaApplication.objects.filter(status='registered').select_related('idea'):
+    active_project_statuses = ['active', 'partial_team', 'solo']
+    for app in IdeaApplication.objects.filter(
+        status='registered',
+        operational_status__in=active_project_statuses,
+    ).select_related('idea'):
         ptype = getattr(app.idea, 'project_type', None)
         dept_pt_with_projects.add((app.idea.department, ptype))
-    for prop in StudentIdeaProposal.objects.filter(status='assigned'):
+    for prop in StudentIdeaProposal.objects.filter(
+        status='assigned',
+        operational_status__in=active_project_statuses,
+    ):
         ptype = getattr(prop, 'project_type', None)
         dept_pt_with_projects.add((prop.department, ptype))
 
@@ -663,11 +826,21 @@ def export_committees_pdf(semester: str | None = None) -> bytes:
         if projs:
             proj_rows = [['المصدر', 'العنوان', 'المشرف', 'الطالب']]
             for p in projs:
+                supervisors_text = ', '.join(
+                    supervisor.get('name', '')
+                    for supervisor in p.get('supervisors', [])
+                    if supervisor.get('name')
+                ) or '—'
+                students_text = ', '.join(
+                    f"{student.get('name', '')} ({student.get('status', 'active')})"
+                    for student in p.get('students', [])
+                    if student.get('name')
+                ) or '—'
                 proj_rows.append([
                     p['source'],
                     p['title'],
-                    p['supervisor'] or '—',
-                    p['student'],
+                    supervisors_text,
+                    students_text,
                 ])
             t2 = Table(proj_rows, colWidths=[40*mm, 80*mm, 50*mm, 50*mm])
             t2.setStyle(TableStyle([
@@ -841,7 +1014,7 @@ def export_projects_assignment_excel(semester: str | None = None) -> bytes:
             students_data = project.get('students', [])
             if students_data:
                 students_text = '\n'.join([
-                    f"{'👤 ' if student.get('is_leader') else '• '}{student['name']}"
+                    f"{'👤 ' if student.get('is_leader') else '• '}{student['name']} ({student.get('status', 'active')})"
                     for student in students_data
                 ])
             else:

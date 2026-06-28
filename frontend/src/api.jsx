@@ -193,6 +193,30 @@ export const replaceProposalMember = (proposalId, old_member_id, new_member_id) 
 export const replaceApplicationMember = (appId, old_member_id, new_member_id) =>
   api.post(`/api/projects/applications/${appId}/replace-member/`, { old_member_id, new_member_id });
 
+export const fetchStudentStatusManagement = (params = {}) =>
+  api.get('/api/projects/participations/status-management/', { params });
+
+export const fetchStudentStatusStats = (params = {}) =>
+  api.get('/api/projects/participations/status-management/stats/', { params });
+
+export const markParticipationFailed = (participationId, payload = {}) =>
+  api.post(`/api/projects/participations/${participationId}/mark-failed/`, payload);
+
+export const markParticipationWithdrawn = (participationId, payload = {}) =>
+  api.post(`/api/projects/participations/${participationId}/mark-withdrawn/`, payload);
+
+export const reverseParticipationToActive = (participationId, payload = {}) =>
+  api.post(`/api/projects/participations/${participationId}/reverse-to-active/`, payload);
+
+export const fetchParticipationHistory = (participationId) =>
+  api.get(`/api/projects/participations/${participationId}/history/`);
+
+export const designateStudentStatus = (studentId, payload = {}) =>
+  api.post(`/api/projects/students/${studentId}/designate-status/`, payload);
+
+export const fetchStudentParticipationHistory = (studentId) =>
+  api.get(`/api/projects/students/${studentId}/participation-history/`);
+
 // ── Doctors list (for supervisor dropdown) ────────────────────────────────────
 export const fetchDoctorsList = () =>
   api.get('/api/projects/doctors/');

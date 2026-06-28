@@ -18,6 +18,7 @@ import {
   Clock,
   Info,
   Building2,
+  ShieldAlert,
 } from 'lucide-react';
 import DashboardLayout from './DashboardLayout';
 import usePageHistory from '../hooks/usePageHistory';
@@ -31,6 +32,7 @@ import TemplateForm from './committees/TemplateForm';
 import DistributionTable from './committees/DistributionTable';
 import CommitteeDetail from './committees/CommitteeDetail';
 import ProjectsAssignment from './committees/ProjectsAssignment';
+import StudentStatusManagement from './StudentStatusManagement';
 import { useTheme } from '../ThemeContext';
 import {
   fetchUnreadCount,
@@ -59,12 +61,14 @@ const Icon = {
   Clock: Clock,
   Info: Info,
   Building: Building2,
+  StudentStatus: ShieldAlert,
 };
 
 /* ── Navigation Items ── */
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Overview', IconComp: Icon.Overview },
   { id: 'committees', label: 'اللجان', IconComp: Icon.Kanban },
+  { id: 'student-status', label: 'Student Status', IconComp: Icon.StudentStatus },
   { id: 'import', label: 'Import Users', IconComp: Icon.Upload },
   { id: 'import-projects', label: 'Import Projects', IconComp: Icon.ProjectImport },
   { id: 'assign-hod', label: 'Assign HoD', IconComp: Icon.UserPlus },
@@ -82,6 +86,13 @@ const MODULE_CARDS = [
     desc: 'إنشاء التشكيلات، توزيع المشاريع، متابعة اللجان والأطباء',
     page: 'committees',
     gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
+  },
+  {
+    IconComp: Icon.StudentStatus,
+    label: 'Student Status Management',
+    desc: 'Mark project participants as active, failed, or withdrawn with audit history',
+    page: 'student-status',
+    gradient: 'linear-gradient(135deg, #0f766e, #14b8a6)',
   },
   {
     IconComp: Icon.Upload,
@@ -239,6 +250,13 @@ usePolling(async () => {
       return (
         <div className="std-page-wrapper">
           <CommitteesDashboard user={user} onNavigate={navigateTo} />
+        </div>
+      );
+    }
+    if (page === 'student-status') {
+      return (
+        <div className="std-page-wrapper">
+          <StudentStatusManagement onBack={goBack} />
         </div>
       );
     }

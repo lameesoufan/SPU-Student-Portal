@@ -258,6 +258,7 @@ class Committee(models.Model):
         Each dict has: source, id, title, department, project_type, supervisor, students (list of all team members).
         """
         result = []
+        from projects.participation_services import get_project_participations, team_stats_for_project, user_display_name
         for app in self.applications.all().select_related('idea', 'idea__doctor', 'student').prefetch_related('invitations__invitee'):
             try:
                 title        = app.idea.title if app.idea_id else ''
@@ -273,23 +274,43 @@ class Committee(models.Model):
                         'is_main': True,
                     })
                 
-                # Get ALL team members: leader + accepted invitations
+                participations = list(get_project_participations(app))
                 students = []
-                if app.student_id:
-                    students.append({
-                        'id': app.student_id,
-                        'name': app.student.get_full_name() or app.student.username,
-                        'is_leader': True,
-                    })
-                
-                # Add accepted team members
-                for invitation in app.invitations.filter(status='accepted'):
-                    if invitation.invitee_id:
+                if participations:
+                    for participation in participations:
                         students.append({
-                            'id': invitation.invitee_id,
-                            'name': invitation.invitee.get_full_name() or invitation.invitee.username,
-                            'is_leader': False,
+                            'id': participation.student_id,
+                            'name': user_display_name(participation.student),
+                            'university_id': participation.student.username,
+                            'is_leader': participation.role == 'leader',
+                            'role': participation.role,
+                            'status': participation.status,
+                            'is_active': participation.status == 'active',
+                            'designation_date': participation.status_changed_at,
+                            'reason': participation.status_reason,
                         })
+                else:
+                    if app.student_id:
+                        students.append({
+                            'id': app.student_id,
+                            'name': app.student.get_full_name() or app.student.username,
+                            'university_id': app.student.username,
+                            'is_leader': True,
+                            'role': 'leader',
+                            'status': 'active',
+                            'is_active': True,
+                        })
+                    for invitation in app.invitations.filter(status='accepted'):
+                        if invitation.invitee_id:
+                            students.append({
+                                'id': invitation.invitee_id,
+                                'name': invitation.invitee.get_full_name() or invitation.invitee.username,
+                                'university_id': invitation.invitee.username,
+                                'is_leader': False,
+                                'role': 'member',
+                                'status': 'active',
+                                'is_active': True,
+                            })
                 
                 result.append({
                     'source':       'IdeaApplication',
@@ -299,7 +320,17 @@ class Committee(models.Model):
                     'project_type': project_type,
                     'supervisors':  supervisors,  # Now a list (even if only one supervisor)
                     'students':     students,  # List of all team members
+                    'active_students': [student for student in students if student.get('status') == 'active'],
+                    'inactive_students': [student for student in students if student.get('status') != 'active'],
                     'team_size':    app.team_size,
+                    'team_size_stats': team_stats_for_project(app) if participations else {
+                        'active': len(students),
+                        'failed': 0,
+                        'withdrawn': 0,
+                        'total': len(students),
+                        'label': f'{len(students)}/{len(students)}',
+                    },
+                    'operational_status': app.operational_status,
                 })
             except Exception:
                 # Skip a broken row rather than 500-ing the whole endpoint
@@ -323,23 +354,43 @@ class Committee(models.Model):
                         'is_main': False,
                     })
                 
-                # Get ALL team members: leader + accepted invitations
+                participations = list(get_project_participations(prop))
                 students = []
-                if prop.student_id:
-                    students.append({
-                        'id': prop.student_id,
-                        'name': prop.student.get_full_name() or prop.student.username,
-                        'is_leader': True,
-                    })
-                
-                # Add accepted team members
-                for invitation in prop.invitations.filter(status='accepted'):
-                    if invitation.invitee_id:
+                if participations:
+                    for participation in participations:
                         students.append({
-                            'id': invitation.invitee_id,
-                            'name': invitation.invitee.get_full_name() or invitation.invitee.username,
-                            'is_leader': False,
+                            'id': participation.student_id,
+                            'name': user_display_name(participation.student),
+                            'university_id': participation.student.username,
+                            'is_leader': participation.role == 'leader',
+                            'role': participation.role,
+                            'status': participation.status,
+                            'is_active': participation.status == 'active',
+                            'designation_date': participation.status_changed_at,
+                            'reason': participation.status_reason,
                         })
+                else:
+                    if prop.student_id:
+                        students.append({
+                            'id': prop.student_id,
+                            'name': prop.student.get_full_name() or prop.student.username,
+                            'university_id': prop.student.username,
+                            'is_leader': True,
+                            'role': 'leader',
+                            'status': 'active',
+                            'is_active': True,
+                        })
+                    for invitation in prop.invitations.filter(status='accepted'):
+                        if invitation.invitee_id:
+                            students.append({
+                                'id': invitation.invitee_id,
+                                'name': invitation.invitee.get_full_name() or invitation.invitee.username,
+                                'university_id': invitation.invitee.username,
+                                'is_leader': False,
+                                'role': 'member',
+                                'status': 'active',
+                                'is_active': True,
+                            })
                 
                 result.append({
                     'source':       'StudentIdeaProposal',
@@ -349,7 +400,17 @@ class Committee(models.Model):
                     'project_type': getattr(prop, 'project_type', None),
                     'supervisors':  supervisors,  # Now a list of all supervisors
                     'students':     students,  # List of all team members
+                    'active_students': [student for student in students if student.get('status') == 'active'],
+                    'inactive_students': [student for student in students if student.get('status') != 'active'],
                     'team_size':    prop.team_size,
+                    'team_size_stats': team_stats_for_project(prop) if participations else {
+                        'active': len(students),
+                        'failed': 0,
+                        'withdrawn': 0,
+                        'total': len(students),
+                        'label': f'{len(students)}/{len(students)}',
+                    },
+                    'operational_status': prop.operational_status,
                 })
             except Exception:
                 continue

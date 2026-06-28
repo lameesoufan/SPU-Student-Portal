@@ -5,6 +5,11 @@ from .models import (
     ProjectIdea, StudentIdeaProposal, ProjectApplication,
     IdeaApplication, TeamInvitation, ProposalInvitation,
 )
+from .participation_services import (
+    create_participations_for_idea_application,
+    create_participations_for_student_proposal,
+    current_registered_participations_for_student,
+)
 from notifications.utils import notify, notify_many
 
 User = get_user_model()
@@ -13,6 +18,9 @@ User = get_user_model()
 # ── Shared helper ─────────────────────────────────────────────────────────────
 
 def student_has_registered_project(student):
+    participations = current_registered_participations_for_student(student)
+    if participations.exists():
+        return participations.active().exists()
     if IdeaApplication.objects.filter(student=student, status='registered').exists():
         return True
     if ProjectApplication.objects.filter(student=student, status='accepted').exists():
@@ -37,17 +45,17 @@ def _student_is_active(student):
     ).exists():
         return True, 'You already have an active application on a doctor idea.'
     if StudentIdeaProposal.objects.select_for_update().filter(
-        student=student, status__in=['awaiting_members', 'pending_supervisor', 'pending_hod', 'assigned'],
+        student=student, status__in=['awaiting_members', 'pending_supervisor', 'pending_hod'],
     ).exists():
         return True, 'You already have an active idea proposal.'
     if TeamInvitation.objects.select_for_update().filter(
         invitee=student, status='accepted',
-        application__status__in=['awaiting_members', 'pending_doctor', 'pending_hod', 'registered'],
+        application__status__in=['awaiting_members', 'pending_doctor', 'pending_hod'],
     ).exists():
         return True, 'You are already a member of an active team.'
     if ProposalInvitation.objects.select_for_update().filter(
         invitee=student, status='accepted',
-        proposal__status__in=['awaiting_members', 'pending_supervisor', 'pending_hod', 'assigned'],
+        proposal__status__in=['awaiting_members', 'pending_supervisor', 'pending_hod'],
     ).exists():
         return True, 'You are already a member of an active proposal team.'
     # ↓↓↓ شيلت فحص الدعوات المعلقة — نقلته لـ create_student_proposal و apply_on_idea ↓↓↓
@@ -96,7 +104,7 @@ def student_can_propose(student):
 
 
 def create_student_proposal(*, student, supervisor, title, description, department,
-                             team_size, team_size_reason, member_ids, project_type):
+                             team_size, team_size_reason, member_ids, project_type='seasonal'):
     if not supervisor or supervisor.role not in ('doctor', 'hod'):
         return {'ok': False, 'error': 'Supervisor must be a doctor.'}
 
@@ -207,15 +215,6 @@ def cancel_proposal(*, proposal, student):
             notify(inv.invitee, 'proposal_rejected',
                    'Proposal Cancelled',
                    f'The proposal "{proposal.title}" you were invited to has been cancelled by the proposer.')
-
-            return {'ok': True}
-        accepted = list(proposal.invitations.filter(status='accepted').select_related('invitee'))
-        proposal.invitations.update(status='rejected')
-
-    for inv in accepted:
-        notify(inv.invitee, 'proposal_rejected',
-               'Proposal Cancelled',
-               f'The proposal "{proposal.title}" you were part of has been cancelled by the proposer.')
 
     return {'ok': True}
 
@@ -422,6 +421,7 @@ def hod_review_proposal(*, proposal, action, rejection_reason=''):
         proposal.status = 'assigned'
         proposal.save(update_fields=['status', 'updated_at'])
         ProjectApplication.objects.create(proposal=proposal, student=proposal.student, status='accepted')
+        create_participations_for_student_proposal(proposal)
         notify(proposal.student, 'proposal_assigned',
                'Project Assigned 🎉',
                f'Your proposal "{proposal.title}" has been approved and assigned to you!')
@@ -464,7 +464,7 @@ def student_can_apply(student):
     return True, None
 
 
-def apply_on_idea(*, student, idea, team_size, team_size_reason='', member_ids=None, project_type):
+def apply_on_idea(*, student, idea, team_size, team_size_reason='', member_ids=None, project_type='seasonal'):
     try:
         with transaction.atomic():
             # Lock the idea row to prevent race conditions
@@ -694,6 +694,7 @@ def hod_review_application(*, application, action, rejection_reason=''):
                 application.save(update_fields=['status', 'updated_at'])
             except IntegrityError:
                 return {'ok': False, 'error': 'This idea has already been registered by another team.'}
+            create_participations_for_idea_application(application)
 
             notify(application.student, 'application_registered',
                    'Project Registered 🎉',

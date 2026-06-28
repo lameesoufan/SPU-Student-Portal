@@ -25,6 +25,28 @@ USAGE:
 from django.db import migrations
 
 
+def drop_legacy_columns(apps, schema_editor):
+    if schema_editor.connection.vendor == 'sqlite':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("""
+            ALTER TABLE committees_committeetemplate
+                DROP COLUMN IF EXISTS committees_count,
+                DROP COLUMN IF EXISTS max_projects_per_committee;
+        """)
+
+
+def restore_legacy_columns(apps, schema_editor):
+    if schema_editor.connection.vendor == 'sqlite':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("""
+            ALTER TABLE committees_committeetemplate
+                ADD COLUMN IF NOT EXISTS committees_count integer NOT NULL DEFAULT 1,
+                ADD COLUMN IF NOT EXISTS max_projects_per_committee integer NOT NULL DEFAULT 10;
+        """)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -32,16 +54,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="""
-                ALTER TABLE committees_committeetemplate
-                    DROP COLUMN IF EXISTS committees_count,
-                    DROP COLUMN IF EXISTS max_projects_per_committee;
-            """,
-            reverse_sql="""
-                ALTER TABLE committees_committeetemplate
-                    ADD COLUMN committees_count integer NOT NULL DEFAULT 1,
-                    ADD COLUMN max_projects_per_committee integer NOT NULL DEFAULT 10;
-            """,
-        ),
+        migrations.RunPython(drop_legacy_columns, restore_legacy_columns),
     ]

@@ -11,6 +11,37 @@ PROJECT_TYPES = [
     ('graduation_2', 'Graduation 2'),
 ]
 
+PARTICIPATION_STATUS_CHOICES = [
+    ('active', 'Active'),
+    ('failed', 'Failed'),
+    ('withdrawn', 'Withdrawn'),
+]
+
+PARTICIPATION_ROLE_CHOICES = [
+    ('leader', 'Leader'),
+    ('member', 'Member'),
+]
+
+PROJECT_SOURCE_CHOICES = [
+    ('idea_application', 'Doctor Idea Application'),
+    ('student_proposal', 'Student Idea Proposal'),
+]
+
+PROJECT_OPERATIONAL_STATUS_CHOICES = [
+    ('active', 'Active'),
+    ('partial_team', 'Partial Team'),
+    ('solo', 'Solo'),
+    ('fully_withdrawn', 'Fully Withdrawn'),
+    ('fully_failed', 'Fully Failed'),
+    ('inactive', 'Inactive'),
+]
+
+PROJECT_STATUS_ACTION_CHOICES = [
+    ('student_project_status_marked_failed', 'Student project status marked failed'),
+    ('student_project_status_marked_withdrawn', 'Student project status marked withdrawn'),
+    ('student_project_status_reversed_to_active', 'Student project status reversed to active'),
+]
+
 
 # Statuses for doctor-proposed ideas (UC-01)
 DOCTOR_IDEA_STATUS = [
@@ -88,6 +119,12 @@ class StudentIdeaProposal(models.Model):
     team_size_reason = models.TextField(blank=True, help_text='Required when team_size is 1 or 4')
     project_type     = models.CharField(max_length=20, choices=PROJECT_TYPES, default='seasonal')
     status           = models.CharField(max_length=25, choices=STUDENT_IDEA_STATUS, default='pending_supervisor')
+    operational_status = models.CharField(
+        max_length=20,
+        choices=PROJECT_OPERATIONAL_STATUS_CHOICES,
+        default='active',
+        db_index=True,
+    )
     rejection_reason = models.TextField(blank=True)
     created_at       = models.DateTimeField(auto_now_add=True)
     updated_at       = models.DateTimeField(auto_now=True)
@@ -198,6 +235,12 @@ class IdeaApplication(models.Model):
     team_size_reason = models.TextField(blank=True, help_text='Required when team_size < 2 or > 3')
     project_type = models.CharField(max_length=20, choices=PROJECT_TYPES, default='seasonal')
     status      = models.CharField(max_length=30, choices=IDEA_APPLICATION_STATUS, default='pending_doctor')
+    operational_status = models.CharField(
+        max_length=20,
+        choices=PROJECT_OPERATIONAL_STATUS_CHOICES,
+        default='active',
+        db_index=True,
+    )
     rejection_reason = models.TextField(blank=True)
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
@@ -227,6 +270,163 @@ class IdeaApplication(models.Model):
 
     def __str__(self):
         return f"{self.student.username} → {self.idea.title} [{self.status}]"
+
+
+class ProjectParticipationQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(status='active')
+
+    def incomplete(self):
+        return self.filter(status__in=['failed', 'withdrawn'])
+
+
+class ProjectParticipation(models.Model):
+    """A student's participation record in one registered/assigned graduation project."""
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='project_participations',
+        limit_choices_to={'role': 'student'},
+    )
+    project_source = models.CharField(max_length=24, choices=PROJECT_SOURCE_CHOICES)
+    idea_application = models.ForeignKey(
+        IdeaApplication,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='participations',
+    )
+    student_proposal = models.ForeignKey(
+        StudentIdeaProposal,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='participations',
+    )
+    role = models.CharField(max_length=12, choices=PARTICIPATION_ROLE_CHOICES)
+    status = models.CharField(max_length=12, choices=PARTICIPATION_STATUS_CHOICES, default='active')
+    status_reason = models.TextField(blank=True)
+    status_notes = models.TextField(blank=True)
+    status_changed_at = models.DateTimeField(null=True, blank=True)
+    status_changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='changed_project_participations',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = ProjectParticipationQuerySet.as_manager()
+
+    class Meta:
+        ordering = ['student__username', 'id']
+        indexes = [
+            models.Index(fields=['student', 'status']),
+            models.Index(fields=['status', '-updated_at']),
+            models.Index(fields=['project_source', 'status']),
+            models.Index(fields=['idea_application', 'status']),
+            models.Index(fields=['student_proposal', 'status']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(project_source='idea_application', idea_application__isnull=False, student_proposal__isnull=True)
+                    | Q(project_source='student_proposal', idea_application__isnull=True, student_proposal__isnull=False)
+                ),
+                name='project_participation_exactly_one_project',
+            ),
+            models.UniqueConstraint(
+                fields=['student', 'idea_application'],
+                condition=Q(idea_application__isnull=False),
+                name='unique_student_idea_application_participation',
+            ),
+            models.UniqueConstraint(
+                fields=['student', 'student_proposal'],
+                condition=Q(student_proposal__isnull=False),
+                name='unique_student_proposal_participation',
+            ),
+        ]
+
+    @property
+    def project(self):
+        return self.idea_application or self.student_proposal
+
+    @property
+    def project_id_display(self):
+        return self.idea_application_id or self.student_proposal_id
+
+    @property
+    def project_title(self):
+        if self.idea_application_id:
+            return self.idea_application.idea.title
+        if self.student_proposal_id:
+            return self.student_proposal.title
+        return ''
+
+    def __str__(self):
+        return f"{self.student.username} - {self.project_source} #{self.project_id_display} [{self.status}]"
+
+
+class ProjectParticipationStatusLog(models.Model):
+    """Immutable audit trail for Dean participation status decisions."""
+    participation = models.ForeignKey(
+        ProjectParticipation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='status_logs',
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='project_participation_status_logs',
+    )
+    project_source = models.CharField(max_length=24, choices=PROJECT_SOURCE_CHOICES)
+    idea_application = models.ForeignKey(
+        IdeaApplication,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='participation_status_logs',
+    )
+    student_proposal = models.ForeignKey(
+        StudentIdeaProposal,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='participation_status_logs',
+    )
+    previous_status = models.CharField(max_length=12, choices=PARTICIPATION_STATUS_CHOICES)
+    new_status = models.CharField(max_length=12, choices=PARTICIPATION_STATUS_CHOICES)
+    reason = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='project_participation_status_changes',
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+    action_type = models.CharField(max_length=64, choices=PROJECT_STATUS_ACTION_CHOICES)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-changed_at']
+        indexes = [
+            models.Index(fields=['student', '-changed_at']),
+            models.Index(fields=['changed_by', '-changed_at']),
+            models.Index(fields=['project_source', '-changed_at']),
+            models.Index(fields=['action_type', '-changed_at']),
+        ]
+
+    def __str__(self):
+        student_label = self.student.username if self.student_id else 'unknown'
+        return f"{student_label}: {self.previous_status} -> {self.new_status}"
 
 
 INVITATION_STATUS = [

@@ -13,6 +13,17 @@ from .permissions import IsHodOrDoctor, IsHod, IsStudent
 from accounts.throttles import WorkflowSubmitThrottle
 from django.db.models import Count
 from .models import WorkflowTemplate, WorkflowStage, ProjectWorkflow, WorkflowStageInstance, WorkflowStageField, WorkflowFieldResponse
+ACTIVE_PROJECT_OPERATIONAL_STATUSES = ['active', 'partial_team', 'solo']
+
+
+def _project_is_operationally_active(project_board):
+    if project_board.proposal:
+        return project_board.proposal.operational_status in ACTIVE_PROJECT_OPERATIONAL_STATUSES
+    if project_board.application:
+        return project_board.application.operational_status in ACTIVE_PROJECT_OPERATIONAL_STATUSES
+    return False
+
+
 def _get_project_board(project_board_id):
     from project_management.models import ProjectBoard
     if isinstance(project_board_id, ProjectBoard):
@@ -44,6 +55,8 @@ def _user_is_project_supervisor(user, project_board):
 
 
 def _user_can_access_project(user, project_board):
+    if not _project_is_operationally_active(project_board) and user.role == 'student':
+        return False
     department, supervisor = _project_department_and_supervisor(project_board)
     if user.role == 'dean':
         return True
@@ -57,6 +70,8 @@ def _user_can_access_project(user, project_board):
 
 
 def _user_can_apply_workflow(user, project_board):
+    if not _project_is_operationally_active(project_board):
+        return False
     department, supervisor = _project_department_and_supervisor(project_board)
     if user.role == 'hod':
         return department == user.department
@@ -192,10 +207,12 @@ def update_workflow_template(request, template_id):
 
         if 'stages' not in data:
             if warnings:
+                result = WorkflowTemplateSerializer(
+                    WorkflowTemplate.objects.prefetch_related('stages', 'stages__fields').get(pk=template.pk)
+                ).data
                 return Response({
-                    'data': WorkflowTemplateSerializer(
-                        WorkflowTemplate.objects.prefetch_related('stages', 'stages__fields').get(pk=template.pk)
-                    ).data,
+                    **result,
+                    'data': result,
                     'warnings': warnings,
                 })
             return Response(WorkflowTemplateSerializer(
@@ -421,7 +438,7 @@ def update_workflow_template(request, template_id):
     ).data
 
     if warnings:
-        return Response({'data': result, 'warnings': warnings})
+        return Response({**result, 'data': result, 'warnings': warnings})
     return Response(result)
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated, IsHodOrDoctor])
@@ -554,9 +571,13 @@ def get_pending_stages(request):
     from project_management.models import ProjectBoard
 
     # الخطوة 1: لقى كل المشاريع اللي الطالب عضو فيها
-    board_ids = ProjectBoard.objects.filter(
-        members=request.user
-    ).values_list('id', flat=True)
+    boards = ProjectBoard.objects.select_related('proposal', 'application')
+    board_ids = [
+        board.id
+        for board in boards
+        if _project_is_operationally_active(board)
+        and board.members.filter(pk=request.user.pk).exists()
+    ]
 
     # الخطوة 2: لقى كل المراحل المعلّقة بهاد المشاريع
     stages = WorkflowStageInstance.objects.filter(
@@ -645,7 +666,11 @@ def submit_workflow_stage(request, stage_instance_id):
     except ProjectBoard.DoesNotExist:
         return Response({'error': 'Project not found'}, status=404)
 
-    if request.user.role != 'student' or not project_board.members.filter(pk=request.user.pk).exists():
+    if (
+        request.user.role != 'student'
+        or not _project_is_operationally_active(project_board)
+        or not project_board.members.filter(pk=request.user.pk).exists()
+    ):
         return Response({'error': 'Not allowed to submit this workflow stage'}, status=403)
     
     field_responses = request.data.get('field_responses', {})
@@ -876,7 +901,7 @@ def get_available_projects(request):
     for project in project_list:
         department, supervisor = _project_department_and_supervisor(project)
 
-        if not department:
+        if not department or not _project_is_operationally_active(project):
             continue
 
         if request.user.role == 'hod':
@@ -888,12 +913,7 @@ def get_available_projects(request):
         else:
             continue
 
-        team_members = []
-        for member in project.members:
-            team_members.append({
-                'id': member.id,
-                'name': member.username
-            })
+        team_members = project.participants_with_status
 
         workflow = active_workflows.get(project.id)
         has_workflow = workflow is not None
@@ -920,6 +940,13 @@ def get_available_projects(request):
             'department': department,
             'supervisor_name': supervisor.username if supervisor else None,
             'team_members': team_members,
+            'active_team_members': [member for member in team_members if member.get('status') == 'active'],
+            'inactive_team_members': [member for member in team_members if member.get('status') != 'active'],
+            'operational_status': (
+                project.proposal.operational_status
+                if project.proposal_id
+                else project.application.operational_status if project.application_id else None
+            ),
             'has_workflow': has_workflow,
             'workflow_status': workflow_status,
             'completed_stages': completed_stages,
@@ -1175,7 +1202,7 @@ def get_projects_workflow_status(request):
     data = []
     for project in project_list:
         department, supervisor = _project_department_and_supervisor(project)
-        if not department:
+        if not department or not _project_is_operationally_active(project):
             continue
         if request.user.role == 'hod' and department != request.user.department:
             continue
@@ -1204,6 +1231,11 @@ def get_projects_workflow_status(request):
         data.append({
             'project_id': project.id,
             'project_name': project.title,
+            'operational_status': (
+                project.proposal.operational_status
+                if project.proposal_id
+                else project.application.operational_status if project.application_id else None
+            ),
             'has_workflow': has_workflow,
             'workflow_status': workflow_status,
             'can_apply': not has_workflow,
@@ -1235,6 +1267,7 @@ def get_reviewable_projects(request):
         StudentIdeaProposal.objects.filter(
             Q(supervisor=request.user) | Q(co_supervisors=request.user),
             status='assigned',
+            operational_status__in=ACTIVE_PROJECT_OPERATIONAL_STATUSES,
         ).values_list('board__id', flat=True)
     )
 
@@ -1270,6 +1303,8 @@ def get_reviewable_projects(request):
     
     data = []
     for project in projects:
+        if not _project_is_operationally_active(project):
+            continue
         # التأكد إنو المستخدم فعلاً يقدر يراجع هاي المشروع
         if request.user.role == 'doctor' and not _user_is_project_supervisor(request.user, project):
             # يقدر يراجع إذا كان منشئ التمبلت
@@ -1277,12 +1312,7 @@ def get_reviewable_projects(request):
             if not workflow or workflow.template.created_by != request.user:
                 continue
 
-        team_members = []
-        for member in project.members:
-            team_members.append({
-                'id': member.id,
-                'name': member.username
-            })
+        team_members = project.participants_with_status
         
         supervisor_name = None
         if project.proposal:
@@ -1301,6 +1331,13 @@ def get_reviewable_projects(request):
             'title': project.title,
             'supervisor_name': supervisor_name,
             'team_members': team_members,
+            'active_team_members': [member for member in team_members if member.get('status') == 'active'],
+            'inactive_team_members': [member for member in team_members if member.get('status') != 'active'],
+            'operational_status': (
+                project.proposal.operational_status
+                if project.proposal_id
+                else project.application.operational_status if project.application_id else None
+            ),
             'pending_reviews': pending_reviews,
         })
     

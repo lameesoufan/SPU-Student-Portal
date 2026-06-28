@@ -16,6 +16,7 @@ from projects.models import (
     StudentIdeaProposal,
     TeamInvitation,
 )
+from projects.participation_services import current_registered_participations_for_student
 
 from .constants import (
     FIELD_HEADERS,
@@ -388,13 +389,17 @@ class RowValidator:
         return issues
 
     def _student_conflict_message(self, student):
-        active_proposal_statuses = ['awaiting_members', 'pending_supervisor', 'pending_hod', 'assigned']
-        active_application_statuses = ['awaiting_members', 'pending_doctor', 'pending_hod', 'registered']
+        registered_participations = current_registered_participations_for_student(student)
+        if registered_participations.exists():
+            if registered_participations.active().exists():
+                return f'Student {student.username} already has an active registered project'
+            return ''
+
+        active_proposal_statuses = ['awaiting_members', 'pending_supervisor', 'pending_hod']
+        active_application_statuses = ['awaiting_members', 'pending_doctor', 'pending_hod']
 
         if StudentIdeaProposal.objects.filter(student=student, status__in=active_proposal_statuses).exists():
             return f'Student {student.username} already has an active proposal'
-        if ProjectApplication.objects.filter(student=student, status='accepted').exists():
-            return f'Student {student.username} already has an accepted project application'
         if IdeaApplication.objects.filter(student=student, status__in=active_application_statuses).exists():
             return f'Student {student.username} already has an active or registered idea application'
         if ProposalInvitation.objects.filter(
@@ -409,6 +414,26 @@ class RowValidator:
             application__status__in=active_application_statuses,
         ).exists():
             return f'Student {student.username} is already an accepted member of an active application'
+
+        # Backward-compatible fallback for old/test data without participation rows.
+        if StudentIdeaProposal.objects.filter(student=student, status='assigned').exists():
+            return f'Student {student.username} already has an active proposal'
+        if ProjectApplication.objects.filter(student=student, status='accepted').exists():
+            return f'Student {student.username} already has an accepted project application'
+        if IdeaApplication.objects.filter(student=student, status='registered').exists():
+            return f'Student {student.username} already has a registered idea application'
+        if ProposalInvitation.objects.filter(
+            invitee=student,
+            status='accepted',
+            proposal__status='assigned',
+        ).exists():
+            return f'Student {student.username} is already an accepted member of an assigned proposal'
+        if TeamInvitation.objects.filter(
+            invitee=student,
+            status='accepted',
+            application__status='registered',
+        ).exists():
+            return f'Student {student.username} is already an accepted member of a registered application'
         return ''
 
     def _normalize_repo_url(self, value):
