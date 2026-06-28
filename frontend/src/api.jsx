@@ -334,3 +334,101 @@ export const replaceWorkflowForProject = (projectBoardId, data) =>
 
 export const fetchProjectsWorkflowStatus = () =>
   api.get('/api/workflow/projects-status/');
+// ── Committees (Dean) ────────────────────────────────────────────────────────
+// Backend endpoints (all require Dean role):
+//   GET    /api/committees/dashboard/
+//   GET    /api/committees/templates/                POST  /api/committees/templates/
+//   GET    /api/committees/templates/{id}/           PATCH /api/committees/templates/{id}/
+//   DELETE /api/committees/templates/{id}/
+//   POST   /api/committees/templates/{id}/spawn/
+//   POST   /api/committees/templates/{id}/approve/
+//   POST   /api/committees/templates/{id}/copy/
+//   GET    /api/committees/templates/{id}/preview_distribution/
+//   GET    /api/committees/committees/               GET   /api/committees/committees/{id}/
+//   PATCH  /api/committees/committees/{id}/
+//   POST   /api/committees/committees/{id}/doctors/
+//   POST   /api/committees/committees/{id}/swap_project/
+//   POST   /api/committees/distribute/
+//   GET    /api/committees/export/?format=pdf|xlsx
+
+export const fetchCommitteesDashboard = (semester) =>
+  api.get('/api/committees/dashboard/', { params: semester ? { semester } : {} });
+
+export const fetchCommitteeTemplates = () =>
+  api.get('/api/committees/templates/');
+
+export const fetchCommitteeTemplate = (id) =>
+  api.get(`/api/committees/templates/${id}/`);
+
+export const createCommitteeTemplate = (data) =>
+  api.post('/api/committees/templates/', data);
+
+export const updateCommitteeTemplate = (id, data) =>
+  api.patch(`/api/committees/templates/${id}/`, data);
+
+export const deleteCommitteeTemplate = (id) =>
+  api.delete(`/api/committees/templates/${id}/`);
+
+export const spawnCommitteesForTemplate = (id) =>
+  api.post(`/api/committees/templates/${id}/spawn/`);
+
+export const approveCommitteeTemplate = (id) =>
+  api.post(`/api/committees/templates/${id}/approve/`);
+
+export const copyCommitteeTemplate = (id, data) =>
+  api.post(`/api/committees/templates/${id}/copy/`, data);
+
+export const previewTemplateDistribution = (id) =>
+  api.get(`/api/committees/templates/${id}/preview_distribution/`);
+
+export const fetchCommittees = (params = {}) =>
+  api.get('/api/committees/committees/', { params });
+
+export const fetchCommittee = (id) =>
+  api.get(`/api/committees/committees/${id}/`);
+
+export const updateCommittee = (id, data) =>
+  api.patch(`/api/committees/committees/${id}/`, data);
+
+export const deleteCommittee = (id) =>
+  api.delete(`/api/committees/committees/${id}/`);
+
+export const updateCommitteeDoctors = (id, data) =>
+  api.post(`/api/committees/committees/${id}/doctors/`, data);
+
+export const swapCommitteeProject = (id, data) =>
+  api.post(`/api/committees/committees/${id}/swap_project/`, data);
+
+export const distributeProjects = (data) =>
+  api.post('/api/committees/distribute/', data);
+
+export const exportCommittees = (format, semester) =>
+  api.get('/api/committees/export/', {
+    params: { format, ...(semester ? { semester } : {}) },
+    responseType: 'blob',
+  });
+
+export const fetchProjectsAssignment = (semester) =>
+  api.get('/api/committees/projects-assignment/', {
+    params: semester ? { semester } : {},
+  });
+
+export const exportProjectsAssignment = (semester) =>
+  api.get('/api/committees/projects-assignment/export/', {
+    params: semester ? { semester } : {},
+    responseType: 'blob',
+  });
+
+// Fetch available committees for swapping (same type, dept, project_type)
+export const fetchAvailableCommitteesForSwap = (committeeId, projectSource, projectId) =>
+  api.get(`/api/committees/committees/${committeeId}/available-for-swap/`, {
+    params: { project_source: projectSource, project_id: projectId },
+  });
+
+// Swap/move a project to another committee
+export const swapProject = (committeeId, data) =>
+  api.post(`/api/committees/committees/${committeeId}/swap_project/`, data);
+
+// ── Doctors list for committee template form ────────────────────────────────
+// Reuse existing /api/doctors/ endpoint (same as AssignHod).
+// Returns: [{id, username, first_name, last_name, department, role}, ...]

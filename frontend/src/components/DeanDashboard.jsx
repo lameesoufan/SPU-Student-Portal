@@ -26,6 +26,11 @@ import HodProjects from './HodProjects';
 import ImportUsers from './ImportUsers';
 import ImportProjects from './ImportProjects';
 import AssignHod from './AssignHod';
+import CommitteesDashboard from './committees/CommitteesDashboard';
+import TemplateForm from './committees/TemplateForm';
+import DistributionTable from './committees/DistributionTable';
+import CommitteeDetail from './committees/CommitteeDetail';
+import ProjectsAssignment from './committees/ProjectsAssignment';
 import { useTheme } from '../ThemeContext';
 import {
   fetchUnreadCount,
@@ -59,6 +64,7 @@ const Icon = {
 /* ── Navigation Items ── */
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Overview', IconComp: Icon.Overview },
+  { id: 'committees', label: 'اللجان', IconComp: Icon.Kanban },
   { id: 'import', label: 'Import Users', IconComp: Icon.Upload },
   { id: 'import-projects', label: 'Import Projects', IconComp: Icon.ProjectImport },
   { id: 'assign-hod', label: 'Assign HoD', IconComp: Icon.UserPlus },
@@ -70,6 +76,13 @@ const NAV_ITEMS = [
 
 /* ── Module Cards ── */
 const MODULE_CARDS = [
+  {
+    IconComp: Icon.Kanban,
+    label: 'إدارة اللجان',
+    desc: 'إنشاء التشكيلات، توزيع المشاريع، متابعة اللجان والأطباء',
+    page: 'committees',
+    gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
+  },
   {
     IconComp: Icon.Upload,
     label: 'Import Users',
@@ -183,8 +196,18 @@ usePolling(async () => {
     if (onLogout) onLogout();
   };
 
+  // Track navigation context (e.g., which committee/template to load)
+  const [navContext, setNavContext] = useState(null);
+
   const handleNavClick = (id) => {
     if (id === 'faculty' || id === 'programs' || id === 'analytics') return;
+    setNavContext(null);
+    setPage(id);
+  };
+
+  // Programmatic navigation with context (e.g., open committee detail by id)
+  const navigateTo = (id, ctx = null) => {
+    setNavContext(ctx);
     setPage(id);
   };
 
@@ -212,6 +235,59 @@ usePolling(async () => {
 
   /* ── Render sub-pages ── */
   const renderContent = () => {
+    if (page === 'committees') {
+      return (
+        <div className="std-page-wrapper">
+          <CommitteesDashboard user={user} onNavigate={navigateTo} />
+        </div>
+      );
+    }
+    if (page === 'committees-template-form') {
+      return (
+        <div className="std-page-wrapper">
+          <TemplateForm
+            editId={navContext?.editId || null}
+            onBack={() => setPage('committees')}
+            onSaved={() => setPage('committees')}
+          />
+        </div>
+      );
+    }
+    if (page === 'committees-list') {
+      return (
+        <div className="std-page-wrapper">
+          <DistributionTable
+            filterTemplateId={navContext?.templateId || null}
+            onBack={() => setPage('committees')}
+            onNavigate={navigateTo}
+          />
+        </div>
+      );
+    }
+    if (page === 'committee-detail') {
+      const committeeId = navContext?.id || navContext?.committeeId;
+      if (!committeeId) {
+        // No id provided — bounce back to list
+        setPage('committees-list');
+        return null;
+      }
+      return (
+        <div className="std-page-wrapper">
+          <CommitteeDetail
+            committeeId={committeeId}
+            onBack={() => setPage('committees-list')}
+            onNavigate={navigateTo}
+          />
+        </div>
+      );
+    }
+    if (page === 'projects-assignment') {
+      return (
+        <div className="std-page-wrapper">
+          <ProjectsAssignment onBack={() => setPage('committees')} />
+        </div>
+      );
+    }
     if (page === 'import') {
       return (
         <div className="std-page-wrapper">
