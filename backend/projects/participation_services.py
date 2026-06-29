@@ -286,17 +286,21 @@ class StudentProjectStatusService:
     @staticmethod
     @transaction.atomic
     def change_status(participation_id, new_status, reason, changed_by, notes=''):
+        # Get participation with lock (no select_related with nullable fields)
         participation = (
             ProjectParticipation.objects
             .select_for_update()
-            .select_related(
-                'student',
-                'status_changed_by',
-                'idea_application__idea__doctor',
-                'student_proposal__supervisor',
-            )
+            .select_related('student')  # Only non-nullable field
             .get(pk=participation_id)
         )
+        
+        # Load related objects after acquiring lock
+        if participation.status_changed_by_id:
+            _ = participation.status_changed_by  # Force load
+        if participation.idea_application_id:
+            _ = participation.idea_application.idea.doctor  # Force load
+        if participation.student_proposal_id:
+            _ = participation.student_proposal.supervisor  # Force load
         project = project_for_participation(participation)
         if project is None or not is_registered_project_source(project):
             raise ParticipationStatusError(NO_REGISTERED_PROJECT_ERROR)

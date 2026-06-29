@@ -98,8 +98,8 @@ export default function ProjectsAssignment({ onBack }) {
   const filteredProjects = data?.projects?.filter((p) => {
     const matchesSearch = 
       !searchTerm ||
-      // Search in all team members
-      p.students?.some(s => s.name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      // Search in ACTIVE team members only
+      p.active_students?.some(s => s.name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
       p.project_title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       // Search in all supervisors
       p.supervisors?.some(s => s.name?.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -246,8 +246,8 @@ export default function ProjectsAssignment({ onBack }) {
                   <td>{index + 1}</td>
                   <td>
                     <div className="pa-students-cell">
-                      {project.students && project.students.length > 0 ? (
-                        project.students.map((student, idx) => (
+                      {project.active_students && project.active_students.length > 0 ? (
+                        project.active_students.map((student, idx) => (
                           <div key={idx} className="pa-student-item">
                             <span className={`pa-student-badge ${student.is_leader ? 'pa-student-leader' : 'pa-student-member'}`}>
                               {student.is_leader ? '👤' : '•'} {student.name}

@@ -1,3 +1,8 @@
+import logging
+import os
+import re
+
+import requests
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.decorators import throttle_classes
 from rest_framework.response import Response
@@ -9,7 +14,7 @@ from django.contrib.auth import authenticate
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
-from .models import DEPARTMENTS
+from .models import User, DEPARTMENTS
 from .permissions import IsDeanOrAdmin
 from .selectors import get_doctors
 from .throttles import RegisterRateThrottle, PasswordResetThrottle
@@ -19,6 +24,8 @@ from .services import (
     change_user_username, generate_username_suggestions,
 )
 
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_IMPORT_EXTENSIONS = ('.xlsx', '.xlsm', '.xltx', '.xltm')
 MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024
@@ -70,7 +77,6 @@ def request_password_reset(request):
     try:
         user = User.objects.get(email=email)
         token = default_token_generator.make_token(user)
-        # أرسل email مع الرابط
         send_mail(
             'Password Reset',
             f'Reset link: /reset/{user.pk}/{token}/',
@@ -129,8 +135,13 @@ def change_username(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsDeanOrAdmin])
 def import_users(request):
-    if 'file' not in request.FILES or 'role' not in request.data:
-        return Response({'error': 'File and role are required.'}, status=400)
+    """استيراد المستخدمين من ملف Excel - نسخة محسّنة مع تقارير أخطاء تفصيلية."""
+    if 'file' not in request.FILES:
+        return Response({'error': 'File is required.'}, status=400)
+
+    role = request.data.get('role') or request.POST.get('role')
+    if not role:
+        return Response({'error': 'Role is required.'}, status=400)
 
     upload = request.FILES['file']
     filename = str(upload.name or '').lower()
@@ -139,28 +150,36 @@ def import_users(request):
     if upload.size > MAX_IMPORT_FILE_SIZE:
         return Response({'error': 'File is too large. Maximum size is 10 MB.'}, status=400)
 
-    role = request.data['role'].lower()
+    role = role.lower()
     if role not in ['student', 'doctor']:
         return Response({'error': 'Invalid role.'}, status=400)
 
     try:
         wb = load_workbook(filename=upload, read_only=True, data_only=True)
         ws = wb.active
-    except Exception:
-        return Response({'error': 'Invalid Excel file.'}, status=400)
+    except Exception as exc:
+        logger.exception('Failed to open Excel file')
+        return Response({'error': f'Invalid Excel file: {str(exc)}'}, status=400)
+
+    created_users = []
+    errors = []
 
     try:
         if ws.max_row is not None and ws.max_row > MAX_IMPORT_ROWS + 1:
-            return Response({'error': f'File has too many rows. Maximum allowed rows is {MAX_IMPORT_ROWS}.'}, status=400)
+            return Response(
+                {'error': f'File has too many rows. Maximum allowed rows is {MAX_IMPORT_ROWS}.'},
+                status=400
+            )
 
-        created_users = []
-        for row in ws.iter_rows(min_row=2, values_only=True):
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             if not row:
                 continue
-            full_name = row[0] if len(row) > 0 else None
+
+            full_name  = row[0] if len(row) > 0 else None
             identifier = row[1] if len(row) > 1 else None
-            email = row[2] if len(row) > 2 else None
+            email      = row[2] if len(row) > 2 else None
             department = row[3] if len(row) > 3 else ''
+
             if identifier is None:
                 continue
             if isinstance(identifier, float) and identifier.is_integer():
@@ -168,24 +187,66 @@ def import_users(request):
             username = str(identifier).strip()
             if not username:
                 continue
+
             result = create_user_from_import(
-                username=username, email=email, role=role,
-                password=username, department=department,
+                username=username,
+                email=email,
+                role=role,
+                password=username,
+                department=department,
             )
-            if result:
-                if full_name:
-                    result.first_name = str(full_name)
-                    result.save(update_fields=['first_name'])
-                created_users.append({'username': username})
+
+            if not result.get('ok'):
+                errors.append({
+                    'row': row_idx,
+                    'username': username,
+                    'error': result.get('error', 'Unknown error'),
+                })
+                continue
+
+            user = result['user']
+            if full_name:
+                try:
+                    user.first_name = str(full_name)[:150]
+                    user.save(update_fields=['first_name'])
+                except Exception as e:
+                    errors.append({
+                        'row': row_idx,
+                        'username': username,
+                        'error': f'Created but failed to save name: {str(e)}',
+                    })
+
+            created_users.append({'username': username})
+
     except Exception as exc:
-        return Response({'error': f'Import failed. Please try again.'}, status=400)
+        logger.exception('Import users failed')
+        return Response({'error': f'Import failed: {str(exc)}'}, status=400)
     finally:
         try:
             wb.close()
         except Exception:
             pass
 
-    return Response({'message': f'{len(created_users)} {role}s created successfully.', 'users': created_users})
+    # لو ما في أي مستخدم تم إنشاؤه - فيه أخطاء فقط
+    if not created_users and errors:
+        return Response({
+            'error': 'No users were imported. See details below.',
+            'details': errors,
+        }, status=400)
+
+    # لو فيه نجاحات وفيه أخطاء
+    if errors:
+        return Response({
+            'message': f'{len(created_users)} {role}(s) created successfully, but {len(errors)} row(s) had errors.',
+            'users': created_users,
+            'errors': errors,
+        }, status=200)
+
+    # كلشي تمام
+    return Response({
+        'message': f'{len(created_users)} {role}(s) created successfully.',
+        'users': created_users,
+    })
 
 
 @api_view(['GET'])

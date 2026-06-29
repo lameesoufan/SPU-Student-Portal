@@ -831,9 +831,11 @@ def export_committees_pdf(semester: str | None = None) -> bytes:
                     for supervisor in p.get('supervisors', [])
                     if supervisor.get('name')
                 ) or '—'
+                # Show ONLY active students
+                active_students_data = p.get('active_students', [])
                 students_text = ', '.join(
-                    f"{student.get('name', '')} ({student.get('status', 'active')})"
-                    for student in p.get('students', [])
+                    student.get('name', '')
+                    for student in active_students_data
                     if student.get('name')
                 ) or '—'
                 proj_rows.append([
@@ -1010,11 +1012,11 @@ def export_projects_assignment_excel(semester: str | None = None) -> bytes:
         for project in projects:
             row_num += 1
             
-            # Format all students (team members)
-            students_data = project.get('students', [])
+            # Format ONLY ACTIVE students (team members)
+            students_data = project.get('active_students', [])
             if students_data:
                 students_text = '\n'.join([
-                    f"{'👤 ' if student.get('is_leader') else '• '}{student['name']} ({student.get('status', 'active')})"
+                    f"{'👤 ' if student.get('is_leader') else '• '}{student['name']}"
                     for student in students_data
                 ])
             else:
