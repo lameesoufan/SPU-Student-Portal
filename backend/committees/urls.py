@@ -10,6 +10,7 @@ from .views import (
     ExportView,
     ProjectsAssignmentView,
     ExportProjectsAssignmentView,
+    UpdateProjectSchedulesView,
 )
 
 
@@ -25,4 +26,5 @@ urlpatterns = [
     path('export/',                         ExportView.as_view(),     name='committee-export'),
     path('projects-assignment/',            ProjectsAssignmentView.as_view(), name='projects-assignment'),
     path('projects-assignment/export/',     ExportProjectsAssignmentView.as_view(), name='projects-assignment-export'),
+    path('update-schedules/',               UpdateProjectSchedulesView.as_view(), name='update-schedules'),
 ]

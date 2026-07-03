@@ -27,7 +27,7 @@ urlpatterns = [
     path('', include('notifications.urls')),
     path('', include('dy_forms.urls')),
     path('', include('project_management.urls')),
-    path('api/workflow/', include('workflow.urls')),
+    path('api/workflow/', include(('workflow.urls', 'workflow'), namespace='workflow')),
     path('api/import/', include('project_imports.urls')),
     path('api/committees/', include('committees.urls')),
 ]

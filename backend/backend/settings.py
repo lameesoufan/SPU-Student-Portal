@@ -88,6 +88,7 @@ REST_FRAMEWORK = {
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': int(os.getenv('DRF_PAGE_SIZE', '50')),
+    'EXCEPTION_HANDLER': 'backend.error_handling_middleware.custom_exception_handler',
 }
 
 MIDDLEWARE = [
@@ -100,6 +101,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'accounts.middleware.JWTCookieMiddleware',
+    'backend.error_handling_middleware.ErrorHandlingMiddleware',
 ]
 
 ROOT_URLCONF = 'backend.urls'

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import usePageHistory from './hooks/usePageHistory';
 import './index.css';
-
+import UploadReference from './components/UploadReference';
 import { logoutUser, clearAccessToken } from './api';
 import Login from './components/Login';
 import SelfRegister from './components/SelfRegister';
@@ -47,10 +47,6 @@ function AppInner() {
   if (user.must_change_password)
     return <ChangePassword user={user} onSuccess={handlePasswordChanged} />;
 
-  if (user.must_change_username)
-    return <ChangeUsername user={user} onSuccess={handleUsernameChanged} />;
-
-  if (user.role === 'student') return <StudentDashboard user={user} onLogout={handleLogout} />;
   if (user.role === 'student') return <StudentDashboard user={user} onLogout={handleLogout} />;
   if (user.role === 'doctor')  return <DoctorDashboard  user={user} onLogout={handleLogout} />;
   if (user.role === 'hod')     return <HodDashboard     user={user} onLogout={handleLogout} />;

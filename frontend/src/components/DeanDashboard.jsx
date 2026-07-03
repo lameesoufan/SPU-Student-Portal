@@ -67,7 +67,7 @@ const Icon = {
 /* ── Navigation Items ── */
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Overview', IconComp: Icon.Overview },
-  { id: 'committees', label: 'اللجان', IconComp: Icon.Kanban },
+  { id: 'committees', label: 'Committees', IconComp: Icon.Kanban },
   { id: 'student-status', label: 'Student Status', IconComp: Icon.StudentStatus },
   { id: 'import', label: 'Import Users', IconComp: Icon.Upload },
   { id: 'import-projects', label: 'Import Projects', IconComp: Icon.ProjectImport },
@@ -82,8 +82,8 @@ const NAV_ITEMS = [
 const MODULE_CARDS = [
   {
     IconComp: Icon.Kanban,
-    label: 'إدارة اللجان',
-    desc: 'إنشاء التشكيلات، توزيع المشاريع، متابعة اللجان والأطباء',
+    label: 'Committees Management',
+    desc: 'Create compositions, distribute projects, monitor committees and faculty workload',
     page: 'committees',
     gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
   },

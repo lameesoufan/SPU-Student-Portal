@@ -35,7 +35,101 @@ from projects.participation_services import get_project_participations, user_dis
 
 User = get_user_model()
 
+# ── Arabic font + text shaping helpers ────────────────────────────────────────
+# ReportLab does NOT do Arabic shaping or RTL flipping out of the box.
+# Without these helpers, Arabic text in PDFs would either:
+#   - render as boxes (if the font has no Arabic glyphs — e.g. DejaVuSans)
+#   - render as disconnected letters in LTR order (with the right font but
+#     without arabic_reshaper + python-bidi)
+# Both helpers degrade gracefully so the PDF never crashes — it just looks
+# bad if `arabic_reshaper` / `python-bidi` aren't installed.
 
+_ARABIC_FONT_REGISTERED = None  # cached font name after first registration
+
+
+def _register_arabic_font() -> str:
+    """
+    Register an Arabic-capable TTF font with reportlab.
+    Tries multiple candidate paths across Linux / macOS / Windows; falls
+    back to 'Helvetica' (which has NO Arabic glyphs) only as last resort.
+
+    Install on Linux:   sudo apt install fonts-noto-core
+    Install on Windows: download NotoSansArabic-Regular.ttf into C:\\Windows\\Fonts\\
+    Or bundle in app:   committees/static/fonts/NotoSansArabic-Regular.ttf
+    """
+    global _ARABIC_FONT_REGISTERED
+    if _ARABIC_FONT_REGISTERED is not None:
+        return _ARABIC_FONT_REGISTERED
+
+    from reportlab.pdfbase       import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    import os
+
+    project_font = os.path.join(
+        os.path.dirname(__file__), 'static', 'fonts',
+        'NotoSansArabic-Regular.ttf',
+    )
+
+    candidate_paths = [
+        # Linux — apt install fonts-noto-core / fonts-noto
+        '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
+        '/usr/share/fonts/opentype/noto/NotoSansArabic-Regular.ttf',
+        '/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf',
+        # Amiri (popular Arabic serif font on Linux)
+        '/usr/share/fonts/truetype/amiri/amiri-regular.ttf',
+        # Project-bundled (recommended — works everywhere)
+        project_font,
+        # Windows — Arial has Arabic glyphs on Windows
+        r'C:\Windows\Fonts\arial.ttf',
+        r'C:\Windows\Fonts\NotoSansArabic-Regular.ttf',
+        # macOS
+        '/System/Library/Fonts/Supplemental/Arial.ttf',
+        # LAST RESORT — DejaVuSans has very weak Arabic support and will
+        # likely produce boxes for many characters. Kept only so the function
+        # never returns 'Helvetica' if anything else is available.
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    ]
+
+    arabic_font = 'Helvetica'
+    for path in candidate_paths:
+        if not os.path.exists(path):
+            continue
+        try:
+            pdfmetrics.registerFont(TTFont('ArabicFont', path))
+            arabic_font = 'ArabicFont'
+            break
+        except Exception:
+            continue
+
+    _ARABIC_FONT_REGISTERED = arabic_font
+    return arabic_font
+
+
+def _ar(text) -> str:
+    """
+    Reshape an Arabic string for correct RTL rendering in ReportLab:
+      1. arabic_reshaper connects cursive letters (mandatory for Arabic)
+      2. python-bidi flips the visual order so the string displays RTL
+
+    Returns the original text (str) unchanged if either library is missing,
+    so the code never crashes — the PDF just won't look right.
+
+    Non-Arabic text (English, numbers) passes through unaffected.
+    """
+    if text is None:
+        return ''
+    if not isinstance(text, str):
+        text = str(text)
+    if not text:
+        return text
+    try:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        reshaped = arabic_reshaper.reshape(text)
+        return get_display(reshaped)
+    except ImportError:
+        # Graceful degradation — text will be wrong but won't crash.
+        return text
 # ── 1) Spawn ONE committee per template ───────────────────────────────────────
 
 @transaction.atomic
@@ -761,20 +855,9 @@ def export_committees_pdf(semester: str | None = None) -> bytes:
     from reportlab.pdfbase.ttfonts import TTFont
     import os
 
-    # Try to register an Arabic-capable font
-    arabic_font = 'Helvetica'
-    candidate_paths = [
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-        '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
-    ]
-    for path in candidate_paths:
-        if os.path.exists(path):
-            try:
-                pdfmetrics.registerFont(TTFont('ArabicFont', path))
-                arabic_font = 'ArabicFont'
-                break
-            except Exception:
-                pass
+    # Register an Arabic-capable font (uses cached registration).
+    # See _register_arabic_font() for the list of candidates.
+    arabic_font = _register_arabic_font()
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
@@ -790,9 +873,9 @@ def export_committees_pdf(semester: str | None = None) -> bytes:
                                   fontName=arabic_font, fontSize=10)
 
     story = []
-    story.append(Paragraph('تقرير اللجان - نظام إدارة مشاريع التخرج', title_style))
+    story.append(Paragraph(_ar('تقرير اللجان - نظام إدارة مشاريع التخرج'), title_style))
     if semester:
-        story.append(Paragraph(f'الفصل: {semester}', body_style))
+        story.append(Paragraph(_ar(f'الفصل: {semester}'), body_style))
     story.append(Spacer(1, 8))
 
     qs = Committee.objects.all()
@@ -801,15 +884,15 @@ def export_committees_pdf(semester: str | None = None) -> bytes:
     qs = qs.order_by('committee_type', 'department', 'sequence_number')
 
     for c in qs:
-        story.append(Paragraph(f'{c} — {c.template.display_name() if c.template_id else ""}', h2_style))
+        story.append(Paragraph(_ar(f'{c} — {c.template.display_name() if c.template_id else ""}'), h2_style))
 
         # Doctors table
         doctors = c.get_all_doctors()
-        doc_rows = [['الاسم', 'الدور', 'القسم']]
+        doc_rows = [[_ar('الاسم'), _ar('الدور'), _ar('القسم')]]
         for d in doctors:
-            doc_rows.append([d['name'],
-                              'رئيس' if d['role'] == 'chair' else 'عضو',
-                              _dept_ar(d['department'])])
+            doc_rows.append([_ar(d['name']),
+                              _ar('رئيس') if d['role'] == 'chair' else _ar('عضو'),
+                              _ar(_dept_ar(d['department']))])
         t = Table(doc_rows, colWidths=[60*mm, 25*mm, 50*mm])
         t.setStyle(TableStyle([
             ('FONTNAME', (0,0), (-1,-1), arabic_font),
@@ -824,7 +907,7 @@ def export_committees_pdf(semester: str | None = None) -> bytes:
         # Projects table
         projs = c.get_all_projects()
         if projs:
-            proj_rows = [['المصدر', 'العنوان', 'المشرف', 'الطالب']]
+            proj_rows = [[_ar('المصدر'), _ar('العنوان'), _ar('المشرف'), _ar('الطالب')]]
             for p in projs:
                 supervisors_text = ', '.join(
                     supervisor.get('name', '')
@@ -839,10 +922,10 @@ def export_committees_pdf(semester: str | None = None) -> bytes:
                     if student.get('name')
                 ) or '—'
                 proj_rows.append([
-                    p['source'],
-                    p['title'],
-                    supervisors_text,
-                    students_text,
+                    _ar(p['source']),
+                    _ar(p['title']),
+                    _ar(supervisors_text),
+                    _ar(students_text),
                 ])
             t2 = Table(proj_rows, colWidths=[40*mm, 80*mm, 50*mm, 50*mm])
             t2.setStyle(TableStyle([
@@ -854,7 +937,7 @@ def export_committees_pdf(semester: str | None = None) -> bytes:
             ]))
             story.append(t2)
         else:
-            story.append(Paragraph('(لا توجد مشاريع موزعة بعد)', body_style))
+            story.append(Paragraph(_ar('(لا توجد مشاريع موزعة بعد)'), body_style))
 
         story.append(Spacer(1, 10))
 

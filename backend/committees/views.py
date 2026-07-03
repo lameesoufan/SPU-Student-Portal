@@ -43,6 +43,7 @@ from .serializers import (
     CommitteeTemplateSerializer, CommitteeSerializer,
     CommitteeScheduleUpdateSerializer, CommitteeDoctorsUpdateSerializer,
     CopyTemplateSerializer, DistributeRequestSerializer,
+    DoctorBriefSerializer,
 )
 from .services import (
     spawn_committee_for_template,
@@ -156,6 +157,23 @@ class CommitteeViewSet(viewsets.ModelViewSet):
             return CommitteeScheduleUpdateSerializer
         return CommitteeSerializer
 
+    def update(self, request, *args, **kwargs):
+        """Override update to return full committee data after schedule update."""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        # Return full committee data using CommitteeSerializer
+        full_serializer = CommitteeSerializer(instance, context={'request': request})
+        return Response(full_serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        """Override partial_update to return full committee data."""
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
     @action(detail=True, methods=['post'], url_path='doctors')
     def update_doctors(self, request, pk=None):
         """Update chair + members of a single committee."""
@@ -227,18 +245,15 @@ class CommitteeViewSet(viewsets.ModelViewSet):
             project_type=current_committee.project_type,
         ).exclude(id=current_committee.id).order_by('sequence_number')
         
-        # Serialize with basic info
+        # Serialize with basic info — chair & members use the SAME
+        # DoctorBriefSerializer shape as everywhere else for consistency.
         result = []
         for committee in available:
-            doctors = committee.get_all_doctors()
-            chair_name = next((d['name'] for d in doctors if d['role'] == 'chair'), '—')
-            members_names = [d['name'] for d in doctors if d['role'] == 'member']
-            
             result.append({
                 'id': committee.id,
                 'name': f"{COMMITTEE_TYPE_AR.get(committee.committee_type, committee.committee_type)} - {committee.sequence_number:03d}",
-                'chair': chair_name,
-                'members': members_names,
+                'chair':   DoctorBriefSerializer(committee.chair).data,                    # object | null
+                'members': DoctorBriefSerializer(committee.members.all(), many=True).data, # list of objects
                 'projects_count': committee.projects_count,
                 'date': committee.date.strftime('%Y-%m-%d') if committee.date else None,
                 'time': committee.time.strftime('%H:%M') if committee.time else None,
@@ -287,41 +302,11 @@ class DashboardView(APIView):
         )
 
         # Composition groups for the dashboard cards
+        # NOTE: chair & members use the SAME DoctorBriefSerializer shape as
+        # CommitteeSerializer, so the frontend can treat them identically
+        # regardless of which endpoint the data came from.
         compositions = []
         for t in templates_qs:
-            # Get chair details
-            chair_name = None
-            chair_info = None
-            if t.chair_id:
-                try:
-                    chair_name = t.chair.get_full_name() or t.chair.username
-                    chair_info = {
-                        'id': t.chair_id,
-                        'name': chair_name,
-                        'username': t.chair.username,
-                        'department': t.chair.department,
-                        'department_ar': DEPARTMENT_AR.get(t.chair.department, t.chair.department),
-                    }
-                except Exception:
-                    chair_name = f"#{t.chair_id}"
-            
-            # Get members details - return simple list of names for display
-            members_list = []
-            members_detail = []
-            for member in t.members.all():
-                try:
-                    name = member.get_full_name() or member.username
-                    members_list.append(name)  # Just the name string
-                    members_detail.append({
-                        'id': member.id,
-                        'name': name,
-                        'username': member.username,
-                        'department': member.department,
-                        'department_ar': DEPARTMENT_AR.get(member.department, member.department),
-                    })
-                except Exception:
-                    continue
-            
             compositions.append({
                 'id':                     t.id,
                 'name':                   t.display_name(),
@@ -332,11 +317,9 @@ class DashboardView(APIView):
                 'project_type':           t.project_type,
                 'project_type_ar':        PROJECT_TYPE_AR.get(t.project_type, t.project_type),
                 'semester':               t.semester,
-                'chair':                  chair_name,  # String for display
-                'chair_detail':           chair_info,  # Object with full details
-                'members':                members_list,  # List of name strings for display
-                'members_detail':         members_detail,  # Full objects for detailed view
-                'members_count':          len(members_list),
+                'chair':                  DoctorBriefSerializer(t.chair).data,                    # object | null
+                'members':                DoctorBriefSerializer(t.members.all(), many=True).data, # list of objects
+                'members_count':          t.members.count(),
                 'committees_count':       t.committees.count(),
                 'total_projects_assigned': t.total_projects_assigned,
                 'is_approved':            t.is_approved,
@@ -523,3 +506,82 @@ class ExportProjectsAssignmentView(APIView):
         filename = f'projects_assignment_{timezone.now():%Y%m%d_%H%M}.xlsx'
         resp['Content-Disposition'] = f'attachment; filename="{filename}"'
         return resp
+
+
+# ── Update Project Schedules ──────────────────────────────────────────────────
+
+class UpdateProjectSchedulesView(APIView):
+    """
+    Update date, time, and location for multiple projects in committees.
+    POST /api/committees/update-schedules/
+    
+    Payload:
+        {
+          "updates": [
+            {
+              "committee_id": 1,
+              "project_source": "IdeaApplication" | "StudentIdeaProposal",
+              "project_id": 123,
+              "date": "2025-01-15",  # optional
+              "time": "10:30",       # optional
+              "location": "Room 301" # optional
+            },
+            ...
+          ]
+        }
+    """
+    permission_classes = [IsDean]
+
+    def post(self, request):
+        updates = request.data.get('updates', [])
+        
+        if not updates:
+            return Response({'detail': 'No updates provided.'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        updated_count = 0
+        errors = []
+        
+        for update in updates:
+            committee_id = update.get('committee_id')
+            project_source = update.get('project_source')
+            project_id = update.get('project_id')
+            
+            if not (committee_id and project_source and project_id):
+                errors.append({
+                    'update': update,
+                    'error': 'Missing required fields: committee_id, project_source, project_id'
+                })
+                continue
+            
+            try:
+                committee = Committee.objects.get(id=committee_id)
+            except Committee.DoesNotExist:
+                errors.append({
+                    'update': update,
+                    'error': f'Committee {committee_id} not found'
+                })
+                continue
+            
+            # Update committee schedule fields if provided
+            schedule_updated = False
+            if 'date' in update and update['date']:
+                committee.date = update['date']
+                schedule_updated = True
+            if 'time' in update and update['time']:
+                committee.time = update['time']
+                schedule_updated = True
+            if 'location' in update and update['location']:
+                committee.location = update['location']
+                schedule_updated = True
+            
+            if schedule_updated:
+                committee.save()
+                updated_count += 1
+        
+        return Response({
+            'success': True,
+            'updated_count': updated_count,
+            'total_updates': len(updates),
+            'errors': errors if errors else None,
+        })

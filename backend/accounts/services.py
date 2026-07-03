@@ -84,43 +84,32 @@ def assign_hod(*, doctor_id: int, department: str) -> dict:
 
 def lookup_student_in_reference(university_id: str, password: str) -> dict:
     """
-    Verify student against external university API.
-    Sends: { university_id, password }
-    Expects: { found: true, full_name: "...", department: "..." }
+    التحقق من الطالب في قاعدة البيانات المرجعية المحلية (StudentReference).
+    - لو الـ ID غير موجود → خطأ
+    - لو الـ ID موجود بس الـ password ما يطابق → خطأ
+    - لو الـ ID والـ password صحيحين → إرجاع البيانات
     """
-    external_api_url = os.getenv('STUDENT_VERIFY_URL', '').strip()
-    if not external_api_url:
-        logger.error('STUDENT_VERIFY_URL is not configured.')
-        return {'ok': False, 'error': 'Student verification service is unavailable.'}
+    from .models import StudentReference
 
     try:
-        response = requests.post(
-            external_api_url,
-            json={'university_id': university_id, 'password': password},
-            timeout=10,
-        )
-        response.raise_for_status()
-        data = response.json()
-    except requests.RequestException:
-        logger.exception('Student verification request failed.')
-        return {'ok': False, 'error': 'Student verification service is unavailable.'}
-    except ValueError:
-        logger.exception('Student verification returned invalid JSON.')
-        return {'ok': False, 'error': 'Student verification service is unavailable.'}
-
-    if not data.get('found'):
+        ref = StudentReference.objects.get(university_id=university_id)
+    except StudentReference.DoesNotExist:
         return {'ok': False, 'error': 'Access Denied: ID not found in University records.'}
+
+    # التحقق من كلمة المرور (لو موجودة في المرجع)
+    if ref.password:
+        if ref.password != password:
+            return {'ok': False, 'error': 'Access Denied: Incorrect password.'}
 
     return {
         'ok': True,
         'data': {
             'university_id': university_id,
-            'full_name':     data.get('full_name', ''),
-            'department':    data.get('department', ''),
-            'email':         data.get('email', ''),
+            'full_name':     ref.full_name,
+            'department':    ref.department,
+            'email':         ref.email,
         }
     }
-
 
 def register_verified_student(*, university_id: str, ref_data: dict) -> dict:
     """

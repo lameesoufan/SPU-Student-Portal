@@ -1,20 +1,22 @@
 import logging
 import os
 import re
+import csv
+import io as io_module
 
 import requests
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.decorators import throttle_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.exceptions import TokenError
 from openpyxl import load_workbook
 from django.contrib.auth import authenticate
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
-from .models import User, DEPARTMENTS
+from .models import User, DEPARTMENTS, StudentReference
 from .permissions import IsDeanOrAdmin
 from .selectors import get_doctors
 from .throttles import RegisterRateThrottle, PasswordResetThrottle
@@ -30,6 +32,11 @@ logger = logging.getLogger(__name__)
 ALLOWED_IMPORT_EXTENSIONS = ('.xlsx', '.xlsm', '.xltx', '.xltm')
 MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024
 MAX_IMPORT_ROWS = 5000
+
+# ── Upload Reference (Student Reference DB) ─────────────────────────────────
+ALLOWED_REFERENCE_EXTENSIONS = ('.xlsx', '.xls', '.csv')
+MAX_REFERENCE_FILE_SIZE = 10 * 1024 * 1024
+MAX_REFERENCE_ROWS = 10000
 
 
 def _set_cookie(response, name, value, max_age, secure=False):
@@ -48,25 +55,6 @@ def _set_cookie(response, name, value, max_age, secure=False):
 def _clear_cookie(response, name):
     """Helper to clear a cookie."""
     response.delete_cookie(name, path='/')
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def logout(request):
-    """Logout: clear JWT cookies and blacklist the refresh token."""
-    refresh_token = request.COOKIES.get('refresh_token')
-    if not refresh_token:
-        refresh_token = request.data.get('refresh')
-    if refresh_token:
-        try:
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-        except TokenError:
-            pass
-    response = Response({'message': 'Logged out successfully.'})
-    _clear_cookie(response, 'access_token')
-    _clear_cookie(response, 'refresh_token')
-    return response
 
 
 @api_view(['POST'])
@@ -134,6 +122,7 @@ def change_username(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsDeanOrAdmin])
+@parser_classes([MultiPartParser, FormParser])
 def import_users(request):
     """استيراد المستخدمين من ملف Excel - نسخة محسّنة مع تقارير أخطاء تفصيلية."""
     if 'file' not in request.FILES:
@@ -347,3 +336,184 @@ def student_self_register(request):
     _set_cookie(response, 'refresh_token', refresh_token_str,
                 getattr(settings, 'JWT_COOKIE_REFRESH_MAX_AGE', 604800), secure=secure)
     return response
+
+
+# ── Upload Student Reference Database ────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsDeanOrAdmin])
+@parser_classes([MultiPartParser, FormParser])
+def upload_reference(request):
+    """
+    رفع قاعدة بيانات الطلاب المرجعية.
+    يقبل: .xlsx, .xls, .csv
+    الأعمدة المطلوبة: university_id, full_name, department, email, password
+    """
+    if 'file' not in request.FILES:
+        return Response({'error': 'File is required.'}, status=400)
+
+    upload = request.FILES['file']
+    filename = str(upload.name or '').lower()
+
+    if not filename.endswith(ALLOWED_REFERENCE_EXTENSIONS):
+        return Response({
+            'error': f'Unsupported file type. Allowed: {", ".join(ALLOWED_REFERENCE_EXTENSIONS)}'
+        }, status=400)
+
+    if upload.size > MAX_REFERENCE_FILE_SIZE:
+        return Response({'error': 'File is too large. Maximum size is 10 MB.'}, status=400)
+
+    # تحديد نوع الملف
+    if filename.endswith('.csv'):
+        records, parse_errors = _parse_csv_reference(upload)
+    else:
+        records, parse_errors = _parse_excel_reference(upload)
+
+    if parse_errors and not records:
+        return Response({
+            'error': 'Failed to parse file.',
+            'details': parse_errors[:20],
+        }, status=400)
+
+    if len(records) > MAX_REFERENCE_ROWS:
+        return Response({
+            'error': f'File has too many rows. Maximum allowed is {MAX_REFERENCE_ROWS}.'
+        }, status=400)
+
+    # إدخال البيانات بشكل جماعي (update_or_create)
+    created_count = 0
+    updated_count = 0
+    row_errors = []
+
+    for idx, record in enumerate(records, start=2):
+        university_id = str(record.get('university_id', '')).strip()
+        if not university_id:
+            row_errors.append({'row': idx, 'error': 'Missing university_id'})
+            continue
+
+        try:
+            _, created = StudentReference.objects.update_or_create(
+                university_id=university_id,
+                defaults={
+                    'full_name':  str(record.get('full_name', '')).strip(),
+                    'department': str(record.get('department', '')).strip(),
+                    'email':      str(record.get('email', '')).strip(),
+                    'password':   str(record.get('password', '')).strip(),
+                    'uploaded_by': request.user,
+                },
+            )
+            if created:
+                created_count += 1
+            else:
+                updated_count += 1
+        except Exception as e:
+            row_errors.append({
+                'row': idx,
+                'university_id': university_id,
+                'error': str(e),
+            })
+
+    logger.info(
+        'Reference upload by %s: %d created, %d updated, %d errors',
+        request.user.username, created_count, updated_count, len(row_errors)
+    )
+
+    return Response({
+        'message': f'Reference database updated. {created_count} new, {updated_count} updated.',
+        'count': created_count + updated_count,
+        'created': created_count,
+        'updated': updated_count,
+        'errors': row_errors[:20],
+        'errors_count': len(row_errors),
+    }, status=200)
+
+
+def _parse_excel_reference(upload):
+    """تحليل ملف Excel — الأعمدة: university_id, full_name, department, email, password"""
+    records = []
+    errors = []
+    try:
+        wb = load_workbook(filename=upload, read_only=True, data_only=True)
+        ws = wb.active
+    except Exception as exc:
+        logger.exception('Failed to open Excel reference file')
+        return [], [f'Invalid Excel file: {str(exc)}']
+
+    try:
+        rows = list(ws.iter_rows(min_row=1, values_only=True))
+        if not rows:
+            return [], ['File is empty.']
+
+        # اكتشاف الـ header
+        header = rows[0]
+        col_map = _detect_columns(header)
+
+        if 'university_id' not in col_map:
+            return [], ['Could not find university_id column. Expected headers: university_id, full_name, department, email, password']
+
+        for row_idx, row in enumerate(rows[1:], start=2):
+            if not row:
+                continue
+            record = {}
+            for field, col_idx in col_map.items():
+                if col_idx < len(row):
+                    val = row[col_idx]
+                    if isinstance(val, float) and val.is_integer():
+                        val = str(int(val))
+                    record[field] = str(val) if val is not None else ''
+            records.append(record)
+    except Exception as exc:
+        errors.append(f'Error reading rows: {str(exc)}')
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
+
+    return records, errors
+
+
+def _parse_csv_reference(upload):
+    """تحليل ملف CSV"""
+    records = []
+    errors = []
+    try:
+        # قراءة الملف كنص
+        decoded = upload.read().decode('utf-8-sig')  # utf-8-sig يتجاهل BOM
+        reader = csv.DictReader(io_module.StringIO(decoded))
+        for row_idx, row in enumerate(reader, start=2):
+            # تطبيع أسماء الأعمدة (حروف صغيرة، إزالة المسافات)
+            normalized = {k.lower().strip(): v for k, v in row.items() if k}
+            record = {
+                'university_id': normalized.get('university_id', ''),
+                'full_name':     normalized.get('full_name', ''),
+                'department':    normalized.get('department', ''),
+                'email':         normalized.get('email', ''),
+                'password':      normalized.get('password', ''),
+            }
+            records.append(record)
+    except Exception as exc:
+        errors.append(f'CSV parse error: {str(exc)}')
+
+    return records, errors
+
+
+def _detect_columns(header):
+    """تحويل header row إلى خريطة {field_name: column_index}"""
+    col_map = {}
+    aliases = {
+        'university_id': ['university_id', 'universityid', 'id', 'student_id', 'studentid', 'رقم الجامعي', 'الرقم الجامعي'],
+        'full_name':     ['full_name', 'fullname', 'name', 'الاسم', 'اسم الطالب'],
+        'department':    ['department', 'dept', 'القسم'],
+        'email':         ['email', 'البريد'],
+        'password':      ['password', 'pwd', 'pass', 'كلمة المرور', 'الرقم السري'],
+    }
+    for col_idx, cell in enumerate(header or []):
+        if cell is None:
+            continue
+        cell_lower = str(cell).lower().strip()
+        for field, alias_list in aliases.items():
+            if cell_lower in [a.lower() for a in alias_list]:
+                col_map[field] = col_idx
+                break
+    return col_map

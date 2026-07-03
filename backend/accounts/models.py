@@ -47,3 +47,29 @@ class User(AbstractUser):
             self.is_superuser = True
             self.is_staff = True
         super().save(*args, **kwargs)
+class StudentReference(models.Model):
+    """
+    قاعدة بيانات مرجعية للطلاب — تُستخدم للتحقق عند الـ self-registration.
+    يتم ملؤها عبر رفع ملف Excel/CSV من قبل الأدمن.
+    """
+    university_id = models.CharField(max_length=50, unique=True, db_index=True)
+    full_name     = models.CharField(max_length=255, blank=True)
+    department    = models.CharField(max_length=50, blank=True)
+    email         = models.EmailField(blank=True, default='')
+    password      = models.CharField(max_length=255, blank=True, default='')
+    uploaded_at   = models.DateTimeField(auto_now=True)
+    uploaded_by   = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='uploaded_references'
+    )
+
+    class Meta:
+        verbose_name = 'Student Reference'
+        verbose_name_plural = 'Student References'
+        ordering = ['-uploaded_at']
+        indexes = [
+            models.Index(fields=['university_id']),
+        ]
+
+    def __str__(self):
+        return f'{self.university_id} — {self.full_name}'

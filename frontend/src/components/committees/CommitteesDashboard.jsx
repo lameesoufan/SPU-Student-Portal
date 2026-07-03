@@ -19,19 +19,11 @@ import './CommitteesDashboard.css';
 /*         → doctor workload table                                              */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-/* ── Helper: safely render a chair value ─────────────────────────────────── */
-/* chair can be either:
- *   - null/undefined            → return '—'
- *   - a string (from DashboardView compositions)
- *   - an object {full_name, username, ...} (from CommitteeSerializer)
- */
+/* ── Helper: render chair full name ──────────────────────────────────────── */
+/* chair is unified across all endpoints: object {id, username, full_name, ...} | null */
 function renderChairName(chair) {
   if (!chair) return '—';
-  if (typeof chair === 'string') return chair;
-  if (typeof chair === 'object') {
-    return chair.full_name || chair.username || `#${chair.id}` || '—';
-  }
-  return String(chair);
+  return chair.full_name || chair.username || (chair.id ? `#${chair.id}` : '—');
 }
 
 function distributionExclusionMessage(exclusions) {
@@ -71,7 +63,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
       const res = await fetchCommitteesDashboard();
       setData(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || 'فشل تحميل لوحة اللجان.');
+      setError(err.response?.data?.detail || 'Failed to load committees dashboard.');
     } finally {
       setLoading(false);
     }
@@ -101,14 +93,14 @@ export default function CommitteesDashboard({ onNavigate, user }) {
       const processed      = res.data?.processed_templates     ?? 0;
       const exclusionMsg   = distributionExclusionMessage(res.data?.exclusions);
       const msg = undistributed > 0
-        ? `تم توزيع ${distributed} مشروع على ${processed} تركيبة. (${undistributed} مشروع بدون لجنة مناسبة — راجع التنبيهات.)`
-        : `تم توزيع ${distributed} مشروع على ${processed} تركيبة بنجاح.`;
+        ? `Distributed ${distributed} projects to ${processed} compositions. (${undistributed} projects without suitable committee — check warnings.)`
+        : `Successfully distributed ${distributed} projects to ${processed} compositions.`;
       setToast({ type: 'success', msg: [msg, exclusionMsg].filter(Boolean).join(' ') });
       await load();
     } catch (err) {
       setToast({
         type: 'error',
-        msg: err.response?.data?.detail || 'فشل التوزيع. حاول لاحقاً.',
+        msg: err.response?.data?.detail || 'Distribution failed. Try again later.',
       });
     } finally { setBusy(false); }
   };
@@ -129,7 +121,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
           {error}
         </div>
         <button className="cmd-btn cmd-btn-primary" onClick={load}>
-          <RefreshCw size={14} /> إعادة المحاولة
+          <RefreshCw size={14} /> Retry
         </button>
       </div>
     );
@@ -146,10 +138,10 @@ export default function CommitteesDashboard({ onNavigate, user }) {
       <div className="cmd-hero">
         <div className="cmd-hero-content">
           <div>
-            <h1 className="cmd-hero-title">لوحة إدارة اللجان</h1>
+            <h1 className="cmd-hero-title">Committees Management Dashboard</h1>
             <p className="cmd-hero-sub">
-              مرحباً {user?.username || 'د. عميد'} — من هنا يمكنك إنشاء التشكيلات، توزيع المشاريع،
-              ومتابعة ضغط العمل على أعضاء هيئة التدريس.
+              Welcome {user?.username || 'Dean'} — From here you can create compositions, distribute projects,
+              and monitor faculty workload.
             </p>
           </div>
           <div className="cmd-hero-actions">
@@ -157,19 +149,19 @@ export default function CommitteesDashboard({ onNavigate, user }) {
               className="cmd-hero-btn cmd-hero-btn-primary"
               onClick={() => onNavigate && onNavigate('committees-template-form')}
             >
-              <Plus size={16} /> تشكيلة جديدة
+              <Plus size={16} /> New Composition
             </button>
             <button
               className="cmd-hero-btn cmd-hero-btn-secondary"
               onClick={() => onNavigate && onNavigate('committees-list')}
             >
-              <FolderKanban size={16} /> قائمة اللجان
+              <FolderKanban size={16} /> Committees List
             </button>
             <button
               className="cmd-hero-btn cmd-hero-btn-secondary"
               onClick={() => onNavigate && onNavigate('projects-assignment')}
             >
-              <FileText size={16} /> جدول التوزيع
+              <FileText size={16} /> Distribution Table
             </button>
           </div>
         </div>
@@ -177,11 +169,11 @@ export default function CommitteesDashboard({ onNavigate, user }) {
 
       {/* ── Stat Cards ────────────────────────────────────────────────────── */}
       <div className="cmd-stats">
-        <StatCard icon={<FileSpreadsheet size={22} />} value={stats.templates_count ?? 0} label="التشكيلات" variant="is-purple" />
-        <StatCard icon={<Users size={22} />} value={stats.committees_count ?? 0} label="اللجان المنشأة" variant="is-blue" />
-        <StatCard icon={<CheckCircle2 size={22} />} value={stats.projects_distributed ?? 0} label="مشاريع موزعة" variant="is-green" />
-        <StatCard icon={<Inbox size={22} />} value={stats.projects_unassigned ?? 0} label="مشاريع بدون لجنة" variant="is-amber" />
-        <StatCard icon={<AlertTriangle size={22} />} value={stats.warnings_count ?? 0} label="تنبيهات" variant="is-red" />
+        <StatCard icon={<FileSpreadsheet size={22} />} value={stats.templates_count ?? 0} label="Compositions" variant="is-purple" />
+        <StatCard icon={<Users size={22} />} value={stats.committees_count ?? 0} label="Committees" variant="is-blue" />
+        <StatCard icon={<CheckCircle2 size={22} />} value={stats.projects_distributed ?? 0} label="Distributed Projects" variant="is-green" />
+        <StatCard icon={<Inbox size={22} />} value={stats.projects_unassigned ?? 0} label="Unassigned Projects" variant="is-amber" />
+        <StatCard icon={<AlertTriangle size={22} />} value={stats.warnings_count ?? 0} label="Warnings" variant="is-red" />
       </div>
 
       {/* ── Toolbar ───────────────────────────────────────────────────────── */}
@@ -191,15 +183,15 @@ export default function CommitteesDashboard({ onNavigate, user }) {
             className="cmd-btn cmd-btn-success"
             onClick={handleDistribute}
             disabled={busy || comps.length === 0}
-            title="تنفيذ خوارزمية التوزيع"
+            title="Execute distribution algorithm"
           >
             {busy ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            توزيع المشاريع
+            Distribute Projects
           </button>
         </div>
         <div className="cmd-toolbar-right">
           <button className="cmd-btn cmd-btn-sm" onClick={load} disabled={loading}>
-            <RefreshCw size={13} /> تحديث
+            <RefreshCw size={13} /> Refresh
           </button>
         </div>
       </div>
@@ -211,28 +203,28 @@ export default function CommitteesDashboard({ onNavigate, user }) {
           <div className="cmd-section-header">
             <h2 className="cmd-section-title">
               <span className="cmd-section-title-icon"><FolderKanban size={16} /></span>
-              التشكيلات
+              Compositions
               <span className="cmd-section-count">{comps.length}</span>
             </h2>
             <button
               className="cmd-btn cmd-btn-sm cmd-btn-primary"
               onClick={() => onNavigate && onNavigate('committees-template-form')}
             >
-              <Plus size={13} /> إضافة
+              <Plus size={13} /> Add
             </button>
           </div>
           <div className="cmd-section-body">
             {comps.length === 0 ? (
               <div className="cmd-empty">
                 <div className="cmd-empty-icon"><FolderKanban size={28} /></div>
-                <h3>لا توجد تشكيلات بعد</h3>
-                <p>ابدأ بإنشاء أول تشكيلة لتحديد نوع اللجنة والقسم ونوع المشروع والأطباء.</p>
+                <h3>No compositions yet</h3>
+                <p>Start by creating your first composition to define committee type, department, project type, and faculty members.</p>
               </div>
             ) : (
               comps.map((c) => {
                 const cTypeColor = COMMITTEE_TYPE_COLORS[c.committee_type] || {};
                 const deptColor  = DEPARTMENT_COLORS[c.department] || {};
-                /* ── FIX: safely render chair (string OR object) ──────── */
+                /* ── render chair (unified object shape) ──────────────── */
                 const chairName = renderChairName(c.chair);
                 return (
                   <div
@@ -249,7 +241,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
                             color: '#34d399',
                             borderColor: 'rgba(16, 185, 129, 0.25)',
                           }}>
-                            <CheckCircle2 size={11} /> معتمدة
+                            <CheckCircle2 size={11} /> Approved
                           </span>
                         ) : (
                           <span className="cmd-badge" style={{
@@ -257,7 +249,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
                             color: '#fbbf24',
                             borderColor: 'rgba(245, 158, 11, 0.25)',
                           }}>
-                            <Clock size={11} /> مسودة
+                            <Clock size={11} /> Draft
                           </span>
                         )}
                       </div>
@@ -286,16 +278,16 @@ export default function CommitteesDashboard({ onNavigate, user }) {
                       </div>
                       <div className="cmd-comp-meta">
                         <span className="cmd-comp-meta-item">
-                          <UserCheck size={13} /> الرئيس: <strong>{chairName}</strong>
+                          <UserCheck size={13} /> Chair: <strong>{chairName}</strong>
                         </span>
                         <span className="cmd-comp-meta-item">
-                          <Users size={13} /> الأعضاء: <strong>{c.members_count ?? 0}</strong>
+                          <Users size={13} /> Members: <strong>{c.members_count ?? 0}</strong>
                         </span>
                         <span className="cmd-comp-meta-item">
-                          <FolderKanban size={13} /> اللجان: <strong>{c.committees_count ?? c.committees_total ?? 0}</strong>
+                          <FolderKanban size={13} /> Committees: <strong>{c.committees_count ?? c.committees_total ?? 0}</strong>
                         </span>
                         <span className="cmd-comp-meta-item">
-                          <CheckCircle2 size={13} /> المشاريع: <strong>{c.total_projects_assigned ?? 0}</strong>
+                          <CheckCircle2 size={13} /> Projects: <strong>{c.total_projects_assigned ?? 0}</strong>
                         </span>
                       </div>
                     </div>
@@ -307,7 +299,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
                           onNavigate && onNavigate('committees-list', { templateId: c.id });
                         }}
                       >
-                        عرض اللجان <ChevronLeft size={12} />
+                        View Committees <ChevronLeft size={12} />
                       </button>
                     </div>
                   </div>
@@ -327,7 +319,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
               }}>
                 <AlertTriangle size={16} />
               </span>
-              التنبيهات
+              Warnings
               <span className="cmd-section-count" style={{
                 background: 'rgba(239, 68, 68, 0.12)',
                 color: '#f87171',
@@ -338,8 +330,8 @@ export default function CommitteesDashboard({ onNavigate, user }) {
             {warnings.length === 0 ? (
               <div className="cmd-empty">
                 <div className="cmd-empty-icon"><CheckCircle2 size={28} /></div>
-                <h3>كل شيء على ما يرام</h3>
-                <p>لا توجد تنبيهات حالياً.</p>
+                <h3>Everything looks good</h3>
+                <p>No warnings at this time.</p>
               </div>
             ) : (
               warnings.slice(0, 30).map((w, i) => {
@@ -367,7 +359,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
             )}
             {warnings.length > 30 && (
               <div style={{ textAlign: 'center', padding: '8px', fontSize: 12, color: 'var(--text-muted)' }}>
-                و {warnings.length - 30} تنبيه آخر…
+                and {warnings.length - 30} more warnings…
               </div>
             )}
           </div>
@@ -384,27 +376,27 @@ export default function CommitteesDashboard({ onNavigate, user }) {
             }}>
               <BarChart3 size={16} />
             </span>
-            ضغط عمل أعضاء هيئة التدريس
+            Faculty Workload
             <span className="cmd-section-count">{workloads.length}</span>
           </h2>
         </div>
         {workloads.length === 0 ? (
           <div className="cmd-empty">
             <div className="cmd-empty-icon"><Users size={28} /></div>
-            <h3>لا يوجد أطباء مُعيَّنون بعد</h3>
-            <p>عند إنشاء تشكيلات وإسناد أطباء، ستظهر إحصائيات ضغط العمل هنا.</p>
+            <h3>No faculty assigned yet</h3>
+            <p>When you create compositions and assign faculty members, their workload stats will appear here.</p>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="cmd-workload-table">
               <thead>
                 <tr>
-                  <th>الطبيب</th>
-                  <th>القسم</th>
-                  <th>رئاسة</th>
-                  <th>عضوية</th>
-                  <th>الإجمالي</th>
-                  <th>مستوى الضغط</th>
+                  <th>Faculty Member</th>
+                  <th>Department</th>
+                  <th>Chair</th>
+                  <th>Member</th>
+                  <th>Total</th>
+                  <th>Workload Level</th>
                 </tr>
               </thead>
               <tbody>
@@ -521,7 +513,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
                   color: '#1e293b',
                   marginBottom: 6,
                 }}>
-                  تأكيد توزيع المشاريع
+                  Confirm Project Distribution
                 </h3>
                 <p style={{
                   margin: 0,
@@ -529,12 +521,12 @@ export default function CommitteesDashboard({ onNavigate, user }) {
                   color: '#64748b',
                   lineHeight: 1.6,
                 }}>
-                  سيتم تنفيذ خوارزمية توزيع المشاريع على اللجان المُعدّة. هل تريد المتابعة؟
+                  The project distribution algorithm will be executed on the prepared committees. Do you want to proceed?
                 </p>
               </div>
             </div>
 
-            {/* معلومات إضافية */}
+            {/* Additional information */}
             <div style={{
               background: '#f8fafc',
               border: '1px solid #e2e8f0',
@@ -548,18 +540,18 @@ export default function CommitteesDashboard({ onNavigate, user }) {
                 lineHeight: 1.5,
               }}>
                 <div style={{ marginBottom: 6 }}>
-                  ✓ سيتم توزيع المشاريع تلقائياً
+                  ✓ Projects will be distributed automatically
                 </div>
                 <div style={{ marginBottom: 6 }}>
-                  ✓ سيتم تخصيص مشروع لكل لجنة حسب القسم ونوع المشروع
+                  ✓ Each committee will be assigned projects based on department and project type
                 </div>
                 <div>
-                  ✓ يمكنك تعديل التوزيع يدوياً لاحقاً
+                  ✓ You can manually adjust the distribution later
                 </div>
               </div>
             </div>
 
-            {/* الأزرار */}
+            {/* Buttons */}
             <div style={{
               display: 'flex',
               gap: 10,
@@ -587,7 +579,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
                   e.target.style.borderColor = '#e2e8f0';
                 }}
               >
-                إلغاء
+                Cancel
               </button>
               <button
                 onClick={confirmDistribute}
@@ -616,7 +608,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
                 }}
               >
                 <RefreshCw size={16} />
-                تنفيذ التوزيع
+                Execute Distribution
               </button>
             </div>
           </div>

@@ -453,6 +453,13 @@ export const fetchAvailableCommitteesForSwap = (committeeId, projectSource, proj
 export const swapProject = (committeeId, data) =>
   api.post(`/api/committees/committees/${committeeId}/swap_project/`, data);
 
+// Update project schedules (date, time, location)
+export const updateProjectSchedules = (updates) =>
+  api.post('/api/committees/update-schedules/', { updates });
+
 // ── Doctors list for committee template form ────────────────────────────────
 // Reuse existing /api/doctors/ endpoint (same as AssignHod).
 // Returns: [{id, username, first_name, last_name, department, role}, ...]
+export function getAccessToken() {
+  return _accessToken;
+}

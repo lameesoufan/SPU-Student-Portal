@@ -248,19 +248,19 @@ class IdeaApplication(models.Model):
     class Meta:
         unique_together = ('idea', 'student')
         constraints = [
-            models.UniqueConstraint(
-                fields=['idea'],
-                condition=Q(status='registered'),
-                name='unique_registered_application_per_idea',
-            ),
-        ]
-        models.UniqueConstraint(
+    models.UniqueConstraint(
+        fields=['idea'],
+        condition=Q(status='registered'),
+        name='unique_registered_application_per_idea',
+    ),
+    models.UniqueConstraint(
         fields=['student'],
         condition=Q(status__in=[
             'awaiting_members', 'pending_doctor', 'pending_hod', 'registered'
         ]),
         name='unique_active_application_per_student',
-        ),
+    ),
+]
         
         indexes = [
             models.Index(fields=['student', 'status']),
