@@ -14,7 +14,7 @@ const PARTICLES = [
 ];
 
 export default function Login({ onLogin, onRegister }) {
-  const { theme, toggleTheme } = useTheme();
+  const { theme } = useTheme();
   const [form, setForm] = useState({ username: '', password: '' });
   const [errors, setErrors] = useState({ username: '', password: '' });
   const [serverError, setServerError] = useState('');
@@ -27,6 +27,16 @@ export default function Login({ onLogin, onRegister }) {
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 100);
     return () => clearTimeout(t);
+  }, []);
+
+  // Force dark theme on the login page (regardless of app theme).
+  // Restores the user's chosen theme when leaving the login page.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    return () => {
+      document.documentElement.setAttribute('data-theme', theme);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async (e) => {
@@ -77,7 +87,7 @@ export default function Login({ onLogin, onRegister }) {
     }
   };
 
-  const isDark = theme === 'dark';
+  const isDark = true;
 
   return (
     <>
@@ -98,19 +108,6 @@ export default function Login({ onLogin, onRegister }) {
       `}</style>
 
       <div className="group relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[var(--bg-primary)]">
-        {/* Theme toggle button */}
-        <button
-          className={`fixed top-5 right-5 z-10 flex items-center justify-center w-[42px] h-[42px] rounded-full border-[1.5px] backdrop-blur-[12px] cursor-pointer transition-all duration-250 ${
-            isDark
-              ? 'border-white/15 bg-white/[0.08] text-white/80 hover:bg-white/15 hover:border-white/30 hover:text-white'
-              : 'border-black/12 bg-white/70 text-[#4A5568] hover:bg-white/90 hover:border-[rgba(122,82,148,0.3)] hover:text-[#7A5294]'
-          } hover:rotate-[15deg] hover:scale-105 active:rotate-0 active:scale-95`}
-          onClick={toggleTheme}
-          aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-          title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-        >
-          {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-        </button>
 
         {/* University campus background image */}
         <div

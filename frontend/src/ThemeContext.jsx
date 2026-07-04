@@ -1,13 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-const THEME_KEY = 'spu-theme';
+const THEME_KEY = 'spu-theme-v2';
 
 const getInitialTheme = () => {
   try {
     const saved = localStorage.getItem(THEME_KEY);
     if (saved === 'light' || saved === 'dark') return saved;
   } catch { /* ignore */ }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // Default to light mode for the main app (after login)
+  // Login page forces dark mode locally regardless of this setting.
+  return 'light';
 };
 
 const ThemeContext = createContext({
