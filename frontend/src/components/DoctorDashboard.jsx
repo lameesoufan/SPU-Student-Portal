@@ -30,6 +30,8 @@ import SupervisorProjects from './SupervisorProjects';
 import WorkflowBuilder from './WorkflowBuilder';
 import ApplyWorkflow from './ApplyWorkflow';
 import WorkflowReview from './WorkflowReview';
+import DoctorCommitteeSchedule from './committees/DoctorCommitteeSchedule';
+import GradeEntry from './committees/GradeEntry';
 import { useTheme } from '../ThemeContext';
 import {
   fetchUnreadCount,
@@ -70,6 +72,8 @@ const NAV_ITEMS = [
   { id: 'workflow', label: 'Workflows', IconComp: Icon.BarChart },
   { id: 'applyworkflow', label: 'Apply Workflow', IconComp: Icon.ClipboardList },
   { id: 'reviewworkflow', label: 'Review Submissions', IconComp: Icon.CheckCircle },
+  { id: 'committee-schedule', label: 'جدول المناقشات', IconComp: Icon.Calendar },
+  { id: 'grade-entry', label: 'إدخال العلامات', IconComp: Icon.CheckCircle },
 ];
 
 const MODULE_CARDS = [
@@ -79,6 +83,8 @@ const MODULE_CARDS = [
   { IconComp: Icon.Kanban, label: 'Supervised Projects', desc: 'Track and monitor progress of your registered student projects', page: 'supervised-projects', gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' },
   { IconComp: Icon.BarChart, label: 'Workflow Builder', desc: 'Create dynamic project workflow templates with stages and fields', page: 'workflow', gradient: 'linear-gradient(135deg, #ec4899, #f472b6)' },
   { IconComp: Icon.ClipboardList, label: 'Apply Workflow', desc: 'Apply workflow templates to student projects', page: 'applyworkflow', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
+  { IconComp: Icon.Calendar, label: 'جدول المناقشات', desc: 'اعرض اللجان المسندة إليك ومناقشاتها وأوقاتها', page: 'committee-schedule', gradient: 'linear-gradient(135deg, #667eea, #764ba2)' },
+  { IconComp: Icon.CheckCircle, label: 'إدخال العلامات', desc: 'أدخل علامات المشاريع للجان التي أنت رئيسها', page: 'grade-entry', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
 ];
 
 
@@ -136,6 +142,8 @@ usePolling(async () => {
     if (page === 'applyworkflow') return <div className="std-page-wrapper"><ApplyWorkflow onBack={goBack} /></div>;
     if (page === 'reviewworkflow') return <div className="std-page-wrapper"><WorkflowReview onBack={goBack} /></div>;
     if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword onBack={goBack} /></div>;
+    if (page === 'committee-schedule') return <div className="std-page-wrapper"><DoctorCommitteeSchedule onBack={goBack} /></div>;
+    if (page === 'grade-entry') return <div className="std-page-wrapper"><GradeEntry onBack={goBack} /></div>;
     return (
       <div className="std-content">
         <div className={`std-hero ${mounted ? 'std-animate-in' : ''}`}>

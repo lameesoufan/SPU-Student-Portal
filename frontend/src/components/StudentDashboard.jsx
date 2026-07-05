@@ -4,6 +4,7 @@ import ProposeIdea from './ProposeIdea';
 import BrowseIdeas from './BrowseIdeas';
 import MyInvitations from './MyInvitations';
 import MyProject from './MyProject';
+import MyGrades from './MyGrades';
 import {
   fetchUnreadCount,
   fetchNotifications,
@@ -154,6 +155,7 @@ const NAV_ITEMS = [
       { id: 'gitlab', label: 'GitLab', IconComp: SubIcon.GitLab },
     ],
   },
+  { id: 'my-grades', label: 'علاماتي', IconComp: Icon.CheckCircle },
 ];
 /* ── Breadcrumb Map ── */
 const BREADCRUMB_MAP = {
@@ -581,6 +583,13 @@ const breadcrumbs = getBreadcrumbs();
       return (
         <div className="std-page-wrapper">
           <MyProject user={user} />
+        </div>
+      );
+    }
+    if (page === 'my-grades') {
+      return (
+        <div className="std-page-wrapper">
+          <MyGrades />
         </div>
       );
     }

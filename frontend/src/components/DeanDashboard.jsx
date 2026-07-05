@@ -33,6 +33,7 @@ import DistributionTable from './committees/DistributionTable';
 import CommitteeDetail from './committees/CommitteeDetail';
 import ProjectsAssignment from './committees/ProjectsAssignment';
 import StudentStatusManagement from './StudentStatusManagement';
+import GradesSummary from './GradesSummary';
 import { useTheme } from '../ThemeContext';
 import {
   fetchUnreadCount,
@@ -76,6 +77,7 @@ const NAV_ITEMS = [
   { id: 'faculty', label: 'Faculty Overview', IconComp: Icon.Users },
   { id: 'programs', label: 'Academic Programs', IconComp: Icon.BookOpen },
   { id: 'analytics', label: 'Analytics', IconComp: Icon.BarChart },
+  { id: 'grades-summary', label: 'علامات المشاريع', IconComp: Icon.CheckCircle },
 ];
 
 /* ── Module Cards ── */
@@ -331,6 +333,13 @@ usePolling(async () => {
       return (
         <div className="std-page-wrapper">
           <HodProjects onBack={goBack} user={user} />
+        </div>
+      );
+    }
+    if (page === 'grades-summary') {
+      return (
+        <div className="std-page-wrapper">
+          <GradesSummary onBack={goBack} />
         </div>
       );
     }

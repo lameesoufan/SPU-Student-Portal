@@ -216,6 +216,9 @@ class Committee(models.Model):
     # Scheduling
     date           = models.DateField(null=True, blank=True)
     time           = models.TimeField(null=True, blank=True)
+    start_time     = models.TimeField(null=True, blank=True, help_text='ساعة البدء')
+    end_time       = models.TimeField(null=True, blank=True, help_text='ساعة النهاية')
+    discussion_duration = models.PositiveIntegerField(null=True, blank=True, help_text='مدة المناقشة بالدقائق (مثال: 15، 30، 45)')
     location       = models.CharField(max_length=255, blank=True, default='')
 
     status         = models.CharField(max_length=15, choices=COMMITTEE_STATUS_CHOICES,
@@ -246,11 +249,50 @@ class Committee(models.Model):
 
     @property
     def is_scheduled(self) -> bool:
-        return bool(self.date and self.time and self.location)
+        return bool(self.date and self.start_time and self.end_time and self.location)
 
     @property
     def has_chair(self) -> bool:
         return self.chair_id is not None
+
+    def calculate_project_times(self) -> list:
+        """
+        Calculate start and end times for each project based on discussion_duration.
+        Returns list of dicts: {project_index, start_time, end_time}
+        """
+        from datetime import datetime, timedelta
+        
+        if not self.start_time or not self.discussion_duration:
+            return []
+        
+        projects = self.get_all_projects()
+        if not projects:
+            return []
+        
+        times = []
+        current_time = datetime.combine(datetime.today(), self.start_time)
+        duration = timedelta(minutes=self.discussion_duration)
+        
+        for idx, project in enumerate(projects):
+            # Check if we've exceeded end_time
+            project_end = current_time + duration
+            if self.end_time:
+                end_datetime = datetime.combine(datetime.today(), self.end_time)
+                if project_end.time() > self.end_time:
+                    # Stop scheduling if we exceed end_time
+                    break
+            
+            times.append({
+                'project_index': idx,
+                'project_id': project['id'],
+                'project_source': project['source'],
+                'start_time': current_time.strftime('%H:%M'),
+                'end_time': project_end.strftime('%H:%M'),
+            })
+            
+            current_time = project_end
+        
+        return times
 
     def get_all_projects(self) -> list:
         """

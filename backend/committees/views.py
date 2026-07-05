@@ -257,6 +257,9 @@ class CommitteeViewSet(viewsets.ModelViewSet):
                 'projects_count': committee.projects_count,
                 'date': committee.date.strftime('%Y-%m-%d') if committee.date else None,
                 'time': committee.time.strftime('%H:%M') if committee.time else None,
+                'start_time': committee.start_time.strftime('%H:%M') if committee.start_time else None,
+                'end_time': committee.end_time.strftime('%H:%M') if committee.end_time else None,
+                'discussion_duration': committee.discussion_duration,
                 'location': committee.location,
             })
         
@@ -425,6 +428,9 @@ class ProjectsAssignmentView(APIView):
                 'project_type_ar': PROJECT_TYPE_AR.get(committee.project_type, committee.project_type),
                 'date': committee.date.strftime('%Y-%m-%d') if committee.date else None,
                 'time': committee.time.strftime('%H:%M') if committee.time else None,
+                'start_time': committee.start_time.strftime('%H:%M') if committee.start_time else None,
+                'end_time': committee.end_time.strftime('%H:%M') if committee.end_time else None,
+                'discussion_duration': committee.discussion_duration,
                 'location': committee.location,
                 'committee_members': [],  # سيتم ملؤها بجميع أعضاء اللجنة
             }
@@ -439,6 +445,16 @@ class ProjectsAssignmentView(APIView):
                 }
                 for doc in all_doctors
             ]
+            
+            # حساب أوقات المشاريع
+            project_times = committee.calculate_project_times()
+            times_map = {}
+            for pt in project_times:
+                key = f"{pt['project_source']}-{pt['project_id']}"
+                times_map[key] = {
+                    'scheduled_start': pt['start_time'],
+                    'scheduled_end': pt['end_time'],
+                }
             
             # المشاريع في هذه اللجنة
             for project in committee.get_all_projects():
@@ -478,6 +494,9 @@ class ProjectsAssignmentView(APIView):
                     'team_size': project.get('team_size', 1),
                     'team_size_stats': project.get('team_size_stats'),
                     'operational_status': project.get('operational_status'),
+                    # Add calculated times
+                    'scheduled_start': times_map.get(f"{project['source']}-{project['id']}", {}).get('scheduled_start'),
+                    'scheduled_end': times_map.get(f"{project['source']}-{project['id']}", {}).get('scheduled_end'),
                 })
 
         return Response({
@@ -510,6 +529,92 @@ class ExportProjectsAssignmentView(APIView):
 
 # ── Update Project Schedules ──────────────────────────────────────────────────
 
+# ── Doctor Schedule View ──────────────────────────────────────────────────────
+
+class DoctorScheduleView(APIView):
+    """
+    يعرض للدكتور المناقشات المسندة إليه (رئيساً أو عضواً) مع أوقاتها.
+    GET /api/committees/my-schedule/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if getattr(user, 'role', None) not in ('doctor', 'dean'):
+            return Response({'detail': 'مسموح للدكاترة فقط.'}, status=status.HTTP_403_FORBIDDEN)
+
+        semester = request.query_params.get('semester')
+
+        # اللجان التي هو رئيسها أو عضو فيها
+        chaired_qs = Committee.objects.filter(chair=user)
+        member_qs  = Committee.objects.filter(members=user)
+        committees_qs = (chaired_qs | member_qs).distinct()
+
+        if semester:
+            committees_qs = committees_qs.filter(semester=semester)
+
+        committees_qs = committees_qs.order_by('date', 'start_time')
+
+        result = []
+        for c in committees_qs:
+            my_role = 'chair' if c.chair_id == user.id else 'member'
+
+            # كل أعضاء اللجنة
+            all_doctors = c.get_all_doctors()
+
+            # حساب أوقات المشاريع
+            project_times = c.calculate_project_times()
+            times_map = {}
+            for pt in project_times:
+                key = f"{pt['project_source']}-{pt['project_id']}"
+                times_map[key] = {'start': pt['start_time'], 'end': pt['end_time']}
+
+            projects = []
+            for p in c.get_all_projects():
+                key = f"{p['source']}-{p['id']}"
+                t   = times_map.get(key, {})
+                students = [
+                    {'name': s['name'], 'is_leader': s.get('is_leader', False)}
+                    for s in p.get('students', [])
+                    if s.get('status', 'active') == 'active'
+                ]
+                supervisors = [sv['name'] for sv in p.get('supervisors', [])]
+                projects.append({
+                    'id':              p['id'],
+                    'source':          p['source'],
+                    'title':           p['title'],
+                    'students':        students,
+                    'supervisors':     supervisors,
+                    'scheduled_start': t.get('start'),
+                    'scheduled_end':   t.get('end'),
+                })
+
+            result.append({
+                'id':               c.id,
+                'committee_type':   c.committee_type,
+                'committee_type_ar': COMMITTEE_TYPE_AR.get(c.committee_type, c.committee_type),
+                'department':       c.department,
+                'department_ar':    DEPARTMENT_AR.get(c.department, c.department),
+                'project_type_ar':  PROJECT_TYPE_AR.get(c.project_type, c.project_type),
+                'semester':         c.semester,
+                'my_role':          my_role,
+                'my_role_ar':       'رئيس اللجنة' if my_role == 'chair' else 'عضو',
+                'date':             c.date.strftime('%Y-%m-%d') if c.date else None,
+                'start_time':       c.start_time.strftime('%H:%M') if c.start_time else None,
+                'end_time':         c.end_time.strftime('%H:%M') if c.end_time else None,
+                'location':         c.location,
+                'status':           c.status,
+                'discussion_duration': c.discussion_duration,
+                'doctors':          all_doctors,
+                'projects':         projects,
+                'projects_count':   len(projects),
+            })
+
+        return Response({'committees': result, 'total': len(result)})
+
+
+# ── Update Project Schedules ──────────────────────────────────────────────────
+
 class UpdateProjectSchedulesView(APIView):
     """
     Update date, time, and location for multiple projects in committees.
@@ -524,6 +629,8 @@ class UpdateProjectSchedulesView(APIView):
               "project_id": 123,
               "date": "2025-01-15",  # optional
               "time": "10:30",       # optional
+              "start_time": "09:00", # optional - ساعة البدء
+              "end_time": "12:00",   # optional - ساعة النهاية
               "location": "Room 301" # optional
             },
             ...
@@ -570,6 +677,23 @@ class UpdateProjectSchedulesView(APIView):
                 schedule_updated = True
             if 'time' in update and update['time']:
                 committee.time = update['time']
+                schedule_updated = True
+            if 'start_time' in update and update['start_time']:
+                committee.start_time = update['start_time']
+                schedule_updated = True
+            if 'end_time' in update and update['end_time']:
+                committee.end_time = update['end_time']
+                schedule_updated = True
+            if 'discussion_duration' in update:
+                # Handle both empty string and None
+                val = update['discussion_duration']
+                if val == '' or val is None:
+                    committee.discussion_duration = None
+                else:
+                    try:
+                        committee.discussion_duration = int(val)
+                    except (ValueError, TypeError):
+                        committee.discussion_duration = None
                 schedule_updated = True
             if 'location' in update and update['location']:
                 committee.location = update['location']

@@ -463,3 +463,56 @@ export const updateProjectSchedules = (updates) =>
 export function getAccessToken() {
   return _accessToken;
 }
+
+// ── Doctor Committee Schedule ─────────────────────────────────────────────────
+export const fetchMyCommitteeSchedule = (semester) =>
+  api.get('/api/committees/my-schedule/', { params: semester ? { semester } : {} });
+
+// ── Grades ────────────────────────────────────────────────────────────────────
+export const uploadProjectReport = (formData) =>
+  api.post('/api/grades/report/upload/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+export const fetchProjectReport = (source, pid) =>
+  api.get(`/api/grades/report/${source}/${pid}/`);
+
+export const downloadProjectReport = (source, pid) =>
+  api.get(`/api/grades/report/${source}/${pid}/download/`, { responseType: 'blob' });
+
+export const enterGrade = (data) =>
+  api.post('/api/grades/enter/', data);
+
+export const enterBulkGrades = (data) =>
+  api.post('/api/grades/enter/bulk/', data);
+
+// Collective grading
+export const fetchGradingModes = () =>
+  api.get('/api/grades/grading-mode/');
+
+export const setGradingMode = (committee_id, collective) =>
+  api.post('/api/grades/grading-mode/', { committee_id, collective });
+
+export const submitGradeDraft = (data) =>
+  api.post('/api/grades/draft/', data);
+
+export const fetchGradeDrafts = (committee_id, project_source, project_id, committee_type) =>
+  api.get('/api/grades/draft/', { params: { committee_id, project_source, project_id, committee_type } });
+
+export const fetchProjectGrades = (source, pid) =>
+  api.get(`/api/grades/project/${source}/${pid}/`);
+
+export const fetchMyCommitteeGrades = (semester) =>
+  api.get('/api/grades/my-committee-grades/', { params: semester ? { semester } : {} });
+
+export const fetchMyGrades = () =>
+  api.get('/api/grades/my-grades/');
+
+export const fetchGradesSummary = (semester) =>
+  api.get('/api/grades/summary/', { params: semester ? { semester } : {} });
+
+export const exportGrades = (semester) =>
+  api.get('/api/grades/export/', {
+    params: semester ? { semester } : {},
+    responseType: 'blob',
+  });

@@ -61,7 +61,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'gitlab_integration',
     'project_imports',
-    'committees'
+    'committees',
+    'grades',
 ]
 
 AUTH_USER_MODEL = 'accounts.User'

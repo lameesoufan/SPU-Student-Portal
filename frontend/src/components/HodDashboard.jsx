@@ -32,6 +32,7 @@ import WorkflowBuilder from './WorkflowBuilder';
 import ApplyWorkflow from './ApplyWorkflow';
 import WorkflowReview from './WorkflowReview';import MyIdeas from './MyIdeas';         
 import SubmitIdea from './SubmitIdea';
+import CollectiveGradingSettings from './CollectiveGradingSettings';
 import { useTheme } from '../ThemeContext';
 import {
   fetchUnreadCount,
@@ -83,6 +84,7 @@ const NAV_ITEMS = [
   { id: 'workflow', label: 'Workflow Builder', IconComp: Icon.BarChart },
   { id: 'applyworkflow', label: 'Apply Workflow', IconComp: Icon.ClipboardList },
   { id: 'reviewworkflow', label: 'Review Workflows', IconComp: Icon.CheckCircle },
+  { id: 'grading-settings', label: 'إعدادات التقييم', IconComp: Icon.CheckCircle },
 ];
 
 /* ── Module Cards ── */
@@ -312,6 +314,13 @@ usePolling(async () => {
       return (
         <div className="std-page-wrapper">
           <WorkflowReview onBack={goBack} />
+        </div>
+      );
+    }
+    if (page === 'grading-settings') {
+      return (
+        <div className="std-page-wrapper">
+          <CollectiveGradingSettings user={user} />
         </div>
       );
     }

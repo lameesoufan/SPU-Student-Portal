@@ -215,7 +215,7 @@ class CommitteeSerializer(serializers.ModelSerializer):
             'semester',
             'chair', 'members', 'doctors',
             'projects', 'projects_count',
-            'date', 'time', 'location', 'status',
+            'date', 'time', 'start_time', 'end_time', 'discussion_duration', 'location', 'status',
             'is_scheduled', 'has_chair',
             'created_at', 'updated_at',
         ]
@@ -229,7 +229,29 @@ class CommitteeSerializer(serializers.ModelSerializer):
         return obj.get_all_doctors()
 
     def get_projects(self, obj):
-        return obj.get_all_projects()
+        projects = obj.get_all_projects()
+        project_times = obj.calculate_project_times()
+        
+        # Map project times by project_id and source
+        times_map = {}
+        for pt in project_times:
+            key = f"{pt['project_source']}-{pt['project_id']}"
+            times_map[key] = {
+                'start_time': pt['start_time'],
+                'end_time': pt['end_time'],
+            }
+        
+        # Add calculated times to each project
+        for project in projects:
+            key = f"{project['source']}-{project['id']}"
+            if key in times_map:
+                project['scheduled_start'] = times_map[key]['start_time']
+                project['scheduled_end'] = times_map[key]['end_time']
+            else:
+                project['scheduled_start'] = None
+                project['scheduled_end'] = None
+        
+        return projects
 
     def get_committee_type_ar(self, obj):
         return COMMITTEE_TYPE_AR.get(obj.committee_type, obj.committee_type)
@@ -243,9 +265,23 @@ class CommitteeSerializer(serializers.ModelSerializer):
 
 class CommitteeScheduleUpdateSerializer(serializers.ModelSerializer):
     """Lightweight serializer for inline editing of date/time/location/status."""
+    discussion_duration = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+    
     class Meta:
         model = Committee
-        fields = ['date', 'time', 'location', 'status']
+        fields = ['date', 'time', 'start_time', 'end_time', 'discussion_duration', 'location', 'status']
+    
+    def validate_discussion_duration(self, value):
+        """Allow empty string to be converted to None"""
+        if value == '' or value is None:
+            return None
+        try:
+            val = int(value)
+            if val < 1:
+                raise serializers.ValidationError("Duration must be at least 1 minute")
+            return val
+        except (ValueError, TypeError):
+            return None
 
 
 class CommitteeDoctorsUpdateSerializer(serializers.Serializer):

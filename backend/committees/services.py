@@ -1060,7 +1060,7 @@ def export_projects_assignment_excel(semester: str | None = None) -> bytes:
     headers = [
         '#', 'الطلاب', 'المشروع', 'المشرفين', 
         'اللجنة', 'نوع اللجنة', 'القسم',
-        'أعضاء اللجنة', 'التاريخ', 'الوقت', 'المكان'
+        'أعضاء اللجنة', 'التاريخ', 'وقت بداية المناقشة', 'وقت نهاية المناقشة', 'المكان'
     ]
     ws.append(headers)
     
@@ -1092,6 +1092,16 @@ def export_projects_assignment_excel(semester: str | None = None) -> bytes:
         # Get all projects
         projects = committee.get_all_projects()
         
+        # Calculate project times
+        project_times = committee.calculate_project_times()
+        times_map = {}
+        for pt in project_times:
+            key = f"{pt['project_source']}-{pt['project_id']}"
+            times_map[key] = {
+                'scheduled_start': pt['start_time'],
+                'scheduled_end': pt['end_time'],
+            }
+        
         for project in projects:
             row_num += 1
             
@@ -1115,6 +1125,11 @@ def export_projects_assignment_excel(semester: str | None = None) -> bytes:
             else:
                 supervisors_text = '—'
             
+            # Get calculated times for this project
+            key = f"{project['source']}-{project['id']}"
+            scheduled_start = times_map.get(key, {}).get('scheduled_start', '—')
+            scheduled_end = times_map.get(key, {}).get('scheduled_end', '—')
+            
             row_data = [
                 row_num - 1,  # Number
                 students_text,  # All team members (leader marked with 👤)
@@ -1125,7 +1140,8 @@ def export_projects_assignment_excel(semester: str | None = None) -> bytes:
                 DEPARTMENT_AR.get(committee.department, committee.department),
                 members_text if members_text else '—',
                 committee.date.strftime('%Y-%m-%d') if committee.date else '—',
-                committee.time.strftime('%H:%M') if committee.time else '—',
+                scheduled_start,  # Calculated start time for this project
+                scheduled_end,    # Calculated end time for this project
                 committee.location if committee.location else '—',
             ]
             ws.append(row_data)
@@ -1137,7 +1153,7 @@ def export_projects_assignment_excel(semester: str | None = None) -> bytes:
                 cell.border = border
 
     # Column widths
-    widths = [6, 20, 35, 20, 30, 15, 18, 35, 14, 10, 20]
+    widths = [6, 20, 35, 20, 30, 15, 18, 35, 14, 16, 16, 20]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
     
@@ -1146,7 +1162,7 @@ def export_projects_assignment_excel(semester: str | None = None) -> bytes:
 
     # If no data
     if ws.max_row == 1:
-        ws.append(['لا توجد مشاريع موزعة', '', '', '', '', '', '', '', '', '', ''])
+        ws.append(['لا توجد مشاريع موزعة', '', '', '', '', '', '', '', '', '', '', ''])
 
     # Save to buffer
     buf = io.BytesIO()

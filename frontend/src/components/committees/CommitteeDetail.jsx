@@ -29,7 +29,7 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
 
   // Inline editing for schedule
   const [editingSchedule, setEditingSchedule] = useState(false);
-  const [scheduleDraft, setScheduleDraft] = useState({ date: '', time: '', location: '', status: 'draft' });
+  const [scheduleDraft, setScheduleDraft] = useState({ date: '', time: '', start_time: '', end_time: '', discussion_duration: '', location: '', status: 'draft' });
 
   /* ── Load committee ──────────────────────────────────────────────────── */
   const load = useCallback(async () => {
@@ -42,6 +42,9 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
       setScheduleDraft({
         date: res.data.date || '',
         time: res.data.time || '',
+        start_time: res.data.start_time || '',
+        end_time: res.data.end_time || '',
+        discussion_duration: res.data.discussion_duration || '',
         location: res.data.location || '',
         status: res.data.status || 'draft',
       });
@@ -72,7 +75,12 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
     if (busy || !committee) return;
     setBusy(true);
     try {
-      const res = await updateCommittee(committee.id, scheduleDraft);
+      // Clean up the data before sending
+      const cleanedData = {
+        ...scheduleDraft,
+        discussion_duration: scheduleDraft.discussion_duration ? parseInt(scheduleDraft.discussion_duration) : null,
+      };
+      const res = await updateCommittee(committee.id, cleanedData);
       setCommittee(res.data);
       setEditingSchedule(false);
       setToast({ type: 'success', msg: 'Schedule saved successfully.' });
@@ -244,6 +252,11 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
                               <Users size={11} /> {p.students.join('، ')}
                             </span>
                           )}
+                          {p.scheduled_start && p.scheduled_end && (
+                            <span className="ccd-project-meta-item" style={{ color: '#667EEA', fontWeight: 500 }}>
+                              <Clock size={11} /> {p.scheduled_start} - {p.scheduled_end}
+                            </span>
+                          )}
                           <span className="ccd-project-meta-item">
                             #{p.id}
                           </span>
@@ -358,6 +371,39 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
                     />
                   </div>
                   <div className="ccd-edit-field">
+                    <label>ساعة البدء</label>
+                    <input
+                      type="time"
+                      className="ccd-edit-input"
+                      value={scheduleDraft.start_time}
+                      onChange={(e) => setScheduleDraft({ ...scheduleDraft, start_time: e.target.value })}
+                    />
+                  </div>
+                  <div className="ccd-edit-field">
+                    <label>ساعة النهاية</label>
+                    <input
+                      type="time"
+                      className="ccd-edit-input"
+                      value={scheduleDraft.end_time}
+                      onChange={(e) => setScheduleDraft({ ...scheduleDraft, end_time: e.target.value })}
+                    />
+                  </div>
+                  <div className="ccd-edit-field">
+                    <label>مدة المناقشة (بالدقائق)</label>
+                    <input
+                      type="number"
+                      className="ccd-edit-input"
+                      placeholder="مثال: 15، 30، 45"
+                      min="5"
+                      step="5"
+                      value={scheduleDraft.discussion_duration}
+                      onChange={(e) => setScheduleDraft({ ...scheduleDraft, discussion_duration: e.target.value })}
+                    />
+                    <small style={{ fontSize: '0.8em', color: '#888', marginTop: '4px', display: 'block' }}>
+                      سيتم حساب وقت كل مشروع تلقائياً بناءً على المدة المحددة
+                    </small>
+                  </div>
+                  <div className="ccd-edit-field">
                     <label>Room / Location</label>
                     <input
                       type="text"
@@ -394,6 +440,9 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
                         setScheduleDraft({
                           date: committee.date || '',
                           time: committee.time || '',
+                          start_time: committee.start_time || '',
+                          end_time: committee.end_time || '',
+                          discussion_duration: committee.discussion_duration || '',
                           location: committee.location || '',
                           status: committee.status || 'draft',
                         });
@@ -422,6 +471,27 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
                       <Clock size={14} className="ccd-schedule-row-icon" />
                       <span>Time</span>
                       <span className="ccd-schedule-row-label">{committee.time}</span>
+                    </div>
+                  )}
+                  {committee.start_time && (
+                    <div className="ccd-schedule-row">
+                      <Clock size={14} className="ccd-schedule-row-icon" />
+                      <span>ساعة البدء</span>
+                      <span className="ccd-schedule-row-label">{committee.start_time}</span>
+                    </div>
+                  )}
+                  {committee.end_time && (
+                    <div className="ccd-schedule-row">
+                      <Clock size={14} className="ccd-schedule-row-icon" />
+                      <span>ساعة النهاية</span>
+                      <span className="ccd-schedule-row-label">{committee.end_time}</span>
+                    </div>
+                  )}
+                  {committee.discussion_duration && (
+                    <div className="ccd-schedule-row">
+                      <Clock size={14} className="ccd-schedule-row-icon" />
+                      <span>مدة المناقشة</span>
+                      <span className="ccd-schedule-row-label">{committee.discussion_duration} دقيقة</span>
                     </div>
                   )}
                   {committee.location ? (

@@ -169,11 +169,20 @@ export default function ProjectsAssignment({ onBack }) {
       // Prepare updates array
       const updates = Object.entries(editedProjects).map(([index, values]) => {
         const project = filteredProjects[parseInt(index)];
+        
+        // Clean up discussion_duration - convert to integer or null
+        const cleanedValues = { ...values };
+        if ('discussion_duration' in cleanedValues) {
+          cleanedValues.discussion_duration = cleanedValues.discussion_duration 
+            ? parseInt(cleanedValues.discussion_duration) 
+            : null;
+        }
+        
         return {
           committee_id: project.committee_id,
           project_source: project.project_source,
           project_id: project.project_id,
-          ...values
+          ...cleanedValues
         };
       });
 
@@ -397,7 +406,8 @@ export default function ProjectsAssignment({ onBack }) {
                 <th>Department</th>
                 <th>Committee Members</th>
                 <th>Date</th>
-                <th>Time</th>
+                <th>وقت بداية المناقشة</th>
+                <th>وقت نهاية المناقشة</th>
                 <th>Location</th>
                 {!editMode && <th>Actions</th>}
               </tr>
@@ -498,17 +508,11 @@ export default function ProjectsAssignment({ onBack }) {
                         ) : '—'
                       )}
                     </td>
-                    <td>
-                      {editMode ? (
-                        <input
-                          type="time"
-                          className="pa-inline-input"
-                          value={getDisplayValue(index, project, 'time')}
-                          onChange={(e) => handleEditChange(index, 'time', e.target.value)}
-                        />
-                      ) : (
-                        getDisplayValue(index, project, 'time') || '—'
-                      )}
+                    <td style={{ backgroundColor: '#f0f9ff', fontWeight: 500, color: '#0369a1' }}>
+                      {project.scheduled_start || '—'}
+                    </td>
+                    <td style={{ backgroundColor: '#f0f9ff', fontWeight: 500, color: '#0369a1' }}>
+                      {project.scheduled_end || '—'}
                     </td>
                     <td>
                       {editMode ? (
