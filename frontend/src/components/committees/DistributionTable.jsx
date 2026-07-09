@@ -350,7 +350,8 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
                     <tr>
                       <th>Committee</th>
                       <th>Status</th>
-                      <th>Schedule</th>
+                      <th>Schedule (manual)</th>
+                      <th>Scheduled (CP-SAT)</th>
                       <th>Faculty</th>
                       <th>Projects</th>
                       <th style={{ textAlign: 'left' }}>Actions</th>
@@ -439,6 +440,30 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
                                 </span>
                               )}
                             </div>
+                          </td>
+
+                          {/* Scheduled (CP-SAT) */}
+                          <td>
+                            {c.scheduled_start ? (
+                              <div className="cdt-schedule">
+                                <span className="cdt-schedule-row" style={{ color: '#0369a1', fontWeight: 600 }}>
+                                  <Calendar size={12} /> {new Date(c.scheduled_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                </span>
+                                <span className="cdt-schedule-row" style={{ color: '#0369a1', fontWeight: 600 }}>
+                                  <Clock size={12} /> {new Date(c.scheduled_start).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} - {new Date(c.scheduled_end).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                {c.room && (
+                                  <span className="cdt-schedule-row">
+                                    <MapPin size={12} /> {c.room_detail?.name || c.room_name || c.room}
+                                  </span>
+                                )}
+                                {c.manually_scheduled && (
+                                  <span style={{ fontSize: 10, color: '#f59e0b', fontWeight: 600 }}>✎ معدّل يدوياً</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>—</span>
+                            )}
                           </td>
 
                           {/* Doctors */}

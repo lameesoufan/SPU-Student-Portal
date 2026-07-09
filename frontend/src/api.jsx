@@ -406,7 +406,9 @@ export const previewTemplateDistribution = (id) =>
   api.get(`/api/committees/templates/${id}/preview_distribution/`);
 
 export const fetchCommittees = (params = {}) =>
-  api.get('/api/committees/committees/', { params });
+  api.get('/api/committees/committees/', {
+    params: { ...params, _t: Date.now() },  // cache-busting
+  });
 
 export const fetchCommittee = (id) =>
   api.get(`/api/committees/committees/${id}/`);
@@ -516,3 +518,106 @@ export const exportGrades = (semester) =>
     params: semester ? { semester } : {},
     responseType: 'blob',
   });
+
+// ── Scheduling: Rooms ─────────────────────────────────────────────────────────
+export const fetchRooms = (params = {}) =>
+  api.get('/api/committees/rooms/', { params });
+
+export const fetchRoom = (id) =>
+  api.get(`/api/committees/rooms/${id}/`);
+
+export const createRoom = (data) =>
+  api.post('/api/committees/rooms/', data);
+
+export const updateRoom = (id, data) =>
+  api.patch(`/api/committees/rooms/${id}/`, data);
+
+export const deleteRoom = (id) =>
+  api.delete(`/api/committees/rooms/${id}/`);
+
+// ── Scheduling: Doctor availability (Dean manages any doctor) ────────────────
+export const fetchDoctorAvailability = (doctorId) =>
+  api.get('/api/committees/availability/', { params: doctorId ? { doctor_id: doctorId } : {} });
+
+export const createDoctorAvailability = (data) =>
+  api.post('/api/committees/availability/', data);
+
+export const deleteDoctorAvailability = (id) =>
+  api.delete(`/api/committees/availability/${id}/`);
+
+export const fetchDoctorExceptions = (doctorId) =>
+  api.get('/api/committees/availability/exceptions/', { params: doctorId ? { doctor_id: doctorId } : {} });
+
+export const createDoctorException = (data) =>
+  api.post('/api/committees/availability/exceptions/', data);
+
+export const deleteDoctorException = (id) =>
+  api.delete(`/api/committees/availability/exceptions/${id}/`);
+
+// ── Scheduling: Doctor self-availability ─────────────────────────────────────
+export const fetchMyAvailability = () =>
+  api.get('/api/committees/my-availability/');
+
+export const setMyAvailability = (weekdays) =>
+  api.post('/api/committees/my-availability/', { weekdays });
+
+export const addMyAvailabilityDay = (weekday) =>
+  api.post('/api/committees/my-availability/', { weekday });
+
+export const deleteMyAvailability = (id) =>
+  api.delete(`/api/committees/my-availability/${id}/`);
+
+export const fetchMyExceptions = () =>
+  api.get('/api/committees/my-availability/exceptions/');
+
+export const createMyException = (data) =>
+  api.post('/api/committees/my-availability/exceptions/', data);
+
+export const deleteMyException = (id) =>
+  api.delete(`/api/committees/my-availability/exceptions/${id}/`);
+
+// ── Scheduling: Solver settings ──────────────────────────────────────────────
+export const fetchSolverSettings = (params = {}) =>
+  api.get('/api/committees/solver-settings/', { params });
+
+export const fetchSolverSetting = (id) =>
+  api.get(`/api/committees/solver-settings/${id}/`);
+
+export const createSolverSettings = (data) =>
+  api.post('/api/committees/solver-settings/', data);
+
+export const updateSolverSettings = (id, data) =>
+  api.patch(`/api/committees/solver-settings/${id}/`, data);
+
+export const deleteSolverSettings = (id) =>
+  api.delete(`/api/committees/solver-settings/${id}/`);
+
+// ── Scheduling: Preview / Apply / Reject ─────────────────────────────────────
+export const schedulePreview = (data) =>
+  api.post('/api/committees/schedule/preview/', data);
+
+export const scheduleApply = (runId) =>
+  api.post(`/api/committees/schedule/${runId}/apply/`);
+
+export const scheduleReject = (runId) =>
+  api.post(`/api/committees/schedule/${runId}/reject/`);
+
+// ── Scheduling: Runs history ─────────────────────────────────────────────────
+export const fetchSchedulingRuns = (params = {}) =>
+  api.get('/api/committees/schedule/runs/', { params });
+
+export const fetchSchedulingRun = (id) =>
+  api.get(`/api/committees/schedule/runs/${id}/`);
+
+// ── Wizard: Unified semester setup + scheduling ──────────────────────────────
+export const semesterSetup = (data) =>
+  api.post('/api/committees/semester-setup/', data);
+
+export const scheduleAll = (data) =>
+  api.post('/api/committees/schedule-all/', data);
+
+export const scheduleApplyAll = (semester) =>
+  api.post('/api/committees/schedule-apply-all/', { semester });
+
+export const scheduleRejectAll = (semester) =>
+  api.post('/api/committees/schedule-reject-all/', { semester });

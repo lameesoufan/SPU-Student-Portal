@@ -27,6 +27,10 @@ from .models import (
     CommitteeTemplate, Committee,
     COMMITTEE_TYPE_CHOICES, PROJECT_TYPE_CHOICES,
     COMMITTEE_TYPE_AR, PROJECT_TYPE_AR, DEPARTMENT_AR,
+    SCHEDULING_MODE_CHOICES,
+    Room, DoctorWeeklyAvailability, DoctorDateException,
+    SolverSettings, SchedulingRun,
+    WEEKDAYS, WEEKDAYS_AR,
 )
 
 
@@ -106,6 +110,8 @@ class CommitteeTemplateSerializer(serializers.ModelSerializer):
             'chair', 'chair_detail',  # chair for write, chair_detail for read
             'members', 'members_detail',  # members for write, members_detail for read
             'is_approved',
+            'scheduling_mode',  # single | multi
+            'discussion_duration',  # minutes — required for solver
             'created_by', 'created_at', 'updated_at',
             # computed
             'committees_total', 'total_projects_assigned',
@@ -196,6 +202,7 @@ class CommitteeSerializer(serializers.ModelSerializer):
     template_id     = serializers.IntegerField(read_only=True)
     chair           = DoctorBriefSerializer(read_only=True, allow_null=True)
     members         = DoctorBriefSerializer(many=True, read_only=True)
+    room_detail     = serializers.SerializerMethodField()
     doctors         = serializers.SerializerMethodField()
     projects        = serializers.SerializerMethodField()
     projects_count  = serializers.IntegerField(read_only=True)
@@ -216,14 +223,48 @@ class CommitteeSerializer(serializers.ModelSerializer):
             'chair', 'members', 'doctors',
             'projects', 'projects_count',
             'date', 'time', 'start_time', 'end_time', 'discussion_duration', 'location', 'status',
+            # CP-SAT scheduling fields
+            'room', 'room_detail',
+            'scheduled_start', 'scheduled_end',
+            'scheduling_group', 'manually_scheduled', 'last_scheduling_run',
             'is_scheduled', 'has_chair',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'template_id', 'sequence_number',
             'committee_type', 'department', 'project_type', 'semester',
+            'scheduled_start', 'scheduled_end',  # set only by the Solver
+            'scheduling_group', 'manually_scheduled', 'last_scheduling_run',
             'created_at', 'updated_at',
         ]
+
+    def get_room_detail(self, obj):
+        if obj.room_id is None:
+            return None
+        return {
+            'id': obj.room_id,
+            'name': obj.room.name,
+            'capacity': obj.room.capacity,
+        }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Add convenient fields for frontend display
+        if instance.scheduled_start:
+            data['scheduled_date'] = instance.scheduled_start.strftime('%Y-%m-%d')
+            data['scheduled_start_time'] = instance.scheduled_start.strftime('%H:%M')
+        else:
+            data['scheduled_date'] = None
+            data['scheduled_start_time'] = None
+        if instance.scheduled_end:
+            data['scheduled_end_time'] = instance.scheduled_end.strftime('%H:%M')
+        else:
+            data['scheduled_end_time'] = None
+        if instance.room_id:
+            data['room_name'] = instance.room.name
+        else:
+            data['room_name'] = None
+        return data
 
     def get_doctors(self, obj):
         return obj.get_all_doctors()
@@ -264,12 +305,18 @@ class CommitteeSerializer(serializers.ModelSerializer):
 
 
 class CommitteeScheduleUpdateSerializer(serializers.ModelSerializer):
-    """Lightweight serializer for inline editing of date/time/location/status."""
+    """Lightweight serializer for inline editing of date/time/location/status/room."""
     discussion_duration = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+    room = serializers.PrimaryKeyRelatedField(
+        queryset=Room.objects.all(), required=False, allow_null=True,
+    )
     
     class Meta:
         model = Committee
-        fields = ['date', 'time', 'start_time', 'end_time', 'discussion_duration', 'location', 'status']
+        fields = ['date', 'time', 'start_time', 'end_time', 'discussion_duration',
+                  'location', 'status', 'room',
+                  'scheduled_start', 'scheduled_end', 'manually_scheduled']
+        read_only_fields = ['scheduled_start', 'scheduled_end']
     
     def validate_discussion_duration(self, value):
         """Allow empty string to be converted to None"""
@@ -343,6 +390,9 @@ class DistributeRequestSerializer(serializers.Serializer):
                                           allow_blank=True)
     dry_run      = serializers.BooleanField(default=False,
         help_text='If true, returns the plan without writing to DB.')
+    scheduling_mode = serializers.ChoiceField(
+        choices=[('single', 'single'), ('multi', 'multi')], default='multi',
+        help_text='single: same committee for all 4 types. multi: 4 independent committees per project.')
 
 
 # ── Doctor workload ───────────────────────────────────────────────────────────
@@ -356,3 +406,107 @@ class DoctorWorkloadSerializer(serializers.Serializer):
     member_count       = serializers.IntegerField()
     total_committees   = serializers.IntegerField()
     workload_level     = serializers.CharField()  # low / med / high
+
+
+# ── Scheduling serializers ────────────────────────────────────────────────────
+
+class RoomSerializer(serializers.ModelSerializer):
+    """CRUD serializer for rooms."""
+    class Meta:
+        model = Room
+        fields = ['id', 'name', 'capacity', 'is_active', 'notes',
+                  'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class DoctorWeeklyAvailabilitySerializer(serializers.ModelSerializer):
+    """CRUD serializer for weekly recurring availability."""
+    weekday_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DoctorWeeklyAvailability
+        fields = ['id', 'doctor', 'weekday', 'weekday_display', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def get_weekday_display(self, obj):
+        return WEEKDAYS_AR.get(obj.weekday, str(obj.weekday))
+
+
+class DoctorDateExceptionSerializer(serializers.ModelSerializer):
+    """CRUD serializer for one-off date overrides."""
+    doctor_name = serializers.CharField(source='doctor.username', read_only=True)
+
+    class Meta:
+        model = DoctorDateException
+        fields = ['id', 'doctor', 'doctor_name', 'date', 'exception_type',
+                  'reason', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class SolverSettingsSerializer(serializers.ModelSerializer):
+    """Per (committee_type × semester) solver configuration."""
+    committee_type_ar = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SolverSettings
+        fields = ['id', 'name', 'committee_type', 'committee_type_ar', 'semester',
+                  'date_range_start', 'date_range_end', 'workdays',
+                  'daily_start', 'daily_end',
+                  'buffer_between_committees_minutes',
+                  'max_committees_per_doctor',
+                  'solver_timeout_seconds',
+                  'is_active', 'created_by',
+                  'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+    def get_committee_type_ar(self, obj):
+        return COMMITTEE_TYPE_AR.get(obj.committee_type, obj.committee_type)
+
+    def validate_workdays(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError("workdays must be a list of ints.")
+        for v in value:
+            if not isinstance(v, int) or v < 0 or v > 6:
+                raise serializers.ValidationError(
+                    f"Invalid weekday {v}. Must be int 0-6 (0=Monday, 6=Sunday)."
+                )
+        return value
+
+    def validate(self, attrs):
+        start = attrs.get('date_range_start',
+                          getattr(self.instance, 'date_range_start', None))
+        end   = attrs.get('date_range_end',
+                          getattr(self.instance, 'date_range_end', None))
+        if start and end and end < start:
+            raise serializers.ValidationError({
+                'date_range_end': 'date_range_end must be >= date_range_start.'
+            })
+        daily_start = attrs.get('daily_start',
+                                getattr(self.instance, 'daily_start', None))
+        daily_end   = attrs.get('daily_end',
+                                getattr(self.instance, 'daily_end', None))
+        if daily_start and daily_end and daily_end <= daily_start:
+            raise serializers.ValidationError({
+                'daily_end': 'daily_end must be > daily_start.'
+            })
+        return attrs
+
+
+class SchedulingRunSerializer(serializers.ModelSerializer):
+    """Read-only serializer for scheduling runs."""
+    committee_type_ar = serializers.SerializerMethodField()
+    requested_by_name  = serializers.CharField(source='requested_by.username',
+                                                read_only=True, allow_null=True)
+
+    class Meta:
+        model = SchedulingRun
+        fields = ['id', 'committee_type', 'committee_type_ar', 'semester',
+                  'solver_settings', 'status',
+                  'plan_json', 'infeasibility_report', 'summary_stats',
+                  'solver_status', 'solver_wall_time_sec',
+                  'requested_by', 'requested_by_name',
+                  'requested_at', 'applied_at']
+        read_only_fields = fields  # all read-only — created/updated only by the system
+
+    def get_committee_type_ar(self, obj):
+        return COMMITTEE_TYPE_AR.get(obj.committee_type, obj.committee_type)

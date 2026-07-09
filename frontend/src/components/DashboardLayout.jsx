@@ -114,9 +114,18 @@ export default function DashboardLayout({
         {/* Navigation */}
         <nav className="flex-1 py-3 px-3 overflow-y-auto overflow-x-hidden">
           {!collapsed && (
-            <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] px-3 pt-2 pb-2 mb-1">Menu</div>
+            <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] px-3 pt-2 pb-2 mb-1">القائمة</div>
           )}
-          {navItems.map((item, index) => (
+          {navItems.map((item, index) => {
+            if (item.section) {
+              if (collapsed) return <div key={`sep-${index}`} className="h-px bg-[var(--border)] mx-3 my-2" />;
+              return (
+                <div key={`sec-${index}`} className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.06em] px-3 pt-3 pb-1 mt-2 border-t border-[var(--border)]">
+                  {item.section}
+                </div>
+              );
+            }
+            return (
             <button
               key={item.id}
               className={`relative flex items-center gap-3 w-full py-2.5 px-3 border-none rounded-[var(--radius-sm)] bg-transparent text-[13px] font-medium cursor-pointer transition-all duration-200 text-left whitespace-nowrap overflow-hidden ${activePage === item.id ? 'bg-[var(--bg-hover)] text-[var(--info)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]'} ${mounted ? 'animate-[stdSlideIn_0.4s_ease_both]' : ''}`}
@@ -135,7 +144,8 @@ export default function DashboardLayout({
                 <span className="ml-auto bg-[var(--danger)] text-white text-[11px] font-semibold py-0 px-[7px] rounded-[10px] min-w-[18px] text-center">{unreadCount}</span>
               )}
             </button>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="h-px bg-[var(--border)] mx-4" />

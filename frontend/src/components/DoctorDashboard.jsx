@@ -32,6 +32,7 @@ import ApplyWorkflow from './ApplyWorkflow';
 import WorkflowReview from './WorkflowReview';
 import DoctorCommitteeSchedule from './committees/DoctorCommitteeSchedule';
 import GradeEntry from './committees/GradeEntry';
+import MyAvailabilityPage from './committees/MyAvailabilityPage';
 import { useTheme } from '../ThemeContext';
 import {
   fetchUnreadCount,
@@ -73,6 +74,7 @@ const NAV_ITEMS = [
   { id: 'applyworkflow', label: 'Apply Workflow', IconComp: Icon.ClipboardList },
   { id: 'reviewworkflow', label: 'Review Submissions', IconComp: Icon.CheckCircle },
   { id: 'committee-schedule', label: 'جدول المناقشات', IconComp: Icon.Calendar },
+  { id: 'my-availability', label: 'توفري الأسبوعي', IconComp: Icon.Calendar },
   { id: 'grade-entry', label: 'إدخال العلامات', IconComp: Icon.CheckCircle },
 ];
 
@@ -144,6 +146,7 @@ usePolling(async () => {
     if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword onBack={goBack} /></div>;
     if (page === 'committee-schedule') return <div className="std-page-wrapper"><DoctorCommitteeSchedule onBack={goBack} /></div>;
     if (page === 'grade-entry') return <div className="std-page-wrapper"><GradeEntry onBack={goBack} /></div>;
+    if (page === 'my-availability') return <div className="std-page-wrapper"><MyAvailabilityPage user={user} onBack={goBack} /></div>;
     return (
       <div className="std-content">
         <div className={`std-hero ${mounted ? 'std-animate-in' : ''}`}>

@@ -55,6 +55,8 @@ export default function CommitteesDashboard({ onNavigate, user }) {
   const [busy, setBusy]       = useState(false);
   const [toast, setToast]     = useState(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showModeDialog, setShowModeDialog] = useState(false);
+  const [selectedMode, setSelectedMode] = useState('multi');  // 'single' | 'multi'
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,21 +82,23 @@ export default function CommitteesDashboard({ onNavigate, user }) {
   /* ── Actions ─────────────────────────────────────────────────────────── */
   const handleDistribute = async () => {
     if (busy) return;
-    setShowConfirmDialog(true);
+    setShowModeDialog(true);  // first ask the dean for scheduling mode
   };
 
   const confirmDistribute = async () => {
     setShowConfirmDialog(false);
     setBusy(true);
     try {
-      const res = await distributeProjects({ dry_run: false });
+      const res = await distributeProjects({ dry_run: false, scheduling_mode: selectedMode });
       const distributed    = res.data?.distributed_projects    ?? 0;
       const undistributed  = res.data?.undistributed_projects  ?? 0;
       const processed      = res.data?.processed_templates     ?? 0;
       const exclusionMsg   = distributionExclusionMessage(res.data?.exclusions);
+      const modeLabel = selectedMode === 'single' ? 'نفس اللجنة للأنواع الأربعة' : 'لجان مستقلة';
+      const singleCreated = res.data?.single_mode_committees_created || 0;
       const msg = undistributed > 0
-        ? `Distributed ${distributed} projects to ${processed} compositions. (${undistributed} projects without suitable committee — check warnings.)`
-        : `Successfully distributed ${distributed} projects to ${processed} compositions.`;
+        ? `تم توزيع ${distributed} مشروع على ${processed} تركيب (${modeLabel}). (${undistributed} مشروع بدون لجنة مناسبة)`
+        : `تم توزيع ${distributed} مشروع بنجاح (${modeLabel})${singleCreated ? ' · ' + singleCreated + ' لجنة منشأة للوضع الموحّد' : ''}`;
       setToast({ type: 'success', msg: [msg, exclusionMsg].filter(Boolean).join(' ') });
       await load();
     } catch (err) {
@@ -461,6 +465,102 @@ export default function CommitteesDashboard({ onNavigate, user }) {
             ? <CheckCircle2 size={18} />
             : <AlertTriangle size={18} />}
           {toast.msg}
+        </div>
+      )}
+
+      {/* ── Scheduling Mode Selection Dialog ─────────────────────────────── */}
+      {showModeDialog && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(4px)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 10000,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 16, padding: 28,
+            maxWidth: 540, width: 'calc(100% - 32px)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+            direction: 'rtl',
+          }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: 20, fontWeight: 700, color: '#1e293b' }}>
+              اختر طريقة التوزيع
+            </h3>
+            <p style={{ margin: '0 0 20px 0', fontSize: 14, color: '#64748b', lineHeight: 1.6 }}>
+              هل نفس اللجنة تقيّم المشروع في كل الأنواع الأربعة (سيمينار 1، سيمينار 2، فنية، نهائية)،
+              أم لجان مختلفة لكل نوع؟
+            </p>
+
+            {/* Option A: Single */}
+            <div
+              onClick={() => setSelectedMode('single')}
+              style={{
+                padding: 16, borderRadius: 12, cursor: 'pointer', marginBottom: 10,
+                border: `2px solid ${selectedMode === 'single' ? '#667eea' : '#e2e8f0'}`,
+                background: selectedMode === 'single' ? '#ede9fe' : '#fff',
+                transition: 'all 0.2s',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <div style={{
+                  width: 20, height: 20, borderRadius: '50%',
+                  border: `2px solid ${selectedMode === 'single' ? '#667eea' : '#cbd5e1'}`,
+                  background: selectedMode === 'single' ? '#667eea' : '#fff',
+                }} />
+                <strong style={{ fontSize: 15, color: '#1e293b' }}>نفس اللجنة للأنواع الأربعة</strong>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.5, paddingLeft: 30 }}>
+                نفس الأطباء يقيّمون المشروع في 4 جلسات بأنواع مختلفة.
+                ينشئ النظام 4 لجان تلقائياً لكل مشروع بنفس الأطباء.
+              </p>
+            </div>
+
+            {/* Option B: Multi */}
+            <div
+              onClick={() => setSelectedMode('multi')}
+              style={{
+                padding: 16, borderRadius: 12, cursor: 'pointer', marginBottom: 20,
+                border: `2px solid ${selectedMode === 'multi' ? '#667eea' : '#e2e8f0'}`,
+                background: selectedMode === 'multi' ? '#ede9fe' : '#fff',
+                transition: 'all 0.2s',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <div style={{
+                  width: 20, height: 20, borderRadius: '50%',
+                  border: `2px solid ${selectedMode === 'multi' ? '#667eea' : '#cbd5e1'}`,
+                  background: selectedMode === 'multi' ? '#667eea' : '#fff',
+                }} />
+                <strong style={{ fontSize: 15, color: '#1e293b' }}>لجان مختلفة لكل نوع</strong>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.5, paddingLeft: 30 }}>
+                كل نوع لجنة له تشكيلة منفصلة بأطباء قد يكونون مختلفين.
+                التشكيلة تحدد نوع اللجنة (سيمينار 1، 2، فنية، نهائية).
+              </p>
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowModeDialog(false)}
+                style={{
+                  padding: '11px 24px', borderRadius: 10,
+                  border: '1.5px solid #e2e8f0', background: '#fff',
+                  color: '#64748b', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                }}
+              >إلغاء</button>
+              <button
+                onClick={() => {
+                  setShowModeDialog(false);
+                  setShowConfirmDialog(true);  // proceed to confirmation
+                }}
+                style={{
+                  padding: '11px 28px', borderRadius: 10, border: 'none',
+                  background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                  color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(102,126,234,0.4)',
+                }}
+              >متابعة</button>
+            </div>
+          </div>
         </div>
       )}
 

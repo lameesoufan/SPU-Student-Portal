@@ -19,6 +19,9 @@ import {
   Info,
   Building2,
   ShieldAlert,
+  DoorClosed,
+  Settings as SettingsIcon,
+  Sparkles,
 } from 'lucide-react';
 import DashboardLayout from './DashboardLayout';
 import usePageHistory from '../hooks/usePageHistory';
@@ -32,6 +35,11 @@ import TemplateForm from './committees/TemplateForm';
 import DistributionTable from './committees/DistributionTable';
 import CommitteeDetail from './committees/CommitteeDetail';
 import ProjectsAssignment from './committees/ProjectsAssignment';
+import RoomsManagement from './committees/RoomsManagement';
+import DoctorAvailabilityPage from './committees/DoctorAvailabilityPage';
+import SolverSettingsPage from './committees/SolverSettingsPage';
+import SchedulePage from './committees/SchedulePage';
+import SemesterSetupWizard from './committees/SemesterSetupWizard';
 import StudentStatusManagement from './StudentStatusManagement';
 import GradesSummary from './GradesSummary';
 import { useTheme } from '../ThemeContext';
@@ -63,21 +71,29 @@ const Icon = {
   Info: Info,
   Building: Building2,
   StudentStatus: ShieldAlert,
+  Door: DoorClosed,
+  SolverSettings: SettingsIcon,
+  Schedule: Calendar,
+  Wizard: Sparkles,
 };
 
 /* ── Navigation Items ── */
 const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Overview', IconComp: Icon.Overview },
-  { id: 'committees', label: 'Committees', IconComp: Icon.Kanban },
-  { id: 'student-status', label: 'Student Status', IconComp: Icon.StudentStatus },
-  { id: 'import', label: 'Import Users', IconComp: Icon.Upload },
-  { id: 'import-projects', label: 'Import Projects', IconComp: Icon.ProjectImport },
-  { id: 'assign-hod', label: 'Assign HoD', IconComp: Icon.UserPlus },
-  { id: 'projects', label: 'All Projects', IconComp: Icon.Kanban },
-  { id: 'faculty', label: 'Faculty Overview', IconComp: Icon.Users },
-  { id: 'programs', label: 'Academic Programs', IconComp: Icon.BookOpen },
-  { id: 'analytics', label: 'Analytics', IconComp: Icon.BarChart },
+  { id: 'dashboard', label: 'نظرة عامة', IconComp: Icon.Overview },
+  { section: 'إدارة اللجان' },
+  { id: 'committees', label: 'التشكيلات والتوزيع', IconComp: Icon.Kanban },
+  { id: 'schedule', label: 'جدولة اللجان', IconComp: Icon.Schedule },
+  { id: 'rooms', label: 'القاعات', IconComp: Icon.Door },
+  { id: 'availability', label: 'توفر الدكاترة', IconComp: Icon.Users },
+  { section: 'الطلاب والمشاريع' },
+  { id: 'projects', label: 'كل المشاريع', IconComp: Icon.Kanban },
+  { id: 'student-status', label: 'حالة الطلاب', IconComp: Icon.StudentStatus },
   { id: 'grades-summary', label: 'علامات المشاريع', IconComp: Icon.CheckCircle },
+  { section: 'الإدارة' },
+  { id: 'import', label: 'استيراد مستخدمين', IconComp: Icon.Upload },
+  { id: 'import-projects', label: 'استيراد مشاريع', IconComp: Icon.ProjectImport },
+  { id: 'assign-hod', label: 'تعيين رؤساء أقسام', IconComp: Icon.UserPlus },
+  { id: 'faculty', label: 'الدكاترة', IconComp: Icon.Users },
 ];
 
 /* ── Module Cards ── */
@@ -305,6 +321,41 @@ usePolling(async () => {
       return (
         <div className="std-page-wrapper">
           <ProjectsAssignment onBack={() => setPage('committees')} />
+        </div>
+      );
+    }
+    if (page === 'rooms') {
+      return (
+        <div className="std-page-wrapper">
+          <RoomsManagement onBack={goBack} />
+        </div>
+      );
+    }
+    if (page === 'availability') {
+      return (
+        <div className="std-page-wrapper">
+          <DoctorAvailabilityPage onBack={goBack} />
+        </div>
+      );
+    }
+    if (page === 'solver-settings') {
+      return (
+        <div className="std-page-wrapper">
+          <SolverSettingsPage onBack={goBack} />
+        </div>
+      );
+    }
+    if (page === 'semester-wizard') {
+      return (
+        <div className="std-page-wrapper">
+          <SemesterSetupWizard onBack={goBack} />
+        </div>
+      );
+    }
+    if (page === 'schedule') {
+      return (
+        <div className="std-page-wrapper">
+          <SchedulePage onBack={goBack} />
         </div>
       );
     }

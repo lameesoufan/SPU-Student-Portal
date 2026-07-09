@@ -57,6 +57,12 @@ COMMITTEE_STATUS_CHOICES = [
     ('cancelled', 'Cancelled'),
 ]
 
+# Scheduling mode for templates
+SCHEDULING_MODE_CHOICES = [
+    ('single', 'Single — same committee across all 4 committee types'),
+    ('multi',  'Multi — 4 independent committees per project'),
+]
+
 # Arabic labels for serializers / exports
 COMMITTEE_TYPE_AR = {
     'seminar_1':        'سيمينار 1',
@@ -120,6 +126,16 @@ class CommitteeTemplate(models.Model):
     )
 
     is_approved                = models.BooleanField(default=False)
+    scheduling_mode            = models.CharField(
+        max_length=10, choices=SCHEDULING_MODE_CHOICES, default='multi',
+        help_text='single: نفس اللجنة تقيّم المشروع في 4 جلسات (أنواع مختلفة). '
+                  'multi: 4 لجان مستقلة لكل مشروع.',
+    )
+    discussion_duration        = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text='مدة المناقشة لكل مشروع بالدقائق (مثال: 15، 20، 30). '
+                  'مطلوبة لتشغيل الـ Solver — تُنتقل للـ Committees المُنشأة.',
+    )
     created_by                 = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -223,6 +239,34 @@ class Committee(models.Model):
 
     status         = models.CharField(max_length=15, choices=COMMITTEE_STATUS_CHOICES,
                                        default='draft')
+
+    # ── CP-SAT scheduling fields ────────────────────────────────────
+    room                = models.ForeignKey(
+        'committees.Room', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='committees',
+        help_text='القاعة المُجدوَلة (PROTECT: لا يمكن حذف قاعة مستخدمة)',
+    )
+    scheduled_start     = models.DateTimeField(
+        null=True, blank=True,
+        help_text='بداية الجلسة الكاملة (تاريخ + وقت)',
+    )
+    scheduled_end       = models.DateTimeField(
+        null=True, blank=True,
+        help_text='نهاية الجلسة الكاملة (تاريخ + وقت)',
+    )
+    scheduling_group    = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        help_text='في وضع single: يربط الـ 4 Committees (للأنواع الأربعة) '
+                  'التي تمثل نفس المشروع بنفس الأطباء',
+    )
+    manually_scheduled  = models.BooleanField(
+        default=False,
+        help_text='True إذا تم تعديل الجدولة يدوياً بعد Apply',
+    )
+    last_scheduling_run = models.ForeignKey(
+        'committees.SchedulingRun', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='committees',
+    )
 
     created_at     = models.DateTimeField(auto_now_add=True)
     updated_at     = models.DateTimeField(auto_now=True)
@@ -489,3 +533,247 @@ class Committee(models.Model):
             except Exception:
                 continue
         return out
+
+
+
+# ── Weekday choices (Python: Monday=0 .. Sunday=6) ───────────────────────────
+
+WEEKDAYS = [
+    (0, 'Monday'),
+    (1, 'Tuesday'),
+    (2, 'Wednesday'),
+    (3, 'Thursday'),
+    (4, 'Friday'),
+    (5, 'Saturday'),
+    (6, 'Sunday'),
+]
+
+# Arabic labels for weekdays
+WEEKDAYS_AR = {
+    0: 'الإثنين',
+    1: 'الثلاثاء',
+    2: 'الأربعاء',
+    3: 'الخميس',
+    4: 'الجمعة',
+    5: 'السبت',
+    6: 'الأحد',
+}
+
+
+# ── 1. Room ──────────────────────────────────────────────────────────────────
+
+class Room(models.Model):
+    """A simple meeting room. Just a name and a capacity."""
+    name       = models.CharField(max_length=255, unique=True,
+                                  help_text='اسم القاعة فقط (مثال: قاعة 201)')
+    capacity   = models.PositiveIntegerField(default=30)
+    is_active  = models.BooleanField(default=True)
+    notes      = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+# ── 2. Doctor weekly availability ────────────────────────────────────────────
+
+class DoctorWeeklyAvailability(models.Model):
+    """Weekly recurring availability. A doctor is available the entire workday
+    (per SolverSettings.daily_start..daily_end) on each chosen weekday.
+    No time-of-day restriction — keeps it simple."""
+    doctor  = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='weekly_availability',
+        limit_choices_to={'role__in': ['doctor', 'hod']},
+    )
+    weekday = models.IntegerField(choices=WEEKDAYS,
+                                   help_text='0=Monday, 6=Sunday')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('doctor', 'weekday')
+        indexes = [
+            models.Index(fields=['doctor', 'weekday']),
+        ]
+        verbose_name = 'Doctor Weekly Availability'
+        verbose_name_plural = 'Doctor Weekly Availabilities'
+
+    def __str__(self):
+        return f"{self.doctor.username} — {WEEKDAYS_AR.get(self.weekday, self.weekday)}"
+
+
+# ── 3. Doctor date exception ─────────────────────────────────────────────────
+
+EXCEPTION_TYPES = [
+    ('available', 'Available (override)'),  # متاح استثنائياً
+    ('blocked',   'Blocked (override)'),    # محظور
+]
+
+
+class DoctorDateException(models.Model):
+    """One-off date override on top of weekly availability."""
+    doctor         = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='date_exceptions',
+        limit_choices_to={'role__in': ['doctor', 'hod']},
+    )
+    date           = models.DateField()
+    exception_type = models.CharField(max_length=10, choices=EXCEPTION_TYPES)
+    reason         = models.CharField(max_length=255, blank=True, default='')
+    created_at     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('doctor', 'date')
+        indexes = [
+            models.Index(fields=['date']),
+            models.Index(fields=['doctor', 'date']),
+        ]
+        verbose_name = 'Doctor Date Exception'
+        verbose_name_plural = 'Doctor Date Exceptions'
+
+    def __str__(self):
+        return f"{self.doctor.username} — {self.date} [{self.exception_type}]"
+
+
+# ── 4. Solver settings ───────────────────────────────────────────────────────
+
+class SolverSettings(models.Model):
+    """Per (committee_type × semester) solver configuration.
+
+    Different committee types can have different date ranges so that
+    seminar_1 / seminar_2 / technical / final_discussion are scheduled
+    in independent weeks and never conflict with each other.
+    """
+    name = models.CharField(max_length=100, default='Default',
+                            help_text='Human label for this config')
+
+    committee_type = models.CharField(max_length=25, choices=COMMITTEE_TYPE_CHOICES)
+    semester       = models.CharField(max_length=50)
+
+    # Date range for the search
+    date_range_start = models.DateField()
+    date_range_end   = models.DateField()
+
+    # Workdays as list of weekday ints [0..6]
+    workdays = models.JSONField(
+        default=list,
+        help_text='List of weekday ints (0=Monday, 6=Sunday). Example: [5, 6] for Sat+Sun',
+    )
+
+    # Daily work window (applies to all rooms/doctors in this run)
+    daily_start = models.TimeField(default='09:00')
+    daily_end   = models.TimeField(default='17:00')
+
+    # Buffer between consecutive committees in the same room
+    buffer_between_committees_minutes = models.PositiveIntegerField(
+        default=10,
+        help_text='Buffer (in minutes) added after each committee in the same room',
+    )
+
+    # Hard ceiling per doctor for THIS committee type in THIS semester
+    max_committees_per_doctor = models.PositiveIntegerField(default=5)
+
+    # Solver timeout (CP-SAT)
+    solver_timeout_seconds = models.PositiveIntegerField(
+        default=30,
+        help_text='Max wall-clock time for CP-SAT solver',
+    )
+
+    is_active  = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_solver_settings',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('committee_type', 'semester')
+        indexes = [
+            models.Index(fields=['committee_type', 'semester', 'is_active']),
+        ]
+        verbose_name = 'Solver Settings'
+        verbose_name_plural = 'Solver Settings'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} — {self.committee_type} — {self.semester}"
+
+
+# ── 5. Scheduling run (preview / apply / reject) ─────────────────────────────
+
+SCHEDULING_RUN_STATUS = [
+    ('pending',  'Pending'),     # قيد الإنشاء
+    ('preview',  'Preview Ready'),  # خطة جاهزة للمراجعة
+    ('applied',  'Applied'),     # تم التطبيق على DB
+    ('rejected', 'Rejected'),    # رُفض بعد المراجعة
+    ('failed',   'Failed'),      # فشل الـ Solver (infeasibility أو timeout)
+]
+
+SOLVER_STATUS_CHOICES = [
+    ('OPTIMAL',    'Optimal'),
+    ('FEASIBLE',   'Feasible'),
+    ('INFEASIBLE', 'Infeasible'),
+    ('UNKNOWN',    'Unknown (timeout or no solution found)'),
+    ('ERROR',      'Error during solving'),
+]
+
+
+class SchedulingRun(models.Model):
+    """A single scheduling attempt. Persists the full plan in JSON before
+    being applied to the DB, allowing the dean to preview/reject."""
+    committee_type = models.CharField(max_length=25, choices=COMMITTEE_TYPE_CHOICES)
+    semester       = models.CharField(max_length=50)
+    solver_settings = models.ForeignKey(
+        SolverSettings,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='runs',
+    )
+
+    status = models.CharField(
+        max_length=20, choices=SCHEDULING_RUN_STATUS, default='pending',
+        db_index=True,
+    )
+
+    # Full plan: list of {committee_id, room_id, scheduled_start, scheduled_end, project_ids}
+    plan_json = models.JSONField(default=dict, blank=True)
+
+    # List of infeasibility reason dicts (Arabic) when status='failed'
+    infeasibility_report = models.JSONField(default=list, blank=True)
+
+    # Summary stats: counts, durations, days_used, rooms_used, doctor_workload
+    summary_stats = models.JSONField(default=dict, blank=True)
+
+    # CP-SAT solver outcome
+    solver_status       = models.CharField(max_length=30, choices=SOLVER_STATUS_CHOICES, blank=True, default='')
+    solver_wall_time_sec = models.FloatField(default=0)
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='requested_scheduling_runs',
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    applied_at   = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-requested_at']
+        indexes = [
+            models.Index(fields=['committee_type', 'semester', 'status']),
+            models.Index(fields=['requested_at']),
+        ]
+        verbose_name = 'Scheduling Run'
+        verbose_name_plural = 'Scheduling Runs'
+
+    def __str__(self):
+        return f"Run#{self.id} — {self.committee_type} — {self.semester} [{self.status}]"

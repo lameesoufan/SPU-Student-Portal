@@ -5,7 +5,7 @@ import {
   Edit3, Save, X, UserCheck, Trash2, Inbox,
 } from 'lucide-react';
 import {
-  fetchCommittee, updateCommittee,
+  fetchCommittee, updateCommittee, fetchRooms,
 } from '../../api';
 import {
   COMMITTEE_STATUSES, COMMITTEE_TYPE_COLORS, DEPARTMENT_COLORS, STATUS_COLORS,
@@ -31,6 +31,11 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState({ date: '', time: '', start_time: '', end_time: '', discussion_duration: '', location: '', status: 'draft' });
 
+  // CP-SAT scheduling state (room + scheduled_start/end)
+  const [rooms, setRooms] = useState([]);
+  const [editingScheduling, setEditingScheduling] = useState(false);
+  const [schedulingDraft, setSchedulingDraft] = useState({ room: '', scheduled_start: '', scheduled_end: '' });
+
   /* ── Load committee ──────────────────────────────────────────────────── */
   const load = useCallback(async () => {
     if (!committeeId) return;
@@ -39,6 +44,18 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
     try {
       const res = await fetchCommittee(committeeId);
       setCommittee(res.data);
+      setSchedulingDraft({
+        room: res.data.room || '',
+        scheduled_start: res.data.scheduled_start ? res.data.scheduled_start.slice(0, 16) : '',
+        scheduled_end: res.data.scheduled_end ? res.data.scheduled_end.slice(0, 16) : '',
+      });
+      // Load rooms for the dropdown
+      try {
+        const roomsRes = await fetchRooms({ is_active: true });
+        setRooms(roomsRes.data?.results || roomsRes.data || []);
+      } catch {
+        setRooms([]);
+      }
       setScheduleDraft({
         date: res.data.date || '',
         time: res.data.time || '',
@@ -86,6 +103,35 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
       setToast({ type: 'success', msg: 'Schedule saved successfully.' });
     } catch (err) {
       setToast({ type: 'error', msg: err.response?.data?.detail || 'Failed to save schedule.' });
+    } finally { setBusy(false); }
+  };
+
+  /* ── Save CP-SAT scheduling (room + scheduled_start/end) ─────────────── */
+  const saveScheduling = async () => {
+    if (busy || !committee) return;
+    setBusy(true);
+    try {
+      const cleanedData = {
+        room: schedulingDraft.room ? parseInt(schedulingDraft.room) : null,
+      };
+      // Convert datetime-local strings to ISO format
+      if (schedulingDraft.scheduled_start) {
+        cleanedData.scheduled_start = new Date(schedulingDraft.scheduled_start).toISOString();
+      } else {
+        cleanedData.scheduled_start = null;
+      }
+      if (schedulingDraft.scheduled_end) {
+        cleanedData.scheduled_end = new Date(schedulingDraft.scheduled_end).toISOString();
+      } else {
+        cleanedData.scheduled_end = null;
+      }
+      cleanedData.manually_scheduled = true;  // flag as manual edit
+      const res = await updateCommittee(committee.id, cleanedData);
+      setCommittee(res.data);
+      setEditingScheduling(false);
+      setToast({ type: 'success', msg: 'CP-SAT scheduling updated. (manually_scheduled=true)' });
+    } catch (err) {
+      setToast({ type: 'error', msg: err.response?.data?.detail || 'Failed to save scheduling.' });
     } finally { setBusy(false); }
   };
 
@@ -503,6 +549,129 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
                   ) : (
                     <div className="ccd-schedule-row is-empty">
                       <MapPin size={14} /> No room
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CP-SAT Scheduling (room + scheduled_start/end) */}
+          <div className="ccd-section">
+            <div className="ccd-section-header">
+              <h2 className="ccd-section-title">
+                <span className="ccd-section-icon" style={{ background: 'rgba(99, 102, 241, 0.12)', color: '#667eea' }}>
+                  <Calendar size={15} />
+                </span>
+                CP-SAT Scheduling
+                {committee.manually_scheduled && (
+                  <span style={{ fontSize: 10, color: '#f59e0b', fontWeight: 600, marginRight: 8 }}>✎ معدّل يدوياً</span>
+                )}
+              </h2>
+              {!editingScheduling && (
+                <button
+                  className="ccd-btn ccd-btn-sm"
+                  onClick={() => setEditingScheduling(true)}
+                  disabled={busy}
+                >
+                  <Edit3 size={11} /> Edit
+                </button>
+              )}
+            </div>
+            <div className="ccd-section-body">
+              {editingScheduling ? (
+                <>
+                  <div className="ccd-edit-field">
+                    <label>القاعة (Room)</label>
+                    <select
+                      className="ccd-edit-input"
+                      value={schedulingDraft.room}
+                      onChange={(e) => setSchedulingDraft({ ...schedulingDraft, room: e.target.value })}
+                    >
+                      <option value="">— بدون قاعة —</option>
+                      {rooms.map((r) => <option key={r.id} value={r.id}>{r.name} (سعة {r.capacity})</option>)}
+                    </select>
+                  </div>
+                  <div className="ccd-edit-field">
+                    <label>بداية الجلسة (scheduled_start)</label>
+                    <input
+                      type="datetime-local"
+                      className="ccd-edit-input"
+                      value={schedulingDraft.scheduled_start}
+                      onChange={(e) => setSchedulingDraft({ ...schedulingDraft, scheduled_start: e.target.value })}
+                    />
+                  </div>
+                  <div className="ccd-edit-field">
+                    <label>نهاية الجلسة (scheduled_end)</label>
+                    <input
+                      type="datetime-local"
+                      className="ccd-edit-input"
+                      value={schedulingDraft.scheduled_end}
+                      onChange={(e) => setSchedulingDraft({ ...schedulingDraft, scheduled_end: e.target.value })}
+                    />
+                    <small style={{ fontSize: '0.78em', color: '#888', marginTop: 4, display: 'block' }}>
+                      ملاحظة: التعديل هنا يضع علامة manually_scheduled=true. إعادة تشغيل الـ Solver ستمسح هذا التعديل.
+                    </small>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    <button
+                      className="ccd-btn ccd-btn-primary ccd-btn-sm"
+                      onClick={saveScheduling}
+                      disabled={busy}
+                    >
+                      {busy ? (<><div className="ccd-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> Saving…</>) : (<><Save size={11} /> Save</>)}
+                    </button>
+                    <button
+                      className="ccd-btn ccd-btn-sm"
+                      onClick={() => {
+                        setEditingScheduling(false);
+                        setSchedulingDraft({
+                          room: committee.room || '',
+                          scheduled_start: committee.scheduled_start ? committee.scheduled_start.slice(0, 16) : '',
+                          scheduled_end: committee.scheduled_end ? committee.scheduled_end.slice(0, 16) : '',
+                        });
+                      }}
+                      disabled={busy}
+                    >
+                      <X size={11} /> Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="ccd-schedule-block">
+                  {committee.scheduled_start ? (
+                    <>
+                      <div className="ccd-schedule-row" style={{ color: '#0369a1', fontWeight: 600 }}>
+                        <Calendar size={14} className="ccd-schedule-row-icon" />
+                        <span>التاريخ</span>
+                        <span className="ccd-schedule-row-label">
+                          {new Date(committee.scheduled_start).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                      <div className="ccd-schedule-row" style={{ color: '#0369a1', fontWeight: 600 }}>
+                        <Clock size={14} className="ccd-schedule-row-icon" />
+                        <span>الوقت</span>
+                        <span className="ccd-schedule-row-label">
+                          {new Date(committee.scheduled_start).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} - {new Date(committee.scheduled_end).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      {committee.room_detail && (
+                        <div className="ccd-schedule-row">
+                          <MapPin size={14} className="ccd-schedule-row-icon" />
+                          <span>القاعة</span>
+                          <span className="ccd-schedule-row-label">{committee.room_detail.name}</span>
+                        </div>
+                      )}
+                      {committee.last_scheduling_run && (
+                        <div className="ccd-schedule-row" style={{ fontSize: '0.78em', color: '#888' }}>
+                          <span>آخر جدولة</span>
+                          <span className="ccd-schedule-row-label">Run #{committee.last_scheduling_run}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="ccd-schedule-row is-empty">
+                      <Calendar size={14} /> لم تُجدوَل بعد — استخدم صفحة جدولة اللجان
                     </div>
                   )}
                 </div>

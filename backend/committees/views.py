@@ -365,9 +365,10 @@ class DistributeView(APIView):
         d = ser.validated_data
 
         result = distribute_projects_to_committees(
-            template_ids = d.get('template_ids'),
-            semester     = d.get('semester'),
-            dry_run      = d.get('dry_run', False),
+            template_ids    = d.get('template_ids'),
+            semester        = d.get('semester'),
+            dry_run         = d.get('dry_run', False),
+            scheduling_mode = d.get('scheduling_mode', 'multi'),
         )
         return Response(result)
 
@@ -432,6 +433,11 @@ class ProjectsAssignmentView(APIView):
                 'end_time': committee.end_time.strftime('%H:%M') if committee.end_time else None,
                 'discussion_duration': committee.discussion_duration,
                 'location': committee.location,
+                'room_name': committee.room.name if committee.room_id else None,
+                # Send date and time separately for easier frontend display
+                'scheduled_date': committee.scheduled_start.strftime('%Y-%m-%d') if committee.scheduled_start else (committee.date.strftime('%Y-%m-%d') if committee.date else None),
+                'scheduled_start_time': committee.scheduled_start.strftime('%H:%M') if committee.scheduled_start else (committee.start_time.strftime('%H:%M') if committee.start_time else None),
+                'scheduled_end_time': committee.scheduled_end.strftime('%H:%M') if committee.scheduled_end else (committee.end_time.strftime('%H:%M') if committee.end_time else None),
                 'committee_members': [],  # سيتم ملؤها بجميع أعضاء اللجنة
             }
             
@@ -446,15 +452,22 @@ class ProjectsAssignmentView(APIView):
                 for doc in all_doctors
             ]
             
-            # حساب أوقات المشاريع
-            project_times = committee.calculate_project_times()
+            # حساب أوقات المشاريع بناءً على scheduled_start و discussion_duration
             times_map = {}
-            for pt in project_times:
-                key = f"{pt['project_source']}-{pt['project_id']}"
-                times_map[key] = {
-                    'scheduled_start': pt['start_time'],
-                    'scheduled_end': pt['end_time'],
-                }
+            if committee.scheduled_start and committee.discussion_duration:
+                from datetime import timedelta
+                current_start_dt = committee.scheduled_start
+                # المشاريع مرتبة حسب ترتيبها في القائمة
+                for p in committee.get_all_projects():
+                    p_start = current_start_dt
+                    p_end = p_start + timedelta(minutes=committee.discussion_duration)
+                    key = f"{p['source']}-{p['id']}"
+                    times_map[key] = {
+                        'scheduled_start': p_start.strftime('%H:%M'),
+                        'scheduled_end': p_end.strftime('%H:%M'),
+                    }
+                    # الانتقال للمشروع التالي مباشرة (بدون فاصل بين المشاريع داخل نفس اللجنة)
+                    current_start_dt = p_end
             
             # المشاريع في هذه اللجنة
             for project in committee.get_all_projects():

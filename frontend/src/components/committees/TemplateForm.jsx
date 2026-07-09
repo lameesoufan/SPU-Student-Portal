@@ -51,6 +51,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
     chair: null,
     members: [],
     name: '',
+    discussion_duration: '',   // minutes — required for solver
   });
 
   /* ── Load doctors list ───────────────────────────────────────────────── */
@@ -80,6 +81,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
           chair: t.chair || null,
           members: Array.isArray(t.members) ? t.members : [],
           name: t.name || '',
+          discussion_duration: t.discussion_duration || '',
         });
       })
       .catch((err) => {
@@ -138,7 +140,9 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
 
   /* ── Validation per step ─────────────────────────────────────────────── */
   const stepValid = useMemo(() => {
-    if (step === 1) return !!(form.committee_type && form.department && form.project_type && form.semester);
+    if (step === 1) {
+      return !!(form.committee_type && form.department && form.project_type && form.semester && form.discussion_duration);
+    }
     if (step === 2) return !!form.chair;  // chair required; members optional
     if (step === 3) return true;
     return false;
@@ -146,7 +150,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
 
   const canSubmit = useMemo(() => {
     return !!(form.committee_type && form.department && form.project_type
-          && form.semester && form.chair);
+          && form.semester && form.chair && form.discussion_duration);
   }, [form]);
 
   /* ── Navigation ──────────────────────────────────────────────────────── */
@@ -168,6 +172,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
         chair:          form.chair,
         members:        form.members,
         name: form.name || '',
+        discussion_duration: parseInt(form.discussion_duration) || 15,
       };
       let result;
       if (editId) {
@@ -362,6 +367,28 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
                 />
                 <span className="ctf-hint">Used to filter projects and committees later.</span>
               </div>
+            </div>
+
+            {/* Discussion duration — REQUIRED for solver */}
+            <div className="ctf-field">
+              <label className="ctf-label">
+                Discussion Duration per Project (minutes) <span className="ctf-label-required">*</span>
+              </label>
+              <input
+                type="number"
+                className="ctf-input"
+                min="5"
+                step="5"
+                value={form.discussion_duration}
+                onChange={(e) => setForm((f) => ({ ...f, discussion_duration: e.target.value }))}
+                placeholder={
+                  form.committee_type === 'final_discussion' ? 'مثال: 30' :
+                  form.committee_type === 'technical' ? 'مثال: 20' : 'مثال: 15'
+                }
+              />
+              <span className="ctf-hint">
+                مدة المناقشة لكل مشروع بالدقائق — تُستخدم من قبل الـ Solver لحساب مدة اللجنة الكلية.
+              </span>
             </div>
 
             {/* Optional name */}

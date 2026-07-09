@@ -107,10 +107,10 @@ export default function ProjectsAssignment({ onBack }) {
 
   // Selection handlers
   const toggleSelectAll = () => {
-    if (selectedRows.size === filteredProjects.length) {
+    if (selectedRows.size === sortedProjects.length) {
       setSelectedRows(new Set());
     } else {
-      setSelectedRows(new Set(filteredProjects.map((_, idx) => idx)));
+      setSelectedRows(new Set(sortedProjects.map((_, idx) => idx)));
     }
   };
 
@@ -215,6 +215,17 @@ export default function ProjectsAssignment({ onBack }) {
 
     return matchesSearch && matchesType;
   }) || [];
+
+  // Sort by date (nearest first), then by start time
+  const sortedProjects = [...filteredProjects].sort((a, b) => {
+    const dateA = a.scheduled_date || a.date || '9999';
+    const dateB = b.scheduled_date || b.date || '9999';
+    if (dateA !== dateB) return dateA.localeCompare(dateB);
+    // Same date, sort by time
+    const timeA = a.scheduled_start || a.start_time || '99:99';
+    const timeB = b.scheduled_start || b.start_time || '99:99';
+    return timeA.localeCompare(timeB);
+  });
 
   // Get display value (edited or original)
   const getDisplayValue = (index, project, field) => {
@@ -377,7 +388,7 @@ export default function ProjectsAssignment({ onBack }) {
       )}
 
       {/* Table */}
-      {filteredProjects.length === 0 ? (
+      {sortedProjects.length === 0 ? (
         <div className="pa-empty">
           <FileText size={48} />
           <h3>No projects</h3>
@@ -392,7 +403,7 @@ export default function ProjectsAssignment({ onBack }) {
                   <th style={{ width: '40px' }}>
                     <input
                       type="checkbox"
-                      checked={selectedRows.size === filteredProjects.length && filteredProjects.length > 0}
+                      checked={selectedRows.size === sortedProjects.length && sortedProjects.length > 0}
                       onChange={toggleSelectAll}
                     />
                   </th>
@@ -413,7 +424,7 @@ export default function ProjectsAssignment({ onBack }) {
               </tr>
             </thead>
             <tbody>
-              {filteredProjects.map((project, index) => {
+              {sortedProjects.map((project, index) => {
                 const isSelected = selectedRows.has(index);
                 const isEdited = editedProjects[index];
                 
@@ -500,19 +511,19 @@ export default function ProjectsAssignment({ onBack }) {
                           onChange={(e) => handleEditChange(index, 'date', e.target.value)}
                         />
                       ) : (
-                        getDisplayValue(index, project, 'date') ? (
+                        (project.scheduled_date || getDisplayValue(index, project, 'date')) ? (
                           <div className="pa-date-cell">
                             <Calendar size={13} />
-                            <span>{getDisplayValue(index, project, 'date')}</span>
+                            <span>{project.scheduled_date || getDisplayValue(index, project, 'date')}</span>
                           </div>
                         ) : '—'
                       )}
                     </td>
                     <td style={{ backgroundColor: '#f0f9ff', fontWeight: 500, color: '#0369a1' }}>
-                      {project.scheduled_start || '—'}
+                      {project.scheduled_start || project.scheduled_start_time || '—'}
                     </td>
                     <td style={{ backgroundColor: '#f0f9ff', fontWeight: 500, color: '#0369a1' }}>
-                      {project.scheduled_end || '—'}
+                      {project.scheduled_end || project.scheduled_end_time || '—'}
                     </td>
                     <td>
                       {editMode ? (
@@ -524,7 +535,12 @@ export default function ProjectsAssignment({ onBack }) {
                           onChange={(e) => handleEditChange(index, 'location', e.target.value)}
                         />
                       ) : (
-                        getDisplayValue(index, project, 'location') ? (
+                        project.room_name ? (
+                          <div className="pa-location-cell" style={{ color: '#0369a1', fontWeight: 600 }}>
+                            <MapPin size={13} />
+                            <span>🚪 {project.room_name}</span>
+                          </div>
+                        ) : getDisplayValue(index, project, 'location') ? (
                           <div className="pa-location-cell">
                             <MapPin size={13} />
                             <span>{getDisplayValue(index, project, 'location')}</span>
@@ -711,7 +727,7 @@ export default function ProjectsAssignment({ onBack }) {
 
       {/* Footer Info */}
       <div className="pa-footer">
-        <p>Number of displayed projects: <strong>{filteredProjects.length}</strong></p>
+        <p>Number of displayed projects: <strong>{sortedProjects.length}</strong></p>
         <p>Last updated: {new Date().toLocaleString('en-US')}</p>
       </div>
     </div>
