@@ -475,26 +475,35 @@ def run_solver(
         # We can't optimize it here — but we still report it in summary_stats.
         pass
 
-    # 6b) Minimize number of distinct days used
+    # 6b) Minimize number of distinct days used AND prioritize restricted doctors
     used_days: list[cp_model.IntVar] = []
     for di, d in enumerate(dates):
         ud = model.NewBoolVar(f'used_day_{di}')
-        # ud == 1 IFF any committee has day_idx == di
         any_in_day = []
         for c_id, v in committee_vars.items():
             in_day = model.NewBoolVar(f'in_day_{c_id}_{di}')
             model.Add(v['day_idx'] == di).OnlyEnforceIf(in_day)
             model.Add(v['day_idx'] != di).OnlyEnforceIf(in_day.Not())
             any_in_day.append(in_day)
-        # ud >= each in_day (i.e. ud = OR(any_in_day))
-        for b in any_in_day:
-            model.Add(ud >= b)
-        # If no committee is in this day, ud can be 0
-        # We don't force ud == 1 even if some in_day == 1, because OR constraints
-        # can be encoded by AddMaxEquality. Let's use that instead:
-        # Actually, let's rebuild using AddMaxEquality
+            
+            # NEW: Prioritize restricted doctors (rarity bonus)
+            # If this committee has a doctor available on <= 3 days,
+            # give a BONUS (negative penalty) for scheduling on those days.
+            # This forces the solver to schedule restricted doctors first,
+            # and leave flexible doctors for other days.
+            c = v['committee']
+            doc_ids = _committee_doctors(c)
+            rarity_bonus = 0
+            for doc_id in doc_ids:
+                avail_dates = _doctor_available_dates(doc_id, dates)
+                num_avail = len(avail_dates)
+                if 0 < num_avail <= 3:  # restricted doctor
+                    if dates[di] in avail_dates:
+                        rarity_bonus += (4 - num_avail) * 500
+            if rarity_bonus > 0:
+                penalties.append(in_day * -rarity_bonus)
+
         if any_in_day:
-            # ud == max(any_in_day) — i.e. OR
             model.AddMaxEquality(ud, any_in_day)
         used_days.append(ud)
     penalties.append(cp_model.LinearExpr.Sum(used_days) * 10)
@@ -514,13 +523,36 @@ def run_solver(
         used_rooms.append(ur)
     # Heavy weight on minimizing rooms — dean wants committees grouped
     # into as few rooms as possible (e.g., 5 committees → 5 rooms, not 10).
-    # 6d) Minimize Makespan (latest end time) — forces parallel execution
-    # Committees will be scheduled in different rooms simultaneously
-    # to finish as early as possible.
+    # 6d) DAILY LOAD BALANCING — distribute committees evenly across days
+    # Instead of packing everything into the first day (Makespan),
+    # we minimize the maximum number of committees on any single day.
+    # This forces the solver to spread committees evenly:
+    #   76 committees / 3 days = ~25 per day (balanced)
+    #   instead of 45 + 17 + 14 (packed into first day)
+    daily_loads = []
+    for di, d in enumerate(dates):
+        # Count committees on this day
+        load = model.NewIntVar(0, len(committees), f'daily_load_{di}')
+        day_committees = []
+        for c_id, v in committee_vars.items():
+            in_day = model.NewBoolVar(f'load_check_{c_id}_{di}')
+            model.Add(v['day_idx'] == di).OnlyEnforceIf(in_day)
+            model.Add(v['day_idx'] != di).OnlyEnforceIf(in_day.Not())
+            day_committees.append(in_day)
+        model.Add(load == sum(day_committees))
+        daily_loads.append(load)
+
+    # Minimize the MAXIMUM daily load (forces even distribution)
+    max_daily_load = model.NewIntVar(0, len(committees), 'max_daily_load')
+    for load in daily_loads:
+        model.Add(max_daily_load >= load)
+    penalties.append(max_daily_load * 1000)
+
+    # Small Makespan weight (prefer earlier days when load is equal)
     latest_end = model.NewIntVar(0, horizon, 'latest_end')
     for c_id, v in committee_vars.items():
         model.Add(latest_end >= v['end'])
-    penalties.append(latest_end * 1000)
+    penalties.append(latest_end * 10)
 
     # 6e) HARD CONSTRAINT: Committee must stay in the same room all day
     # Group committees by their doctor signature (chair + members).
