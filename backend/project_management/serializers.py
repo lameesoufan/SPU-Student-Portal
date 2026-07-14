@@ -101,10 +101,11 @@ class ProjectBoardSerializer(serializers.ModelSerializer):
     members      = serializers.SerializerMethodField()
     participants = serializers.SerializerMethodField()
     project_type = serializers.SerializerMethodField()
+    department   = serializers.SerializerMethodField()
 
     class Meta:
         model  = ProjectBoard
-        fields = ['id', 'title', 'created_at', 'tasks', 'members', 'participants', 'project_type', 'github_repo']
+        fields = ['id', 'title', 'created_at', 'tasks', 'members', 'participants', 'project_type', 'github_repo', 'department']
 
     def get_members(self, obj):
         return [
@@ -120,4 +121,12 @@ class ProjectBoardSerializer(serializers.ModelSerializer):
             return obj.proposal.project_type
         if obj.application and obj.application.idea and obj.application.idea.project_type:
             return obj.application.idea.project_type
+        return None
+
+    def get_department(self, obj):
+        """Return the department code for this board's underlying project."""
+        if obj.proposal and obj.proposal.department:
+            return obj.proposal.department
+        if obj.application and obj.application.idea and obj.application.idea.department:
+            return obj.application.idea.department
         return None
