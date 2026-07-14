@@ -1082,6 +1082,15 @@ def export_committees_excel(semester: str | None = None) -> bytes:
             projs = c.get_all_projects()
             proj_titles = ' | '.join(p['title'] for p in projs)
 
+            # Prefer CP-SAT scheduled fields; fall back to legacy fields.
+            sched_date  = c.scheduled_start.strftime('%Y-%m-%d') if c.scheduled_start \
+                else (c.date.strftime('%Y-%m-%d') if c.date else '')
+            sched_start = c.scheduled_start.strftime('%H:%M') if c.scheduled_start \
+                else (c.start_time.strftime('%H:%M') if c.start_time \
+                else (c.time.strftime('%H:%M') if c.time else ''))
+            sched_loc   = c.room.name if (c.room_id and c.room) \
+                else (c.location if c.location else '')
+
             row = [
                 f'{c.sequence_number:03d}',
                 COMMITTEE_TYPE_AR.get(c.committee_type, c.committee_type),
@@ -1092,9 +1101,9 @@ def export_committees_excel(semester: str | None = None) -> bytes:
                 member_names,
                 len(projs),
                 proj_titles,
-                c.date.strftime('%Y-%m-%d') if c.date else '',
-                c.time.strftime('%H:%M')    if c.time else '',
-                c.location,
+                sched_date,
+                sched_start,
+                sched_loc,
                 c.status,
             ]
             ws.append(row)
@@ -1224,10 +1233,10 @@ def export_projects_assignment_excel(semester: str | None = None) -> bytes:
                 COMMITTEE_TYPE_AR.get(committee.committee_type, committee.committee_type),
                 DEPARTMENT_AR.get(committee.department, committee.department),
                 members_text if members_text else '—',
-                committee.date.strftime('%Y-%m-%d') if committee.date else '—',
+                (committee.scheduled_start.strftime('%Y-%m-%d') if committee.scheduled_start else (committee.date.strftime('%Y-%m-%d') if committee.date else '—')),
                 scheduled_start,  # Calculated start time for this project
                 scheduled_end,    # Calculated end time for this project
-                committee.location if committee.location else '—',
+                (committee.room.name if (committee.room_id and committee.room) else (committee.location if committee.location else '—')),
             ]
             ws.append(row_data)
             

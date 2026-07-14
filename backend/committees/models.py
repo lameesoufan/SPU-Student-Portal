@@ -302,30 +302,54 @@ class Committee(models.Model):
     def calculate_project_times(self) -> list:
         """
         Calculate start and end times for each project based on discussion_duration.
-        Returns list of dicts: {project_index, start_time, end_time}
+
+        Prefers CP-SAT scheduled_start (DateTimeField) over legacy start_time.
+        Falls back to a 15-minute default if discussion_duration is missing.
+
+        Returns list of dicts:
+          {project_index, project_id, project_source, start_time, end_time}
         """
         from datetime import datetime, timedelta
-        
-        if not self.start_time or not self.discussion_duration:
+
+        # ── Resolve committee start ────────────────────────────────────────
+        # Prefer CP-SAT DateTime; fall back to legacy TimeField.
+        if self.scheduled_start:
+            start_dt = self.scheduled_start
+        elif self.start_time:
+            base_date = self.date or datetime.today().date()
+            start_dt = datetime.combine(base_date, self.start_time)
+        else:
             return []
-        
+
+        # ── Resolve committee end (optional) ──────────────────────────────
+        if self.scheduled_end:
+            end_dt = self.scheduled_end
+        elif self.end_time:
+            base_date = self.date or datetime.today().date()
+            end_dt = datetime.combine(base_date, self.end_time)
+        else:
+            end_dt = None
+
+        # ── Resolve per-project duration (minutes) ────────────────────────
+        # CP-SAT writes this when applying the plan; default 15 min if missing.
+        duration_min = self.discussion_duration or 15
+        duration = timedelta(minutes=duration_min)
+
         projects = self.get_all_projects()
         if not projects:
             return []
-        
+
         times = []
-        current_time = datetime.combine(datetime.today(), self.start_time)
-        duration = timedelta(minutes=self.discussion_duration)
-        
+        current_time = start_dt
+
         for idx, project in enumerate(projects):
-            # Check if we've exceeded end_time
             project_end = current_time + duration
-            if self.end_time:
-                end_datetime = datetime.combine(datetime.today(), self.end_time)
-                if project_end.time() > self.end_time:
-                    # Stop scheduling if we exceed end_time
+            # Stop scheduling if we exceed committee end time
+            if end_dt and project_end > end_dt:
+                # Still record the last project that fits if it starts within bounds
+                if current_time >= end_dt:
                     break
-            
+
             times.append({
                 'project_index': idx,
                 'project_id': project['id'],
@@ -333,9 +357,9 @@ class Committee(models.Model):
                 'start_time': current_time.strftime('%H:%M'),
                 'end_time': project_end.strftime('%H:%M'),
             })
-            
+
             current_time = project_end
-        
+
         return times
 
     def get_all_projects(self) -> list:
