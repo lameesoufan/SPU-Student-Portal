@@ -42,7 +42,7 @@ useEffect(() => {
   if (loading) return (
     <div className="mp-loading-state">
       <div className="spinner spinner-dark"></div>
-      <p>Loading your project board…</p>
+      <p>جاري تحميل لوحة مشروعك…</p>
     </div>
   );
 
@@ -55,7 +55,7 @@ useEffect(() => {
   if (!board) return (
     <div className="my-project-page">
       <div className="page-header">
-        <h1 className="page-title">My Project</h1>
+        <h1 className="page-title">مشروعي</h1>
       </div>
       <div className="mp-empty-state">
         <div className="empty-state">
@@ -66,8 +66,8 @@ useEffect(() => {
               <line x1="9" y1="21" x2="9" y2="9"/>
             </svg>
           </div>
-          <h3>No Active Project</h3>
-          <p>Your project board will appear here once your project proposal is approved by the Head of Department.</p>
+          <h3>لا يوجد مشروع نشط</h3>
+          <p>ستظهر لوحة مشروعك هنا بمجرد موافقة رئيس القسم على مقترح مشروعك.</p>
         </div>
       </div>
     </div>
@@ -76,7 +76,7 @@ useEffect(() => {
   return (
     <div className="my-project-page">
       <div className="page-header" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
-        <h1 className="page-title m-0">My Project</h1>
+        <h1 className="page-title m-0">مشروعي</h1>
         <GithubLink board={board} setBoard={setBoard} />
       </div>
 
@@ -129,7 +129,7 @@ function GithubLink({ board, setBoard }) {
       setBoard(res.data);
       setIsEditing(false);
     } catch (err) {
-      alert('Failed to update GitHub repo link');
+      alert('فشل تحديث رابط مستودع GitHub');
     } finally {
       setLoading(false);
     }
@@ -165,9 +165,9 @@ function GithubLink({ board, setBoard }) {
           {board.github_repo}
         </a>
       ) : (
-        <span className="text-sm text-gray-400 italic">No GitHub repo linked</span>
+        <span className="text-sm text-gray-400 italic">لا يوجد مستودع GitHub مربوط</span>
       )}
-      <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-violet-600 p-1 rounded transition-colors" title="Edit GitHub repo link">
+      <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-violet-600 p-1 rounded transition-colors" title="تعديل رابط مستودع GitHub">
         <Edit2 size={14} />
       </button>
     </div>

@@ -100,64 +100,64 @@ const NAV_ITEMS = [
 const MODULE_CARDS = [
   {
     IconComp: Icon.Kanban,
-    label: 'Committees Management',
-    desc: 'Create compositions, distribute projects, monitor committees and faculty workload',
+    label: 'إدارة اللجان',
+    desc: 'إنشاء التشكيلات، توزيع المشاريع، مراقبة اللجان وأعباء الدكاترة',
     page: 'committees',
     gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
   },
   {
     IconComp: Icon.StudentStatus,
-    label: 'Student Status Management',
-    desc: 'Mark project participants as active, failed, or withdrawn with audit history',
+    label: 'إدارة حالة الطلاب',
+    desc: 'تحديد حالة المشاركين في المشاريع: نشط، راسب، منسحب مع سجل التدقيق',
     page: 'student-status',
     gradient: 'linear-gradient(135deg, #0f766e, #14b8a6)',
   },
   {
     IconComp: Icon.Upload,
-    label: 'Import Users',
-    desc: 'Bulk import students and faculty members into the system',
+    label: 'استيراد المستخدمين',
+    desc: 'استيراد جماعي للطلاب وأعضاء الهيئة التدريسية إلى النظام',
     page: 'import',
     gradient: 'linear-gradient(135deg, #6366f1, #818cf8)',
   },
   {
     IconComp: Icon.ProjectImport,
-    label: 'Import Projects',
-    desc: 'Preview and import assigned student projects from XLSX files',
+    label: 'استيراد المشاريع',
+    desc: 'معاينة واستيراد المشاريع الطلابية المسندة من ملفات XLSX',
     page: 'import-projects',
     gradient: 'linear-gradient(135deg, #0ea5e9, #38bdf8)',
   },
   {
     IconComp: Icon.UserPlus,
-    label: 'Assign HoD',
-    desc: 'Assign heads of departments and manage department leadership',
+    label: 'تعيين رؤساء الأقسام',
+    desc: 'تعيين رؤساء الأقسام وإدارة قيادة الأقسام',
     page: 'assign-hod',
     gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)',
   },
   {
     IconComp: Icon.Kanban,
-    label: 'All Projects',
-    desc: 'Monitor all department projects across the university',
+    label: 'جميع المشاريع',
+    desc: 'مراقبة جميع مشاريع الأقسام في الجامعة',
     page: 'projects',
     gradient: 'linear-gradient(135deg, #06b6d4, #22d3ee)',
   },
   {
     IconComp: Icon.Users,
-    label: 'Faculty Overview',
-    desc: 'View and manage all faculty members across departments',
+    label: 'نظرة عامة على الهيئة التدريسية',
+    desc: 'عرض وإدارة جميع أعضاء الهيئة التدريسية عبر الأقسام',
     page: null,
     gradient: 'linear-gradient(135deg, #10b981, #34d399)',
   },
   {
     IconComp: Icon.BookOpen,
-    label: 'Academic Programs',
-    desc: 'Manage university academic programs and curricula',
+    label: 'البرامج الأكاديمية',
+    desc: 'إدارة البرامج الأكاديمية والمناهج الجامعية',
     page: null,
     gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)',
   },
   {
     IconComp: Icon.BarChart,
-    label: 'Analytics',
-    desc: 'University-wide statistics and performance metrics',
+    label: 'التحليلات',
+    desc: 'إحصائيات ومؤشرات الأداء على مستوى الجامعة',
     page: null,
     gradient: 'linear-gradient(135deg, #ec4899, #f472b6)',
   },
@@ -406,16 +406,16 @@ usePolling(async () => {
           <div className="std-hero-content">
             <div className="std-hero-text">
               <h1 className="std-hero-title">
-                Welcome back, <span className="std-gradient-text">Dr. {user.username}</span>
+                مرحباً بعودتك، <span className="std-gradient-text">د. {user.username}</span>
               </h1>
               <p className="std-hero-sub">
-                Overseeing all university operations, managing departments, and ensuring academic excellence.
+                الإشراف على جميع عمليات الجامعة، إدارة الأقسام، وضمان التميز الأكاديمي.
               </p>
             </div>
             <div className="std-hero-right">
               <div className="std-hero-empty-ring">
                 <Icon.Building size={28} />
-                <span>Dean Portal</span>
+                <span>بوابة العميد</span>
               </div>
             </div>
           </div>
@@ -427,8 +427,8 @@ usePolling(async () => {
               <Icon.Calendar size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Semester</span>
-              <span className="std-stat-value">Spring</span>
+              <span className="std-stat-title">الفصل</span>
+              <span className="std-stat-value">ربيعي</span>
             </div>
           </div>
           <div className="std-stat-card">
@@ -436,8 +436,8 @@ usePolling(async () => {
               <Icon.GradCap size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Role</span>
-              <span className="std-stat-value std-text-green">Dean</span>
+              <span className="std-stat-title">الدور</span>
+              <span className="std-stat-value std-text-green">عميد</span>
             </div>
           </div>
           <div className="std-stat-card">
@@ -445,7 +445,7 @@ usePolling(async () => {
               <Icon.Building size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Departments</span>
+              <span className="std-stat-title">الأقسام</span>
               <span className="std-stat-value std-text-purple">5</span>
             </div>
           </div>
@@ -454,7 +454,7 @@ usePolling(async () => {
               <Icon.Bell size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Notifications</span>
+              <span className="std-stat-title">الإشعارات</span>
               <span className="std-stat-value std-text-amber">
                 {loading ? '—' : unreadCount}
               </span>
@@ -463,7 +463,7 @@ usePolling(async () => {
         </div>
 
         <div className={`std-modules ${mounted ? 'std-animate-in std-delay-2' : ''}`}>
-          <h2 className="std-section-title">University Operations</h2>
+          <h2 className="std-section-title">عمليات الجامعة</h2>
           <div className="std-modules-grid">
             {MODULE_CARDS.map((m, i) => (
               <div
@@ -493,12 +493,12 @@ usePolling(async () => {
         </div>
 
         <div className={`std-activity ${mounted ? 'std-animate-in std-delay-3' : ''}`}>
-          <h2 className="std-section-title">Recent Notifications</h2>
+          <h2 className="std-section-title">آخر الإشعارات</h2>
           <div className="std-activity-list">
             {notifications.length === 0 ? (
               <div className="std-empty-state">
                 <Icon.Bell size={32} />
-                <p>No notifications yet</p>
+                <p>لا توجد إشعارات بعد</p>
               </div>
             ) : (
               notifications.slice(0, 4).map((n, i) => (
@@ -539,14 +539,14 @@ usePolling(async () => {
   };
 
  
-  const currentPageLabel = NAV_ITEMS.find((n) => n.id === page)?.label || 'Overview';
+  const currentPageLabel = NAV_ITEMS.find((n) => n.id === page)?.label || 'نظرة عامة';
     return (
     <DashboardLayout
       navItems={NAV_ITEMS}
       activePage={page}
       onNavigate={handleNavClick}
       unreadCount={unreadCount}
-      logoSubtitle="Student Dashboard"
+      logoSubtitle="لوحة التحكم"
       pageTitle={currentPageLabel}
       theme={theme}
       onToggleTheme={toggleTheme}
@@ -555,7 +555,7 @@ usePolling(async () => {
       onMarkRead={handleMarkRead}
       user={user}
       onLogout={handleLogout}
-      roleLabel="Dean"
+      roleLabel="عميد"
     >
       {renderContent()}
     </DashboardLayout>

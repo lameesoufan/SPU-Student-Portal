@@ -11,16 +11,16 @@ import {
 import { formatSafeDate, formatShortDate } from "../lib/utils";
 // ─── Constants ────────────────────────────────────────────────────────────────
 export const COLUMNS = [
-  { key: 'todo',        label: 'To Do',       color: '#64748b' },
-  { key: 'in_progress', label: 'In Progress', color: '#f59e0b' },
-  { key: 'in_review',   label: 'In Review',   color: '#2563EB' },
-  { key: 'done',        label: 'Done',        color: '#22c55e' },
+  { key: 'todo',        label: 'للقيام',     color: '#64748b' },
+  { key: 'in_progress', label: 'قيد التنفيذ', color: '#f59e0b' },
+  { key: 'in_review',   label: 'قيد المراجعة', color: '#2563EB' },
+  { key: 'done',        label: 'منجزة',       color: '#22c55e' },
 ];
 
 const PRIORITY_META = {
-  low:    { color: '#22c55e', bg: 'bg-emerald-500/10', text: 'text-emerald-600', label: 'Low' },
-  medium: { color: '#f59e0b', bg: 'bg-amber-500/10',  text: 'text-amber-600',  label: 'Medium' },
-  high:   { color: '#ef4444', bg: 'bg-red-500/10',    text: 'text-red-600',    label: 'High' },
+  low:    { color: '#22c55e', bg: 'bg-emerald-500/10', text: 'text-emerald-600', label: 'منخفضة' },
+  medium: { color: '#f59e0b', bg: 'bg-amber-500/10',  text: 'text-amber-600',  label: 'متوسطة' },
+  high:   { color: '#ef4444', bg: 'bg-red-500/10',    text: 'text-red-600',    label: 'عالية' },
 };
 
 const FILE_ICONS = {

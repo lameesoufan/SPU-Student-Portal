@@ -11,10 +11,10 @@ import { submitStudentProposal, fetchMyProposal, fetchDoctorsList, fetchStudentF
 import { PROJECT_TYPES } from '../lib/constants';
 
 const DEPARTMENTS = [
-  { value: 'software_engineering',    label: 'Software Engineering' },
-  { value: 'artificial_intelligence', label: 'Artificial Intelligence' },
-  { value: 'information_security',    label: 'Information Security' },
-  { value: 'communications',          label: 'Communications' },
+  { value: 'software_engineering',    label: 'برمجيات' },
+  { value: 'artificial_intelligence', label: 'ذكاء اصطناعي' },
+  { value: 'information_security',    label: 'أمن سيبراني' },
+  { value: 'communications',          label: 'اتصالات' },
   { value: 'control_robotics',        label: 'Control & Robotics' },
 ];
 
@@ -27,11 +27,11 @@ const BADGE_STYLES = {
 };
 
 const STATUS_META = {
-  awaiting_members:   { label: 'Awaiting Members',    Icon: Users,     color: 'amber' },
-  pending_supervisor: { label: 'Pending Supervisor',   Icon: Clock,     color: 'blue' },
-  pending_hod:        { label: 'Pending HoD Review',   Icon: RefreshCw, color: 'purple' },
+  awaiting_members:   { label: 'بانتظار الأعضاء',    Icon: Users,     color: 'amber' },
+  pending_supervisor: { label: 'بانتظار المشرف',   Icon: Clock,     color: 'blue' },
+  pending_hod:        { label: 'بانتظار مراجعة رئيس القسم',   Icon: RefreshCw, color: 'purple' },
   assigned:           { label: 'Approved & Assigned',   Icon: CheckCircle, color: 'green' },
-  rejected:           { label: 'Rejected',              Icon: XCircle,   color: 'red' },
+  rejected:           { label: 'مرفوض',              Icon: XCircle,   color: 'red' },
 };
 
 const STATUS_STEPS = {
@@ -46,10 +46,10 @@ const EMPTY = { title: '', description: '', department: '', supervisor: '', team
 const emptyValueForField = (field) => field.field_type === 'checkbox' ? [] : '';
 
 const STEPS = [
-  { id: 'idea',    label: 'Project Idea',   Icon: Lightbulb },
-  { id: 'dept',    label: 'Department',     Icon: Building2 },
+  { id: 'idea',    label: 'فكرة مشروع',   Icon: Lightbulb },
+  { id: 'dept',    label: 'القسم',     Icon: Building2 },
   { id: 'team',    label: 'Team',           Icon: UserPlus },
-  { id: 'dynamic', label: 'Requirements',   Icon: Clipboard },
+  { id: 'dynamic', label: 'المتطلبات',   Icon: Clipboard },
 ];
 
 const inputCls = "w-full bg-[var(--input-bg)] text-[var(--text)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors placeholder:text-[var(--text-faint)]";
@@ -220,8 +220,8 @@ const handleTeamSizeChange = (size) => {
             <Clipboard size={20} />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">Your Proposal</h1>
-            <p className="text-sm text-[var(--text-muted)]">Track your submitted project proposal status</p>
+            <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">مقترحك</h1>
+            <p className="text-sm text-[var(--text-muted)]">تابع حالة مقترح مشروعك المُرسل</p>
           </div>
         </div>
 
@@ -244,7 +244,7 @@ const handleTeamSizeChange = (size) => {
               <div className="flex items-center justify-between relative my-4">
                 <div className="absolute top-5 left-0 right-0 h-0.5 bg-[var(--border)]" />
                 <div className="absolute top-5 left-0 h-0.5 bg-emerald-500 transition-all duration-500" style={{ width: `${(stepProgress / 4) * 100}%` }} />
-                {['Members', 'Supervisor', 'HoD', 'Approved'].map((label, i) => (
+                {['الأعضاء', 'المشرف', 'HoD', 'مقبول'].map((label, i) => (
                   <div key={label} className="flex flex-col items-center gap-2 z-10">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
                       i + 1 <= stepProgress
@@ -262,10 +262,10 @@ const handleTeamSizeChange = (size) => {
             {/* Meta Info */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: 'Department', value: existing.department.replace(/_/g, ' ') },
-                { label: 'Supervisor', value: existing.supervisor_name || '—' },
-                { label: 'Team Size', value: `${existing.team_size} student${existing.team_size > 1 ? 's' : ''}` },
-                { label: 'Submitted', value: new Date(existing.created_at).toLocaleDateString() },
+                { label: 'القسم', value: existing.department.replace(/_/g, ' ') },
+                { label: 'المشرف', value: existing.supervisor_name || '—' },
+                { label: 'حجم الفريق', value: `${existing.team_size} student${existing.team_size > 1 ? 's' : ''}` },
+                { label: 'مُرسل', value: new Date(existing.created_at).toLocaleDateString() },
               ].map(item => (
                 <div key={item.label} className="bg-[var(--bg-tertiary)] p-3 rounded-[var(--radius-sm)] border border-[var(--border-light)]">
                   <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">{item.label}</span>
@@ -285,7 +285,7 @@ const handleTeamSizeChange = (size) => {
             {/* Team Members */}
             {existing.invitations && existing.invitations.length > 0 && (
               <div className="flex flex-col gap-2">
-                <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">Team Members</span>
+                <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">أعضاء الفريق</span>
                 {existing.invitations.map((inv) => {
                   const InvIcon = inv.status === 'accepted' ? CheckCircle : inv.status === 'rejected' ? XCircle : Clock;
                   const invColor = inv.status === 'accepted' ? 'green' : inv.status === 'rejected' ? 'red' : 'blue';
@@ -324,11 +324,11 @@ const handleTeamSizeChange = (size) => {
                           <StudentSearch
                             value=""
                             onChange={(username) => handleReplaceMember(inv.invitee_id, username)}
-                            placeholder="Search for a new team member…"
+                            placeholder="ابحث عن عضو جديد في الفريق…"
                           />
                           {replaceLoading && (
                             <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
-                              <Loader2 size={12} className="animate-spin" /> Replacing…
+                              <Loader2 size={12} className="animate-spin" /> جاري الاستبدال…
                             </span>
                           )}
                           {replaceError && (
@@ -339,7 +339,7 @@ const handleTeamSizeChange = (size) => {
                             onClick={() => { setReplacingId(null); setReplaceError(''); }}
                             className="text-xs text-[var(--text-muted)] hover:text-[var(--text)] transition-colors self-start"
                           >
-                            Cancel
+                            إلغاء
                           </button>
                         </div>
                       )}
@@ -353,7 +353,7 @@ const handleTeamSizeChange = (size) => {
             {existing.status === 'awaiting_members' && (
               <div className="flex items-center gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm">
                 <Info size={16} className="shrink-0" />
-                <span>Waiting for team members to confirm their participation.</span>
+                <span>بانتظار تأكيد أعضاء الفريق لمشاركتهم.</span>
               </div>
             )}
             {existing.status === 'assigned' && (
@@ -371,7 +371,7 @@ const handleTeamSizeChange = (size) => {
             {existing.status === 'pending_supervisor' && (
               <div className="flex items-center gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm">
                 <Info size={16} className="shrink-0" />
-                <span>Waiting for <strong>{existing.supervisor_name}</strong> to review your proposal.</span>
+                <span>بانتظار مراجعة <strong>{existing.supervisor_name}</strong> لمقترحك.</span>
               </div>
             )}
             {existing.status === 'pending_hod' && (
@@ -395,7 +395,7 @@ const handleTeamSizeChange = (size) => {
           <Lightbulb size={20} />
         </div>
         <div>
-          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">Project Proposal</h1>
+          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">مقترح مشروع</h1>
           <p className="text-sm text-[var(--text-muted)]">Submit a new idea for approval — fill in each step below</p>
         </div>
       </div>
@@ -454,8 +454,8 @@ const handleTeamSizeChange = (size) => {
                   <Lightbulb size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-[var(--text)]">Project Idea</h2>
-                  <p className="text-sm text-[var(--text-muted)]">Describe your graduation project concept and objectives</p>
+                  <h2 className="text-lg font-bold text-[var(--text)]">فكرة مشروع</h2>
+                  <p className="text-sm text-[var(--text-muted)]">صف فكرة وأهداف مشروع تخرجك</p>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -468,7 +468,7 @@ const handleTeamSizeChange = (size) => {
                   value={form.title} onChange={handleChange}
                   placeholder="e.g. Smart Campus Navigation App" required autoFocus
                 />
-                <span className="text-xs text-[var(--text-muted)]">Choose a clear, descriptive title for your project</span>
+                <span className="text-xs text-[var(--text-muted)]">اختر عنواناً واضحاً ووصفياً لمشروعك</span>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="p-desc" className="text-sm font-semibold text-[var(--text)]">
@@ -478,9 +478,9 @@ const handleTeamSizeChange = (size) => {
                   id="p-desc" name="description" rows={5}
                   className={`${inputCls} resize-none`}
                   value={form.description} onChange={handleChange}
-                  placeholder="Describe your project idea in detail — goals, methodology, expected outcomes, and technologies you plan to use…" required
+                  placeholder="صف فكرة مشروعك بالتفصيل — الأهداف، المنهجية، النتائج المتوقعة، والتقنيات التي تخطط لاستخدامها…" required
                 />
-                <span className="text-xs text-[var(--text-muted)]">Be specific: include objectives, methodology, and expected deliverables</span>
+                <span className="text-xs text-[var(--text-muted)]">كن محدداً: اذكر الأهداف، المنهجية، والمخرجات المتوقعة</span>
               </div>
             </div>
           )}
@@ -493,8 +493,8 @@ const handleTeamSizeChange = (size) => {
                   <Building2 size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-[var(--text)]">Department & Supervisor</h2>
-                  <p className="text-sm text-[var(--text-muted)]">Select your department and preferred supervisor</p>
+                  <h2 className="text-lg font-bold text-[var(--text)]">القسم والمشرف</h2>
+                  <p className="text-sm text-[var(--text-muted)]">اختر قسمك والمشرف المفضل</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -508,7 +508,7 @@ const handleTeamSizeChange = (size) => {
                       className={`${inputCls} appearance-none pr-10`}
                       value={form.department} onChange={handleChange} required
                     >
-                      <option value="">Select Department</option>
+                      <option value="">اختر القسم</option>
                       {DEPARTMENTS.map((d) => (
                         <option key={d.value} value={d.value}>{d.label}</option>
                       ))}
@@ -528,7 +528,7 @@ const handleTeamSizeChange = (size) => {
                       required disabled={doctors.length === 0}
                     >
                       <option value="">
-                        {doctors.length === 0 ? 'No supervisors available' : 'Select Supervisor'}
+                        {doctors.length === 0 ? 'لا يوجد مشرفون متاحون' : 'اختر المشرف'}
                       </option>
                       {doctors.map((d) => (
                         <option key={d.id} value={d.id}>
@@ -554,7 +554,7 @@ const handleTeamSizeChange = (size) => {
                       className={`${inputCls} appearance-none pr-10`}
                       value={form.project_type} onChange={handleChange} required
                     >
-                      <option value="" disabled>Select Type</option>
+                      <option value="" disabled>اختر النوع</option>
                       {PROJECT_TYPES.map((pt) => (
                         <option key={pt.value} value={pt.value}>{pt.label}</option>
                       ))}
@@ -565,7 +565,7 @@ const handleTeamSizeChange = (size) => {
               </div>
               <div className="flex items-start gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm">
                 <Info size={16} className="shrink-0 mt-0.5" />
-                <span>The supervisor you select will review and approve your proposal before it goes to the Head of Department.</span>
+                <span>المشرف الذي تختاره سيراجع ويوافق على مقترحك قبل إرساله إلى رئيس القسم.</span>
               </div>
             </div>
           )}
@@ -578,12 +578,12 @@ const handleTeamSizeChange = (size) => {
                   <UserPlus size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-[var(--text)]">Team Setup</h2>
-                  <p className="text-sm text-[var(--text-muted)]">Choose your team size and invite members</p>
+                  <h2 className="text-lg font-bold text-[var(--text)]">إعداد الفريق</h2>
+                  <p className="text-sm text-[var(--text-muted)]">اختر حجم فريقك وادعُ الأعضاء</p>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5" style={{ maxWidth: 400 }}>
-<label className="text-sm font-semibold text-[var(--text)]">Team Size</label>
+<label className="text-sm font-semibold text-[var(--text)]">حجم الفريق</label>
 <div className="flex gap-3">
   {[1, 2, 3].map((n) => (
     <button
@@ -596,7 +596,7 @@ const handleTeamSizeChange = (size) => {
       onClick={() => handleTeamSizeChange(n)}
     >
       <span className="text-2xl font-bold">{n}</span>
-      <span className="text-xs mt-1">{n === 1 ? 'Solo' : 'Members'}</span>
+      <span className="text-xs mt-1">{n === 1 ? 'فردي' : 'أعضاء'}</span>
     </button>
   ))}
 </div>
@@ -632,19 +632,19 @@ const handleTeamSizeChange = (size) => {
                 <div key={idx} className="flex flex-col gap-1.5">
                   <label htmlFor={`p-member-${idx}`} className="text-sm font-semibold text-[var(--text)]">
                     Team Member {idx + 2}
-                    <span className="text-xs text-[var(--text-muted)] font-normal ml-2">Search by name or university ID</span>
+                    <span className="text-xs text-[var(--text-muted)] font-normal ml-2">ابحث بالاسم أو الرقم الجامعي</span>
                   </label>
                   <StudentSearch
                     id={`p-member-${idx}`}
                     value={val}
                     onChange={(username) => handleMemberChange(idx, username)}
-                    placeholder="Type to search students…"
+                    placeholder="اكتب للبحث عن الطلاب…"
                   />
                 </div>
               ))}
               <div className="flex items-start gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm">
                 <Info size={16} className="shrink-0 mt-0.5" />
-                <span>Team size is <strong>1–4 students</strong>. You are automatically included as the team leader.{(form.team_size === 1 || form.team_size === 4) && ' A justification is required.'}</span>
+                <span>حجم الفريق <strong>1–4 طلاب</strong>. أنت مُضمّن تلقائياً كقائد للفريق.{(form.team_size === 1 || form.team_size === 4) && ' مطلوب تبرير.'}</span>
               </div>
             </div>
           )}
@@ -657,8 +657,8 @@ const handleTeamSizeChange = (size) => {
                   <Clipboard size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-[var(--text)]">{dynForm.title || 'Department Requirements'}</h2>
-                  <p className="text-sm text-[var(--text-muted)]">{dynForm.description || 'Fill in the additional fields required by your department'}</p>
+                  <h2 className="text-lg font-bold text-[var(--text)]">{dynForm.title || 'متطلبات القسم'}</h2>
+                  <p className="text-sm text-[var(--text-muted)]">{dynForm.description || 'املأ الحقول الإضافية المطلوبة من قبل قسمك'}</p>
                 </div>
               </div>
               {(dynForm.fields || []).map(field => (
@@ -678,15 +678,15 @@ const handleTeamSizeChange = (size) => {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-[var(--text)]">Review & Submit</h2>
-                  <p className="text-sm text-[var(--text-muted)]">Review your proposal details before submitting</p>
+                  <p className="text-sm text-[var(--text-muted)]">راجع تفاصيل المقترح قبل التقديم</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: 'Title', value: form.title || '—' },
-                  { label: 'Department', value: DEPARTMENTS.find(d => d.value === form.department)?.label || '—' },
-                  { label: 'Supervisor', value: doctors.find(d => d.id === Number(form.supervisor))?.name || '—' },
-                  { label: 'Team Size', value: `${form.team_size} student${form.team_size > 1 ? 's' : ''}` },
+                  { label: 'العنوان', value: form.title || '—' },
+                  { label: 'القسم', value: DEPARTMENTS.find(d => d.value === form.department)?.label || '—' },
+                  { label: 'المشرف', value: doctors.find(d => d.id === Number(form.supervisor))?.name || '—' },
+                  { label: 'حجم الفريق', value: `${form.team_size} طالب` },
                 ].map(item => (
                   <div key={item.label} className="bg-[var(--bg-tertiary)] p-3 rounded-[var(--radius-sm)] border border-[var(--border-light)]">
                     <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">{item.label}</span>
@@ -695,12 +695,12 @@ const handleTeamSizeChange = (size) => {
                 ))}
               </div>
   <div className="bg-[var(--bg-tertiary)] p-3 rounded-[var(--radius-sm)] border border-[var(--border-light)]">
-  <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">Description</span>
+  <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">الوصف</span>
   <p className="text-sm text-[var(--text)] mt-1">{form.description || '—'}</p>
 </div>
 {form.team_size_reason && (
   <div className="bg-[var(--bg-tertiary)] p-3 rounded-[var(--radius-sm)] border border-[var(--border-light)]">
-    <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">Team Size Justification</span>
+    <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">تبرير حجم الفريق</span>
     <p className="text-sm text-[var(--text)] mt-1">{form.team_size_reason}</p>
   </div>
 )}
@@ -716,7 +716,7 @@ const handleTeamSizeChange = (size) => {
                 onClick={goPrev}
               >
                 <ChevronLeft size={16} />
-                Previous
+                السابق
               </button>
             ) : <div />}
             {currentStep < totalSteps - 1 ? (
@@ -726,7 +726,7 @@ const handleTeamSizeChange = (size) => {
                 onClick={goNext}
                 disabled={!isStepValid(currentStep)}
               >
-                Continue
+                متابعة
                 <ChevronRight size={16} />
               </button>
             ) : (
@@ -736,9 +736,9 @@ const handleTeamSizeChange = (size) => {
                 disabled={submitting}
               >
                 {submitting ? (
-                  <><Loader2 size={16} className="animate-spin" /> Submitting…</>
+                  <><Loader2 size={16} className="animate-spin" /> جاري الإرسال…</>
                 ) : (
-                  <><Send size={16} /> Submit Proposal</>
+                  <><Send size={16} /> إرسال المقترح</>
                 )}
               </button>
             )}

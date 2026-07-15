@@ -56,8 +56,8 @@ export default function MyInvitations({ onBack }) {
           <Mail size={20} />
         </div>
         <div>
-          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">Team Invitations</h1>
-          <p className="text-sm text-[var(--text-muted)]">Review and respond to pending team formation requests.</p>
+          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">دعوات الفريق</h1>
+          <p className="text-sm text-[var(--text-muted)]">راجع ورد على طلبات تشكيل الفريق المعلقة.</p>
         </div>
       </div>
 
@@ -82,7 +82,7 @@ export default function MyInvitations({ onBack }) {
           <div className="w-16 h-16 flex items-center justify-center rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)] mb-4">
             <Inbox size={28} />
           </div>
-          <h3 className="text-lg font-bold text-[var(--text)]">No pending invitations</h3>
+          <h3 className="text-lg font-bold text-[var(--text)]">لا توجد دعوات معلقة</h3>
           <p className="text-sm text-[var(--text-muted)] mt-1">You're all caught up!</p>
         </div>
       )}
@@ -113,7 +113,7 @@ export default function MyInvitations({ onBack }) {
                       <User size={14} />
                     </div>
                     <div>
-                      <span className="text-[11px] text-[var(--text-muted)] uppercase tracking-wide font-medium block">Invited by Team Leader</span>
+                      <span className="text-[11px] text-[var(--text-muted)] uppercase tracking-wide font-medium block">دعوة من قائد الفريق</span>
                       <span className="text-sm font-semibold text-[var(--text)]">{inv.leader_name}</span>
                     </div>
                   </div>
@@ -122,7 +122,7 @@ export default function MyInvitations({ onBack }) {
                 {/* Notice Bar */}
                 <div className="flex items-start gap-2.5 px-5 py-3 bg-blue-500/5 border-l-[3px] border-l-blue-500 text-sm text-[var(--text-secondary)]">
                   <Briefcase size={16} className="text-blue-500 shrink-0 mt-0.5" />
-                  <span>Accepting means you won't be able to apply elsewhere until this application is decided. If rejected, you'll be free again.</span>
+                  <span>قبول الدعوة يعني أنك لن تتمكن من التقدم لمكان آخر حتى يُبت في هذا الطلب. وفي حال الرفض، ستصبح حراً مرة أخرى.</span>
                 </div>
 
                 {/* Actions */}
@@ -132,14 +132,14 @@ export default function MyInvitations({ onBack }) {
                     onClick={() => handleIdeaRespond(inv.id, 'accept')}
                     disabled={acting === inv.id}
                   >
-                    <Check size={16} /> Accept
+                    <Check size={16} /> قبول
                   </button>
                   <button
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-[var(--radius-sm)] bg-transparent border-2 border-red-400 text-red-500 font-semibold text-sm hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={() => handleIdeaRespond(inv.id, 'reject')}
                     disabled={acting === inv.id}
                   >
-                    <X size={16} /> Decline
+                    <X size={16} /> رفض
                   </button>
                 </div>
               </div>
@@ -168,7 +168,7 @@ export default function MyInvitations({ onBack }) {
                       <User size={14} />
                     </div>
                     <div>
-                      <span className="text-[11px] text-[var(--text-muted)] uppercase tracking-wide font-medium block">Proposed by Team Leader</span>
+                      <span className="text-[11px] text-[var(--text-muted)] uppercase tracking-wide font-medium block">مقترحة من قائد الفريق</span>
                       <span className="text-sm font-semibold text-[var(--text)]">{inv.leader_name}</span>
                     </div>
                   </div>
@@ -177,7 +177,7 @@ export default function MyInvitations({ onBack }) {
                 {/* Notice Bar */}
                 <div className="flex items-start gap-2.5 px-5 py-3 bg-blue-500/5 border-l-[3px] border-l-blue-500 text-sm text-[var(--text-secondary)]">
                   <Briefcase size={16} className="text-blue-500 shrink-0 mt-0.5" />
-                  <span>Accepting means you won't be able to apply elsewhere until this proposal is decided. If rejected, you'll be free again.</span>
+                  <span>قبول الدعوة يعني أنك لن تتمكن من التقدم لمكان آخر حتى يُبت في هذا المقترح. وفي حال الرفض، ستصبح حراً مرة أخرى.</span>
                 </div>
 
                 {/* Actions */}
@@ -187,14 +187,14 @@ export default function MyInvitations({ onBack }) {
                     onClick={() => handlePropRespond(inv.id, 'accept')}
                     disabled={acting === inv.id}
                   >
-                    <Check size={16} /> Accept
+                    <Check size={16} /> قبول
                   </button>
                   <button
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-[var(--radius-sm)] bg-transparent border-2 border-red-400 text-red-500 font-semibold text-sm hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={() => handlePropRespond(inv.id, 'reject')}
                     disabled={acting === inv.id}
                   >
-                    <X size={16} /> Decline
+                    <X size={16} /> رفض
                   </button>
                 </div>
               </div>

@@ -81,7 +81,7 @@ export default function SupervisorReview({ onBack }) {
       {!loading && proposals.length === 0 && !error && (
         <div className="empty-state">
           <span aria-hidden="true">✅</span>
-          <p>No pending proposals at the moment.</p>
+          <p>لا توجد مقترحات معلقة حالياً.</p>
         </div>
       )}
 
@@ -151,10 +151,10 @@ export default function SupervisorReview({ onBack }) {
 
               <div className="card-footer" style={{ display: 'flex', gap: 12 }}>
                 <button className="btn btn-primary btn-sm" onClick={() => openReview(p.id, 'approve')}>
-                  ✅ Approve
+                  ✅ موافقة
                 </button>
                 <button className="btn btn-danger btn-sm" onClick={() => openReview(p.id, 'reject')}>
-                  ❌ Reject
+                  ❌ رفض
                 </button>
               </div>
             </div>
@@ -170,14 +170,14 @@ export default function SupervisorReview({ onBack }) {
 
             {reviewing.action === 'reject' && (
               <div className="form-group" style={{ marginTop: 16 }}>
-                <label htmlFor="sv-reason">Rejection Reason <span aria-hidden="true">*</span></label>
+                <label htmlFor="sv-reason">سبب الرفض <span aria-hidden="true">*</span></label>
                 <textarea
                   id="sv-reason"
                   className="form-control"
                   rows={3}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Explain why this proposal is being rejected…"
+                  placeholder="اشرح سبب رفض هذا المقترح…"
                 />
               </div>
             )}
@@ -196,9 +196,9 @@ export default function SupervisorReview({ onBack }) {
                 onClick={handleConfirm}
                 disabled={confirming}
               >
-                {confirming ? 'Processing...' : 'Confirm'}
+                {confirming ? 'Processing...' : 'تأكيد'}
               </button>
-              <button className="btn btn-outline" onClick={() => setReviewing(null)} disabled={confirming}>Cancel</button>
+              <button className="btn btn-outline" onClick={() => setReviewing(null)} disabled={confirming}>إلغاء</button>
             </div>
           </div>
         </div>

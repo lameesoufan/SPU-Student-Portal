@@ -43,7 +43,7 @@ export default function HodProjects({ onBack, user }) {
         setBoards(boardsRes.data);
         setStats(statsRes.data);
       })
-      .catch(() => setError('Failed to load projects.'))
+      .catch(() => setError('فشل تحميل المشاريع.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -88,11 +88,11 @@ export default function HodProjects({ onBack, user }) {
             onClick={() => setSelected(null)}
           >
             <ArrowLeft size={16} />
-            All Projects
+            كل المشاريع
           </button>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
             <Eye size={12} />
-            Read-Only View
+            عرض فقط
           </span>
           {selectedBoard.github_repo && selectedBoard.github_repo.startsWith('http') && (
             <a
@@ -102,7 +102,7 @@ export default function HodProjects({ onBack, user }) {
               className="inline-flex items-center gap-1.5 ml-auto text-[13px] font-medium text-violet-600 dark:text-violet-400 hover:underline"
             >
               <GitBranch size={14} />
-              GitHub Repo
+              مستودع GitHub
             </a>
           )}
         </div>
@@ -124,7 +124,7 @@ export default function HodProjects({ onBack, user }) {
           <FolderKanban size={20} />
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white m-0">
-          {isDean ? 'جميع مشاريع الأقسام' : 'Department Projects'}
+          {isDean ? 'جميع مشاريع الأقسام' : 'مشاريع القسم'}
         </h2>
         {isDean && totalDepts > 0 && (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/10 text-violet-600 border border-violet-500/20">
@@ -143,7 +143,7 @@ export default function HodProjects({ onBack, user }) {
             </div>
             <div className="flex flex-col gap-0.5">
               <span className="text-[26px] font-bold text-gray-900 dark:text-white leading-none">{stats.total_projects}</span>
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Active Projects</span>
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide">مشاريع نشطة</span>
             </div>
           </div>
 
@@ -153,7 +153,7 @@ export default function HodProjects({ onBack, user }) {
             </div>
             <div className="flex flex-col gap-0.5">
               <span className="text-[26px] font-bold text-gray-900 dark:text-white leading-none">{stats.proposals_count}</span>
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Student Proposals</span>
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide">مقترحات الطلاب</span>
             </div>
           </div>
 
@@ -163,7 +163,7 @@ export default function HodProjects({ onBack, user }) {
             </div>
             <div className="flex flex-col gap-0.5">
               <span className="text-[26px] font-bold text-gray-900 dark:text-white leading-none">{stats.applications_count}</span>
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Doctor Ideas</span>
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide">أفكار الدكاترة</span>
             </div>
           </div>
 
@@ -173,7 +173,7 @@ export default function HodProjects({ onBack, user }) {
             </div>
             <div className="flex flex-col gap-0.5">
               <span className="text-[26px] font-bold text-gray-900 dark:text-white leading-none">{stats.avg_progress}%</span>
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Avg Progress</span>
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide">متوسط الإنجاز</span>
             </div>
           </div>
         </div>
@@ -199,9 +199,9 @@ export default function HodProjects({ onBack, user }) {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400">
             <FolderOpen size={32} />
           </div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white">No Active Projects</h3>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">لا توجد مشاريع نشطة</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm leading-relaxed">
-            Projects will appear here once they are registered.
+            ستظهر المشاريع هنا فور تسجيلها.
           </p>
         </div>
       )}
@@ -313,7 +313,7 @@ export default function HodProjects({ onBack, user }) {
                                   {board.title}
                                 </h3>
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 whitespace-nowrap flex-shrink-0">
-                                  {total} tasks
+                                  {total} مهمة
                                 </span>
                               </div>
 
@@ -390,7 +390,7 @@ export default function HodProjects({ onBack, user }) {
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="text-[15px] font-bold text-gray-900 dark:text-white m-0 leading-snug">{board.title}</h3>
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 whitespace-nowrap flex-shrink-0">
-                    {total} tasks
+                    {total} مهمة
                   </span>
                 </div>
 
@@ -423,7 +423,7 @@ export default function HodProjects({ onBack, user }) {
                     return (
                       <div key={col.key} className="bg-gray-50 dark:bg-gray-700 rounded-lg py-2 px-1 text-center border border-gray-200/50 dark:border-gray-600/50 flex flex-col items-center gap-1">
                         <span className="w-[7px] h-[7px] rounded-full" style={{ background: col.color }} />
-                        <span className="text-[9px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wide">{col.label}</span>
+                        <span className="text-[9px] text-gray-400 dark:text-gray-500 font-semibold tracking-wide">{col.label}</span>
                         <span className="text-xl font-bold text-gray-900 dark:text-white leading-none">{count}</span>
                       </div>
                     );

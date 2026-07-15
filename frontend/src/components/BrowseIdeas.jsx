@@ -6,12 +6,12 @@ import DynamicCheckboxGroup from './DynamicCheckboxGroup';
 import { Users, User, Award, Briefcase, Wrench, Search, Lock, Send, CheckCircle, Clock, BookOpen } from 'lucide-react';
 
 const STATUS_META = {
-  awaiting_members:             { label: 'Awaiting Members',             cls: 'badge-warning' },
-  pending_review:              { label: 'Pending Review',              cls: 'badge-warning' },
-  pending_doctor:              { label: 'Pending Doctor',              cls: 'badge-warning' },
-  pending_hod:                 { label: 'Pending HoD',                 cls: 'badge-primary' },
-  registered:                  { label: 'Registered',                  cls: 'badge-success' },
-  rejected:                    { label: 'Rejected',                    cls: 'badge-danger' },
+  awaiting_members:             { label: 'بانتظار الأعضاء',             cls: 'badge-warning' },
+  pending_review:              { label: 'قيد المراجعة',              cls: 'badge-warning' },
+  pending_doctor:              { label: 'بانتظار الطبيب',              cls: 'badge-warning' },
+  pending_hod:                 { label: 'بانتظار رئيس القسم',                 cls: 'badge-primary' },
+  registered:                  { label: 'مسجل',                  cls: 'badge-success' },
+  rejected:                    { label: 'مرفوض',                    cls: 'badge-danger' },
   rejected_insufficient_members: { label: 'Rejected (Insufficient Members)', cls: 'badge-danger' },
 };
 
@@ -47,7 +47,7 @@ export default function BrowseIdeas({ onBack }) {
         const appData = appRes.status === 'fulfilled' ? appRes.value.data : null;
         const propData = propRes.status === 'fulfilled' ? propRes.value.data : null;
         if (boardData && boardData.has_project) {
-          setMyApp({ _type: 'board', status: 'registered', idea_title: boardData.board?.title || 'Your Project' });
+          setMyApp({ _type: 'board', status: 'registered', idea_title: boardData.board?.title || 'مشروعك' });
         } else if (appData && ['awaiting_members', 'pending_doctor', 'pending_hod', 'registered'].includes(appData.status)) {
           setMyApp(appData);
         } else if (propData && ['pending_supervisor', 'pending_hod', 'assigned'].includes(propData.status)) {
@@ -161,8 +161,8 @@ const handleTeamSizeChange = (size) => {
           <BookOpen size={20} />
         </div>
         <div>
-          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">Browse Project Ideas</h1>
-          <p className="text-sm text-[var(--text-muted)]">Discover and apply for graduation projects proposed by faculty members.</p>
+          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">تصفح أفكار المشاريع</h1>
+          <p className="text-sm text-[var(--text-muted)]">اكتشف وتقدم لمشاريع التخرج المقترحة من أعضاء الهيئة التدريسية.</p>
         </div>
       </div>
 
@@ -182,13 +182,13 @@ const handleTeamSizeChange = (size) => {
         {myApp && myApp._type === 'proposal' && (
           <div className="flex items-center gap-2 p-3 rounded-[var(--radius-sm)] bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-sm">
             <Briefcase size={16} />
-            <span>You already have an active idea proposal. You cannot apply on another idea.</span>
+            <span>لديك مقترح فكرة نشط بالفعل. لا يمكنك التقدم لفكرة أخرى.</span>
           </div>
         )}
         {myApp && myApp._type === 'board' && (
           <div className="flex items-center gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm">
             <CheckCircle size={16} />
-            <span>You already have a registered project. You cannot apply on another idea.</span>
+            <span>لديك مشروع مسجل بالفعل. لا يمكنك التقدم لفكرة أخرى.</span>
           </div>
         )}
         {error && (
@@ -207,7 +207,7 @@ const handleTeamSizeChange = (size) => {
             <input
               type="text"
               className="w-full pl-[42px] mb-0 bg-[var(--input-bg)] text-[var(--text)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors placeholder:text-[var(--text-faint)]"
-              placeholder="Search by title, doctor, or skills…"
+              placeholder="ابحث بالعنوان، الطبيب، أو المهارات…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -217,7 +217,7 @@ const handleTeamSizeChange = (size) => {
             value={deptFilter}
             onChange={(e) => setDeptFilter(e.target.value)}
           >
-            <option value="">All Departments</option>
+            <option value="">كل الأقسام</option>
             {departments.map((d) => (
               <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>
             ))}
@@ -228,7 +228,7 @@ const handleTeamSizeChange = (size) => {
         {loading && (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="spinner-dark w-6 h-6"></div>
-            <p className="text-[var(--text-muted)] mt-3 text-sm">Loading projects…</p>
+            <p className="text-[var(--text-muted)] mt-3 text-sm">جاري تحميل المشاريع…</p>
           </div>
         )}
 
@@ -239,8 +239,8 @@ const handleTeamSizeChange = (size) => {
               <div className="w-16 h-16 flex items-center justify-center rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)] mx-auto mb-4">
                 <Search size={24} />
               </div>
-              <h3 className="text-lg font-bold text-[var(--text)]">No projects found</h3>
-              <p className="text-sm text-[var(--text-muted)] text-center mt-1">No project ideas match your current filters. Try adjusting your search or department filter.</p>
+              <h3 className="text-lg font-bold text-[var(--text)]">لا توجد مشاريع</h3>
+              <p className="text-sm text-[var(--text-muted)] text-center mt-1">لا توجد أفكار مشاريع تطابق الفلاتر الحالية. حاول تعديل البحث أو فلتر القسم.</p>
             </div>
           </div>
         )}
@@ -290,7 +290,7 @@ const handleTeamSizeChange = (size) => {
                         <User size={14} />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[var(--text-muted)] text-xs">Supervisor</span>
+                        <span className="text-[var(--text-muted)] text-xs">المشرف</span>
                         <span className="text-sm text-[var(--text)] font-semibold">{idea.doctor_name}</span>
                       </div>
                     </div>
@@ -299,7 +299,7 @@ const handleTeamSizeChange = (size) => {
                         <Users size={14} />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[var(--text-muted)] text-xs">Team Size</span>
+                        <span className="text-[var(--text-muted)] text-xs">حجم الفريق</span>
                         <span className="text-sm text-[var(--text)] font-semibold">Max {idea.max_team_size}</span>
                       </div>
                     </div>
@@ -323,7 +323,7 @@ const handleTeamSizeChange = (size) => {
                   {/* Registered team */}
                   {isTaken && team && (
                     <div className="bg-[var(--bg-tertiary)] px-3.5 py-3 rounded-[var(--radius-sm)] border border-[var(--border-light)]">
-                      <span className="text-[var(--text-muted)] text-xs mb-1.5 block">Registered Team</span>
+                      <span className="text-[var(--text-muted)] text-xs mb-1.5 block">الفريق المسجل</span>
                       <div className="flex flex-col gap-1.5">
                         <span className="text-[13px] flex items-center gap-2 font-bold text-[var(--primary)]">
                           <Award size={16} /> {team.leader.name}
@@ -347,7 +347,7 @@ const handleTeamSizeChange = (size) => {
                       </div>
                     ) : isTaken || hasProject ? (
                       <button className="w-full inline-flex items-center justify-center gap-2 opacity-60 bg-transparent text-[var(--text-muted)] py-2.5 px-4 rounded-[var(--radius-sm)] cursor-not-allowed" disabled>
-                        <Lock size={16} /> {hasProject ? 'Already Have Project' : 'Not Available'}
+                        <Lock size={16} /> {hasProject ? 'لديك مشروع بالفعل' : 'غير متاح'}
                       </button>
                     ) : (
                       <button
@@ -386,7 +386,7 @@ const handleTeamSizeChange = (size) => {
 
             <form className="mt-5">
               <div className="mb-4">
-                <label htmlFor="team-size" className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">Your Team Size</label>
+                <label htmlFor="team-size" className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">حجم فريقك</label>
                 <select
                   id="team-size"
                   className="w-full bg-[var(--input-bg)] text-[var(--text)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors"
@@ -400,7 +400,7 @@ const handleTeamSizeChange = (size) => {
               </div>
 
               <div className="mb-4">
-                <label htmlFor="project_type" className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">Project Type <span className="text-[var(--danger)]">*</span></label>
+                <label htmlFor="project_type" className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">نوع المشروع <span className="text-[var(--danger)]">*</span></label>
                 <select
                   id="project_type"
                   className="w-full bg-[var(--input-bg)] text-[var(--text)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors"
@@ -408,7 +408,7 @@ const handleTeamSizeChange = (size) => {
                   onChange={(e) => setApplyForm(prev => ({ ...prev, project_type: e.target.value }))}
                   required
                 >
-                  <option value="" disabled>Select project type</option>
+                  <option value="" disabled>اختر نوع المشروع</option>
                   {PROJECT_TYPES.map((pt) => (
                     <option key={pt.value} value={pt.value}>{pt.label}</option>
                   ))}
@@ -445,7 +445,7 @@ const handleTeamSizeChange = (size) => {
       id={`member-${idx}`}
       value={val}
       onChange={(username) => handleMemberChange(idx, username)}
-      placeholder="Search by student name or university ID…"
+      placeholder="ابحث باسم الطالب أو الرقم الجامعي…"
     />
   </div>
 ))}
@@ -454,13 +454,13 @@ const handleTeamSizeChange = (size) => {
               {loadingDynForm && (
                 <div className="py-2 flex items-center gap-2">
                   <div className="spinner-dark w-4 h-4"></div>
-                  <span className="text-sm text-[var(--text-muted)]">Loading department form…</span>
+                  <span className="text-sm text-[var(--text-muted)]">جاري تحميل نموذج القسم…</span>
                 </div>
               )}
               {dynForm && (dynForm.fields || []).length > 0 && (
                 <div className="mt-4 p-4 bg-[var(--bg-tertiary)] rounded-[var(--radius)] border border-[var(--border-light)] flex flex-col gap-3.5">
                   <div className="text-sm font-bold text-[var(--primary)] uppercase tracking-wide pb-2 border-b border-[var(--border)]">
-                    {dynForm.title || 'Additional Requirements'}
+                    {dynForm.title || 'متطلبات إضافية'}
                   </div>
                   {dynForm.fields.map(field => (
                     <BrowseDynField
@@ -487,7 +487,7 @@ const handleTeamSizeChange = (size) => {
                 onClick={handleApplySubmit}
                 disabled={applying || loadingDynForm}
               >
-                {applying ? 'Submitting…' : loadingDynForm ? 'Loading form…' : 'Confirm Application'}
+                {applying ? 'Submitting…' : loadingDynForm ? 'Loading form…' : 'تأكيد الطلب'}
               </button>
               <button
                 className="inline-flex items-center justify-center gap-2 bg-transparent border border-[var(--border)] text-[var(--text)] font-medium py-2.5 px-5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-tertiary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -523,7 +523,7 @@ function BrowseDynField({ field, value, onChange }) {
   if (field_type === 'date')
     return <div>{lbl}<input className={inputCls} type="date" value={value} required={required} onChange={e => onChange(e.target.value)} /></div>;
   if (field_type === 'select')
-    return <div>{lbl}<select className={inputCls} value={value} required={required} onChange={e => onChange(e.target.value)}><option value="">Select...</option>{(options||[]).map(o=><option key={o} value={o}>{o}</option>)}</select></div>;
+    return <div>{lbl}<select className={inputCls} value={value} required={required} onChange={e => onChange(e.target.value)}><option value="">اختر...</option>{(options||[]).map(o=><option key={o} value={o}>{o}</option>)}</select></div>;
   if (field_type === 'radio')
     return <div>{lbl}<div className="flex flex-col gap-2">{(options||[]).map(o=><label key={o} className="flex items-center gap-2 text-sm text-[var(--text)] cursor-pointer font-medium"><input type="radio" name={`bdyn-${field.id}`} value={o} checked={value===o} onChange={()=>onChange(o)} required={required} className="accent-[var(--primary)]" /><span>{o}</span></label>)}</div></div>;
   if (field_type === 'checkbox')

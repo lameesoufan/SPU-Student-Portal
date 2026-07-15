@@ -30,7 +30,7 @@ export default function ImportUsers({ onBack }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file) { setError('Please select an Excel file.'); return; }
+    if (!file) { setError('يرجى اختيار ملف Excel.'); return; }
     setError(''); setResult(null); setLoading(true);
     try {
       const res = await importUsers(file, role);
@@ -38,7 +38,7 @@ export default function ImportUsers({ onBack }) {
       setFile(null);
       fileRef.current.value = '';
     } catch (err) {
-      setError(err.response?.data?.error || 'Import failed. Please try again.');
+      setError(err.response?.data?.error || 'فشل الاستيراد. حاول مرة أخرى.');
     } finally { setLoading(false); }
   };
 
@@ -49,14 +49,14 @@ export default function ImportUsers({ onBack }) {
           onClick={onBack}
           className="flex items-center gap-2 text-sm font-semibold mb-6 px-4 py-2 rounded-xl border border-[var(--border,#e2e8f0)] bg-[var(--card,#fff)] hover:bg-[var(--bg-hover,#f1f5f9)] transition-colors"
         >
-          {Icons.ArrowLeft} Back to Dashboard
+          {Icons.ArrowLeft} العودة للوحة التحكم
         </button>
       )}
 
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[var(--text,#1e293b)]">Import Users</h1>
-        <p className="text-sm text-[var(--text-secondary,#64748b)] mt-1">Bulk-create students or doctors using an Excel file.</p>
+        <h1 className="text-2xl font-bold text-[var(--text,#1e293b)]">استيراد المستخدمين</h1>
+        <p className="text-sm text-[var(--text-secondary,#64748b)] mt-1">إنشاء جماعي للطلاب أو الدكاترة باستخدام ملف Excel.</p>
       </div>
 
       {/* Info Banner */}
@@ -85,14 +85,14 @@ export default function ImportUsers({ onBack }) {
             <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-8 mb-6">
               {/* Role Select */}
               <div className="flex flex-col gap-2">
-                <label htmlFor="role-select" className="text-[13px] font-semibold text-[var(--text-secondary,#475569)]">Target Role</label>
+                <label htmlFor="role-select" className="text-[13px] font-semibold text-[var(--text-secondary,#475569)]">الدور المستهدف</label>
                 <select
                   id="role-select"
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
                   className="h-11 px-4 text-sm border-[1.5px] border-[var(--border,#e2e8f0)] rounded-xl bg-[var(--input-bg,#fff)] text-[var(--text,#1e293b)] outline-none focus:border-[var(--primary,#6366f1)] transition-colors"
                 >
-                  <option value="student">Student Batch</option>
+                  <option value="student">دفعة الطلاب</option>
                   <option value="doctor">Faculty / Doctor Batch</option>
                 </select>
               </div>
@@ -114,7 +114,7 @@ export default function ImportUsers({ onBack }) {
                     {file ? Icons.FileUp : Icons.UploadAction}
                   </div>
                   <div className="flex flex-col gap-1">
-                    <span className="text-sm font-bold text-[var(--text,#1e293b)]">{file ? file.name : 'Click to upload or drag and drop'}</span>
+                    <span className="text-sm font-bold text-[var(--text,#1e293b)]">{file ? file.name : 'اضغط للرفع أو اسحب وأفلت'}</span>
                     <span className="text-[13px] text-[var(--text-muted,#94a3b8)]">Excel files only (Max 10MB)</span>
                   </div>
                   <input
@@ -134,7 +134,7 @@ export default function ImportUsers({ onBack }) {
               disabled={loading}
               className="w-full h-12 rounded-xl bg-[var(--primary,#6366f1)] text-white font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              {loading ? 'Processing Import…' : 'Start Import Process'}
+              {loading ? 'Processing Import…' : 'بدء عملية الاستيراد'}
             </button>
           </form>
         </div>
@@ -146,7 +146,7 @@ export default function ImportUsers({ onBack }) {
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border,#e2e8f0)]">
             <h3 className="text-base font-bold text-[var(--text,#1e293b)]">
-              Successfully Imported: {result.users.length} {role === 'student' ? 'Students' : 'Doctors'}
+              Successfully Imported: {result.users.length} {role === 'student' ? 'طلاب' : 'دكاترة'}
             </h3>
             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${role === 'student' ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
               {role === 'student' ? Icons.Student : Icons.Doctor}
@@ -159,10 +159,10 @@ export default function ImportUsers({ onBack }) {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-[var(--bg-tertiary,#f8fafc)]">
-                  <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-muted,#94a3b8)] border-b border-[var(--border,#e2e8f0)]">No.</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-muted,#94a3b8)] border-b border-[var(--border,#e2e8f0)]">System Username</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-muted,#94a3b8)] border-b border-[var(--border,#e2e8f0)]">Account Type</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-muted,#94a3b8)] border-b border-[var(--border,#e2e8f0)]">Access Scope</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-muted,#94a3b8)] border-b border-[var(--border,#e2e8f0)]">ت.</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-muted,#94a3b8)] border-b border-[var(--border,#e2e8f0)]">اسم المستخدم في النظام</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-muted,#94a3b8)] border-b border-[var(--border,#e2e8f0)]">نوع الحساب</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-muted,#94a3b8)] border-b border-[var(--border,#e2e8f0)]">نطاق الوصول</th>
                 </tr>
               </thead>
               <tbody>
@@ -177,7 +177,7 @@ export default function ImportUsers({ onBack }) {
                       </span>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-[var(--text-muted,#94a3b8)] border-b border-[var(--border-light,#f1f5f9)]">
-                      {role === 'student' ? 'Standard Access' : 'Faculty Access'}
+                      {role === 'student' ? 'وصول قياسي' : 'وصول هيئة تدريسية'}
                     </td>
                   </tr>
                 ))}

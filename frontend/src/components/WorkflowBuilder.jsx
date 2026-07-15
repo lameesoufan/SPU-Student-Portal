@@ -13,39 +13,39 @@ import {
 } from '../api';
 
 const TRIGGER_TYPES = [
-  { value: 'project_start', label: 'Project Start' },
-  { value: 'after_days', label: 'After X Days' },
+  { value: 'project_start', label: 'بداية المشروع' },
+  { value: 'after_days', label: 'بعد X يوم' },
   { value: 'date', label: 'Specific Date' },
-  { value: 'milestone', label: 'At Milestone' },
-  { value: 'manual', label: 'Manual Trigger' },
+  { value: 'milestone', label: 'عند里程碑' },
+  { value: 'manual', label: 'تشغيل يدوي' },
 ];
 
 const FIELD_TYPES = [
-  { value: 'text',     label: 'Short Text' },
-  { value: 'textarea', label: 'Long Text' },
-  { value: 'number',   label: 'Number' },
-  { value: 'select',   label: 'Dropdown' },
-  { value: 'radio',    label: 'Radio Buttons' },
-  { value: 'checkbox', label: 'Checkboxes' },
+  { value: 'text',     label: 'نص قصير' },
+  { value: 'textarea', label: 'نص طويل' },
+  { value: 'number',   label: 'رقم' },
+  { value: 'select',   label: 'قائمة منسدلة' },
+  { value: 'radio',    label: 'أزرار اختيار' },
+  { value: 'checkbox', label: 'مربعات اختيار' },
   { value: 'date',     label: 'Date' },
-  { value: 'file',     label: 'File Upload' },
+  { value: 'file',     label: 'رفع ملف' },
 ];
 
 const RECURRENCE_UNITS = [
-  { value: '', label: 'No Repeat' },
-  { value: 'weekly', label: 'Weekly' },
+  { value: '', label: 'بدون تكرار' },
+  { value: 'weekly', label: 'أسبوعي' },
   { value: 'biweekly', label: 'Every 2 Weeks' },
-  { value: 'monthly', label: 'Monthly' },
+  { value: 'monthly', label: 'شهري' },
 ];
 
 const WEEK_DAYS = [
-  { value: 0, label: 'Monday' },
-  { value: 1, label: 'Tuesday' },
-  { value: 2, label: 'Wednesday' },
-  { value: 3, label: 'Thursday' },
-  { value: 4, label: 'Friday' },
-  { value: 5, label: 'Saturday' },
-  { value: 6, label: 'Sunday' },
+  { value: 0, label: 'الإثنين' },
+  { value: 1, label: 'الثلاثاء' },
+  { value: 2, label: 'الأربعاء' },
+  { value: 3, label: 'الخميس' },
+  { value: 4, label: 'الجمعة' },
+  { value: 5, label: 'السبت' },
+  { value: 6, label: 'الأحد' },
 ];
 
 const STATUS_BADGE = {
@@ -106,7 +106,7 @@ function getTriggerLabel(triggerType, stage) {
     case 'project_start': return 'Project Start';
     case 'after_days': return stage.trigger_days ? `After ${stage.trigger_days} days` : 'After X Days';
     case 'date': return stage.trigger_date ? `On ${stage.trigger_date}` : 'Specific Date';
-    case 'milestone': return 'At Milestone';
+    case 'milestone': return 'عند الحد';
     case 'manual': return 'Manual Trigger';
     default: return triggerType;
   }
@@ -172,7 +172,7 @@ function SortableField({ field, fieldIndex, stageIndex, onChange, onRemove }) {
         <div className="flex items-center gap-2 flex-wrap">
           <input
             className="flex-1 min-w-[120px] px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 transition-all duration-200"
-            placeholder="Field label"
+            placeholder="تسمية الحقل"
             value={field.label}
             onChange={e => onChange(stageIndex, fieldIndex, 'label', e.target.value)}
           />
@@ -192,7 +192,7 @@ function SortableField({ field, fieldIndex, stageIndex, onChange, onRemove }) {
               checked={field.required}
               onChange={e => onChange(stageIndex, fieldIndex, 'required', e.target.checked)}
             />
-            <span className="hidden sm:inline">Required</span>
+            <span className="hidden sm:inline">إجباري</span>
           </label>
         </div>
 
@@ -213,7 +213,7 @@ function SortableField({ field, fieldIndex, stageIndex, onChange, onRemove }) {
       <button
         className="p-1.5 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200 flex-shrink-0"
         onClick={() => onRemove(stageIndex, fieldIndex)}
-        title="Remove field"
+        title="إزالة الحقل"
       >
         {Icons.Trash}
       </button>
@@ -312,11 +312,11 @@ function SortableStage({
               {triggerIcon} {triggerLabel}
             </span>
             <span className="text-gray-300 dark:text-gray-600">|</span>
-            <span>{fields.length} field{fields.length !== 1 ? 's' : ''}</span>
+            <span>{fields.length} حقل</span>
             {stage.is_required && (
               <>
                 <span className="text-gray-300 dark:text-gray-600">|</span>
-                <span className="text-emerald-600 dark:text-emerald-400">Required</span>
+                <span className="text-emerald-600 dark:text-emerald-400">إجباري</span>
               </>
             )}
           </div>
@@ -327,14 +327,14 @@ function SortableStage({
           <button
             className="p-1.5 text-gray-400 hover:text-violet-600 dark:text-gray-500 dark:hover:text-violet-400 rounded-md hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors duration-200"
             onClick={() => onToggleEdit(index)}
-            title={isEditing ? 'Collapse' : 'Edit'}
+            title={isEditing ? 'طي' : 'تعديل'}
           >
             {isEditing ? Icons.ChevronUp : Icons.Edit}
           </button>
           <button
             className="p-1.5 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200"
             onClick={() => onRemove(index)}
-            title="Remove stage"
+            title="إزالة المرحلة"
           >
             {Icons.Trash}
           </button>
@@ -350,10 +350,10 @@ function SortableStage({
         <div className="mt-2 ml-6 mr-2 p-4 bg-white dark:bg-gray-800 border border-violet-200 dark:border-violet-700 rounded-xl space-y-3">
           {/* Name */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</label>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">الاسم</label>
             <input
               className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 transition-all duration-200"
-              placeholder="Stage name"
+              placeholder="اسم المرحلة"
               value={stage.name}
               onChange={e => onChange(index, 'name', e.target.value)}
             />
@@ -361,7 +361,7 @@ function SortableStage({
 
           {/* Description */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Description</label>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">الوصف</label>
             <textarea
               className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 transition-all duration-200 resize-y"
               rows={2}
@@ -373,7 +373,7 @@ function SortableStage({
 
           {/* Trigger Type */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Trigger</label>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">المحفّز</label>
             <select
               className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 transition-all duration-200"
               value={stage.trigger_type}
@@ -388,7 +388,7 @@ function SortableStage({
           {/* Conditional: After Days */}
           {needsDays && (
             <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Days after project start</label>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">أيام بعد بداية المشروع</label>
               <input
                 className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 transition-all duration-200"
                 type="number"
@@ -402,7 +402,7 @@ function SortableStage({
           {/* Conditional: Specific Date */}
           {needsDate && (
             <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Specific date</label>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">تاريخ محدد</label>
               <input
                 className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 transition-all duration-200"
                 type="date"
@@ -451,7 +451,7 @@ function SortableStage({
             {stage.is_recurring && (
               <div className="ml-6 space-y-2 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-100 dark:border-violet-800">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 w-16">Repeat:</label>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 w-16">التكرار:</label>
                   <select
                     className="flex-1 px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 transition-all duration-200"
                     value={stage.recurrence_unit || ''}
@@ -509,14 +509,14 @@ function SortableStage({
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
-                Form Fields ({fields.length})
+                حقول النموذج ({fields.length})
               </h4>
               <button
                 className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 rounded-md hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors duration-200"
                 onClick={() => onFieldAdd(index)}
                 type="button"
               >
-                {Icons.Plus} Add Field
+                {Icons.Plus} إضافة حقل
               </button>
             </div>
 
@@ -580,7 +580,7 @@ function FormPreview({ stages, selectedStageForPreview }) {
           <textarea
             className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-500 resize-none"
             rows={3}
-            placeholder={field.label || 'Long text input'}
+            placeholder={field.label || 'إدخال نص طويل'}
             disabled
           />
         );
@@ -589,7 +589,7 @@ function FormPreview({ stages, selectedStageForPreview }) {
           <input
             className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-500"
             type="number"
-            placeholder={field.label || 'Number input'}
+            placeholder={field.label || 'إدخال رقم'}
             disabled
           />
         );
@@ -606,7 +606,7 @@ function FormPreview({ stages, selectedStageForPreview }) {
         return (
           <div className="space-y-1.5">
             {(field.options || []).length === 0 ? (
-              <span className="text-xs text-gray-400 dark:text-gray-500">No options defined</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">لا توجد خيارات محددة</span>
             ) : (
               (field.options || []).map((opt, i) => (
                 <label key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
@@ -621,7 +621,7 @@ function FormPreview({ stages, selectedStageForPreview }) {
         return (
           <div className="space-y-1.5">
             {(field.options || []).length === 0 ? (
-              <span className="text-xs text-gray-400 dark:text-gray-500">No options defined</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">لا توجد خيارات محددة</span>
             ) : (
               (field.options || []).map((opt, i) => (
                 <label key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
@@ -650,7 +650,7 @@ function FormPreview({ stages, selectedStageForPreview }) {
         return (
           <input
             className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-500"
-            placeholder={field.label || 'Input'}
+            placeholder={field.label || 'إدخال'}
             disabled
           />
         );
@@ -705,7 +705,7 @@ function FormPreview({ stages, selectedStageForPreview }) {
 
           {/* Pipeline Progress */}
           <div>
-            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Pipeline Progress</div>
+            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">تقدم المسار</div>
             <div className="flex items-center gap-0">
               {stages.map((s, i) => (
                 <div key={i} className="flex items-center">
@@ -779,7 +779,7 @@ export default function WorkflowBuilder({ onBack }) {
     setLoading(true);
     fetchWorkflowTemplates()
       .then(res => setTemplates(res.data))
-      .catch(() => setError('Failed to load templates'))
+      .catch(() => setError('فشل تحميل القوالب'))
       .finally(() => setLoading(false));
   };
 
@@ -896,7 +896,7 @@ export default function WorkflowBuilder({ onBack }) {
       return;
     }
     if (stages.length === 0) {
-      setError('Add at least one stage');
+      setError('أضف مرحلة واحدة على الأقل');
       return;
     }
 
@@ -945,27 +945,27 @@ export default function WorkflowBuilder({ onBack }) {
     } catch (err) {
       const respData = err.response?.data;
       if (respData && typeof respData === 'object') {
-        if (respData.error === 'Cannot update template with active workflows') {
+        if (respData.error === 'لا يمكن تحديث قالب مع سير عمل نشط') {
           const projects = (respData.projects || []).filter(Boolean).join(', ');
           alert(
-            'Cannot Update "' + (respData.template_name || '') + '"\n\n' +
-            'This template has ' + respData.active_count + ' active workflow(s) running.\n' +
-            (projects ? 'Projects: ' + projects + '\n' : '') +
-            '\nPlease deactivate or complete the workflows first, or use "Replace Workflow" to assign a new template.'
+            'لا يمكن تحديث "' + (respData.template_name || '') + '"\n\n' +
+            'هذا القالب لديه ' + respData.active_count + ' سير عمل نشط قيد التشغيل.\n' +
+            (projects ? 'المشاريع: ' + projects + '\n' : '') +
+            '\nيرجى تعطيل أو إكمال سير العمل أولاً، أو استخدام "استبدال سير العمل" لتعيين قالب جديد.'
           );
-        } else if (respData.error === 'Cannot delete template with active workflows') {
+        } else if (respData.error === 'لا يمكن حذف قالب مع سير عمل نشط') {
           const projects = (respData.projects || []).filter(Boolean).join(', ');
           alert(
-            'Cannot Delete "' + (respData.template_name || '') + '"\n\n' +
-            'This template has ' + respData.active_count + ' active workflow(s) running.\n' +
-            (projects ? 'Projects: ' + projects + '\n' : '') +
-            '\nPlease deactivate or complete the workflows first, then try again.'
+            'لا يمكن حذف "' + (respData.template_name || '') + '"\n\n' +
+            'هذا القالب لديه ' + respData.active_count + ' سير عمل نشط قيد التشغيل.\n' +
+            (projects ? 'المشاريع: ' + projects + '\n' : '') +
+            '\nيرجى تعطيل أو إكمال سير العمل أولاً، ثم حاول مرة أخرى.'
           );
         } else {
-          setError(respData.error || respData.detail || 'Failed to save template');
+          setError(respData.error || respData.detail || 'فشل حفظ القالب');
         }
       } else {
-        setError('Failed to save template');
+        setError('فشل حفظ القالب');
       }
     } finally {
       setSaving(false);
@@ -1001,16 +1001,16 @@ export default function WorkflowBuilder({ onBack }) {
         if (data.error === 'Cannot delete template with active workflows') {
           const projects = (data.projects || []).filter(Boolean).join(', ');
           alert(
-            'Cannot Delete "' + (data.template_name || '') + '"\n\n' +
-            'This template has ' + data.active_count + ' active workflow(s) running.\n' +
-            (projects ? 'Projects: ' + projects + '\n' : '') +
-            '\nPlease deactivate or complete the workflows first, then try again.'
+            'لا يمكن حذف "' + (data.template_name || '') + '"\n\n' +
+            'هذا القالب لديه ' + data.active_count + ' سير عمل نشط قيد التشغيل.\n' +
+            (projects ? 'المشاريع: ' + projects + '\n' : '') +
+            '\nيرجى تعطيل أو إكمال سير العمل أولاً، ثم حاول مرة أخرى.'
           );
         } else {
-          setError(data.error || data.detail || 'Failed to delete template');
+          setError(data.error || data.detail || 'فشل حذف القالب');
         }
       } else {
-        setError('Failed to delete template');
+        setError('فشل حذف القالب');
       }
     }
   };
@@ -1042,17 +1042,17 @@ export default function WorkflowBuilder({ onBack }) {
                 className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors duration-200"
                 onClick={onBack}
               >
-                {Icons.ArrowLeft} Back
+                {Icons.ArrowLeft} رجوع
               </button>
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
-                Workflow Templates
+                قوالب سير العمل
               </h2>
             </div>
             <button
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-violet-600 dark:bg-violet-500 rounded-lg hover:bg-violet-700 dark:hover:bg-violet-600 shadow-sm transition-colors duration-200"
               onClick={handleNewTemplate}
             >
-              {Icons.Plus} New Template
+              {Icons.Plus} قالب جديد
             </button>
           </div>
 
@@ -1071,8 +1071,8 @@ export default function WorkflowBuilder({ onBack }) {
                   <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
                 </svg>
               </div>
-              <p className="text-gray-500 dark:text-gray-400 font-medium">No workflow templates yet.</p>
-              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Create one to define project stages and forms.</p>
+              <p className="text-gray-500 dark:text-gray-400 font-medium">لا توجد قوالب سير عمل بعد.</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">أنشئ واحداً لتحديد مراحل وأشكال المشاريع.</p>
             </div>
           ) : (
             /* Template Cards with Mini Pipeline */
@@ -1098,14 +1098,14 @@ export default function WorkflowBuilder({ onBack }) {
                         <button
                           className="p-2 text-gray-400 hover:text-violet-600 dark:text-gray-500 dark:hover:text-violet-400 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors duration-200"
                           onClick={() => handleEdit(t)}
-                          title="Edit"
+                          title="تعديل"
                         >
                           {Icons.Edit}
                         </button>
                         <button
                           className="p-2 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200"
                           onClick={() => handleDelete(t.id)}
-                          title="Delete"
+                          title="حذف"
                         >
                           {Icons.Trash}
                         </button>
@@ -1149,10 +1149,10 @@ export default function WorkflowBuilder({ onBack }) {
             className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors duration-200"
             onClick={() => { setView('list'); resetForm(); }}
           >
-            {Icons.ArrowLeft} Back to List
+            {Icons.ArrowLeft} العودة للقائمة
           </button>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {currentTemplate ? 'Edit' : 'Create'} Workflow Template
+            {currentTemplate ? 'تعديل' : 'إنشاء'} قالب سير العمل
           </h2>
         </div>
 
@@ -1162,20 +1162,20 @@ export default function WorkflowBuilder({ onBack }) {
             {/* Template Info Card */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 space-y-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Template Name</label>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">اسم القالب</label>
                 <input
                   className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 transition-all duration-200"
-                  placeholder="e.g., Software Engineering Project Workflow"
+                  placeholder="مثال: سير عمل مشاريع هندسة البرمجيات"
                   value={name}
                   onChange={e => setName(e.target.value)}
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Description</label>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">الوصف</label>
                 <textarea
                   className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 transition-all duration-200 resize-y"
                   rows={3}
-                  placeholder="Describe this workflow template..."
+                  placeholder="صف قالب سير العمل هذا..."
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                 />
@@ -1193,7 +1193,7 @@ export default function WorkflowBuilder({ onBack }) {
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors duration-200"
                   onClick={addStage}
                 >
-                  {Icons.Plus} Add Stage
+                  {Icons.Plus} إضافة مرحلة
                 </button>
               </div>
 
@@ -1204,7 +1204,7 @@ export default function WorkflowBuilder({ onBack }) {
                       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                     </svg>
                   </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">No stages yet. Add stages to define your workflow.</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">لا توجد مراحل بعد. أضف مراحل لتحديد سير عملك.</p>
                 </div>
               ) : (
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -1251,7 +1251,7 @@ export default function WorkflowBuilder({ onBack }) {
                 onClick={handleSave}
                 disabled={saving}
               >
-                {Icons.Save} {saving ? 'Saving...' : 'Save Template'}
+                {Icons.Save} {saving ? 'جاري الحفظ...' : 'حفظ القالب'}
               </button>
             </div>
           </div>

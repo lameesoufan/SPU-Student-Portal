@@ -17,10 +17,10 @@ import {
 } from '../api';
 
 const STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'active', label: 'Active' },
-  { value: 'failed', label: 'Failed' },
-  { value: 'withdrawn', label: 'Withdrawn' },
+  { value: '', label: 'كل الحالات' },
+  { value: 'active', label: 'نشط' },
+  { value: 'failed', label: 'راسب' },
+  { value: 'withdrawn', label: 'منسحب' },
 ];
 
 const emptyStats = {
@@ -42,17 +42,17 @@ function statusClass(status) {
 
 function projectStatusLabel(status) {
   return {
-    active: 'Active',
-    partial_team: 'Partial',
-    solo: 'Solo',
-    fully_withdrawn: 'Fully withdrawn',
-    fully_failed: 'Fully failed',
-    inactive: 'Inactive',
-  }[status] || status || 'Active';
+    active: 'نشط',
+    partial_team: 'جزئي',
+    solo: 'فردي',
+    fully_withdrawn: 'منسحب كلياً',
+    fully_failed: 'راسب كلياً',
+    inactive: 'غير نشط',
+  }[status] || status || 'نشط';
 }
 
 function studentLabel(student) {
-  return `${student.name}${student.is_leader ? ' - Leader' : ''}${student.status !== 'active' ? ` - ${student.status}` : ''}`;
+  return `${student.name}${student.is_leader ? ' - قائد' : ''}${student.status !== 'active' ? ` - ${student.status}` : ''}`;
 }
 
 function StatCard({ label, value, tone = 'slate' }) {
@@ -101,7 +101,7 @@ export default function StudentStatusManagement({ onBack }) {
       setRows(response.data?.results || []);
       setStats(response.data?.stats || emptyStats);
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to load student status data.');
+      setError(err.response?.data?.error || 'تعذر تحميل بيانات حالة الطلاب.');
     } finally {
       setLoading(false);
     }
@@ -119,10 +119,10 @@ export default function StudentStatusManagement({ onBack }) {
   const alertProjects = useMemo(() => {
     const alerts = stats.alerts || {};
     return [
-      ...(alerts.partial_projects || []).map((project) => ({ ...project, label: 'Partial' })),
-      ...(alerts.solo_projects || []).map((project) => ({ ...project, label: 'Solo' })),
-      ...(alerts.fully_withdrawn_projects || []).map((project) => ({ ...project, label: 'Fully withdrawn' })),
-      ...(alerts.fully_failed_projects || []).map((project) => ({ ...project, label: 'Fully failed' })),
+      ...(alerts.partial_projects || []).map((project) => ({ ...project, label: 'جزئي' })),
+      ...(alerts.solo_projects || []).map((project) => ({ ...project, label: 'فردي' })),
+      ...(alerts.fully_withdrawn_projects || []).map((project) => ({ ...project, label: 'منسحب كلياً' })),
+      ...(alerts.fully_failed_projects || []).map((project) => ({ ...project, label: 'راسب كلياً' })),
     ].slice(0, 8);
   }, [stats]);
 
@@ -164,27 +164,27 @@ export default function StudentStatusManagement({ onBack }) {
     try {
       if (modal.action === 'failed') {
         await markParticipationFailed(modal.row.id, payload);
-        setSuccess(`${modal.row.student_name} marked as failed.`);
+        setSuccess(`${modal.row.student_name} تم تحديده كراسب.`);
       } else if (modal.action === 'withdrawn') {
         await markParticipationWithdrawn(modal.row.id, payload);
-        setSuccess(`${modal.row.student_name} marked as withdrawn.`);
+        setSuccess(`${modal.row.student_name} تم تحديده كمنسحب.`);
       } else {
         await reverseParticipationToActive(modal.row.id, payload);
-        setSuccess(`${modal.row.student_name} reversed to active.`);
+        setSuccess(`${modal.row.student_name} تمت إعادته كنشط.`);
       }
       closeModal();
       await loadRows();
     } catch (err) {
-      setError(err.response?.data?.error || 'Status update failed.');
+      setError(err.response?.data?.error || 'فشل تحديث الحالة.');
       setSubmitting(false);
     }
   };
 
   const modalTitle = modal?.action === 'failed'
-    ? 'Mark as Failed'
+    ? 'تحديد كراسب'
     : modal?.action === 'withdrawn'
-      ? 'Mark as Withdrawn'
-      : 'Reverse to Active';
+      ? 'تحديد كمنسحب'
+      : 'إعادة كنشط';
 
   const remainingActive = modal?.row?.team_members
     ?.filter((student) => student.id !== modal.row.student && student.status === 'active')
@@ -195,7 +195,7 @@ export default function StudentStatusManagement({ onBack }) {
       <div className="mx-auto max-w-7xl space-y-5">
         <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Student Status Management</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">إدارة حالة الطلاب</h1>
             <div className="mt-1 text-sm text-slate-500">{rows.length} records loaded</div>
           </div>
           {onBack && (
@@ -210,13 +210,13 @@ export default function StudentStatusManagement({ onBack }) {
         </div>
 
         <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
-          <StatCard label="Active" value={stats.active_students} tone="emerald" />
-          <StatCard label="Failed" value={stats.failed_students} tone="rose" />
-          <StatCard label="Withdrawn" value={stats.withdrawn_students} tone="amber" />
-          <StatCard label="Partial" value={stats.partial_projects} tone="sky" />
-          <StatCard label="Solo" value={stats.solo_projects} tone="amber" />
-          <StatCard label="Fully withdrawn" value={stats.fully_withdrawn_projects} tone="slate" />
-          <StatCard label="Fully failed" value={stats.fully_failed_projects} tone="rose" />
+          <StatCard label="نشط" value={stats.active_students} tone="emerald" />
+          <StatCard label="راسب" value={stats.failed_students} tone="rose" />
+          <StatCard label="منسحب" value={stats.withdrawn_students} tone="amber" />
+          <StatCard label="جزئي" value={stats.partial_projects} tone="sky" />
+          <StatCard label="فردي" value={stats.solo_projects} tone="amber" />
+          <StatCard label="منسحب كلياً" value={stats.fully_withdrawn_projects} tone="slate" />
+          <StatCard label="راسب كلياً" value={stats.fully_failed_projects} tone="rose" />
         </div>
 
         {alertProjects.length > 0 && (
@@ -244,14 +244,14 @@ export default function StudentStatusManagement({ onBack }) {
                 value={filters.search}
                 onChange={(event) => updateFilter('search', event.target.value)}
                 className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-sm"
-                placeholder="Student or project"
+                placeholder="طالب أو مشروع"
               />
             </label>
             <input
               value={filters.university_id}
               onChange={(event) => updateFilter('university_id', event.target.value)}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="University ID"
+              placeholder="الرقم الجامعي"
             />
             <select
               value={filters.status}
@@ -267,7 +267,7 @@ export default function StudentStatusManagement({ onBack }) {
               onChange={(event) => updateFilter('department', event.target.value)}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             >
-              <option value="">All departments</option>
+              <option value="">كل الأقسام</option>
               {departments.map((department) => (
                 <option key={department} value={department}>{department}</option>
               ))}
@@ -276,13 +276,13 @@ export default function StudentStatusManagement({ onBack }) {
               value={filters.project}
               onChange={(event) => updateFilter('project', event.target.value)}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Project"
+              placeholder="المشروع"
             />
             <input
               value={filters.supervisor}
               onChange={(event) => updateFilter('supervisor', event.target.value)}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Supervisor"
+              placeholder="المشرف"
             />
           </div>
           <div className="mt-3 flex justify-end">
@@ -291,7 +291,7 @@ export default function StudentStatusManagement({ onBack }) {
               onClick={clearFilters}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Clear
+              مسح
             </button>
           </div>
         </div>
@@ -307,27 +307,27 @@ export default function StudentStatusManagement({ onBack }) {
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                 <tr>
-                  <th className="px-4 py-3">Student</th>
-                  <th className="px-4 py-3">University ID</th>
-                  <th className="px-4 py-3">Department</th>
-                  <th className="px-4 py-3">Registered project</th>
-                  <th className="px-4 py-3">Supervisor</th>
-                  <th className="px-4 py-3">Team size</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Designation</th>
-                  <th className="px-4 py-3">Reason</th>
-                  <th className="px-4 py-3">Last changed by</th>
-                  <th className="px-4 py-3">Actions</th>
+                  <th className="px-4 py-3">الطالب</th>
+                  <th className="px-4 py-3">الرقم الجامعي</th>
+                  <th className="px-4 py-3">القسم</th>
+                  <th className="px-4 py-3">مشروع مسجل</th>
+                  <th className="px-4 py-3">المشرف</th>
+                  <th className="px-4 py-3">حجم الفريق</th>
+                  <th className="px-4 py-3">الحالة</th>
+                  <th className="px-4 py-3">التصنيف</th>
+                  <th className="px-4 py-3">السبب</th>
+                  <th className="px-4 py-3">آخر تعديل بواسطة</th>
+                  <th className="px-4 py-3">إجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td className="px-4 py-8 text-center text-slate-500" colSpan={11}>Loading...</td>
+                    <td className="px-4 py-8 text-center text-slate-500" colSpan={11}>جاري التحميل...</td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-8 text-center text-slate-500" colSpan={11}>No records found</td>
+                    <td className="px-4 py-8 text-center text-slate-500" colSpan={11}>لا توجد سجلات</td>
                   </tr>
                 ) : rows.map((row) => (
                   <tr key={row.id} className={row.current_status === 'active' ? 'bg-white' : 'bg-slate-50'}>
@@ -409,17 +409,17 @@ export default function StudentStatusManagement({ onBack }) {
             <div className="space-y-4 px-5 py-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Student</div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">طالب</div>
                   <div className="mt-1 font-semibold text-slate-900">{modal.row.student_name}</div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Project</div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">المشروع</div>
                   <div className="mt-1 font-semibold text-slate-900">{modal.row.registered_project}</div>
                 </div>
               </div>
 
               <div>
-                <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Current team</div>
+                <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">الفريق الحالي</div>
                 <div className="flex flex-wrap gap-2">
                   {modal.row.team_members?.map((student) => (
                     <span key={student.id} className={`rounded-full border px-2 py-1 text-xs ${statusClass(student.status)}`}>
@@ -431,17 +431,17 @@ export default function StudentStatusManagement({ onBack }) {
 
               <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                 {modal.action === 'active'
-                  ? `${modal.row.student_name} will reappear in active project operations and future eligibility checks.`
-                  : `${modal.row.student_name} will be excluded from future active project operations. ${remainingActive.length ? `Remaining active students: ${remainingActive.join(', ')}.` : 'No other active students will remain.'}`}
+                  ? `${modal.row.student_name} سيظهر مجدداً في عمليات المشاريع النشطة وفحوصات الأهلية المستقبلية.`
+                  : `${modal.row.student_name} سيُستبعد من عمليات المشاريع النشطة المستقبلية. ${remainingActive.length ? `الطلاب النشطون المتبقون: ${remainingActive.join('، ')}.` : 'لن يبقى أي طلاب نشطين آخرين.'}`}
               </div>
 
               <label className="block">
-                <span className="mb-1 block text-sm font-medium text-slate-700">Reason</span>
+                <span className="mb-1 block text-sm font-medium text-slate-700">السبب</span>
                 <textarea
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                   className="min-h-[96px] w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Optional reason"
+                  placeholder="سبب اختياري"
                 />
               </label>
             </div>
@@ -452,7 +452,7 @@ export default function StudentStatusManagement({ onBack }) {
                 onClick={closeModal}
                 className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                Cancel
+                إلغاء
               </button>
               <button
                 type="button"
@@ -461,7 +461,7 @@ export default function StudentStatusManagement({ onBack }) {
                 className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
               >
                 <CheckCircle2 size={16} />
-                Confirm
+                تأكيد
               </button>
             </div>
           </div>

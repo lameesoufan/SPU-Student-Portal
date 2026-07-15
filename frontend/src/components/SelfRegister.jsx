@@ -105,10 +105,10 @@ onRegistered({
             </div>
 
             <div>
-              <h1 className="text-[36px] font-extrabold text-[var(--text)] leading-[1.15] tracking-[-0.5px]">Join the Portal</h1>
+              <h1 className="text-[36px] font-extrabold text-[var(--text)] leading-[1.15] tracking-[-0.5px]">انضم للبوابة</h1>
               <div className="w-12 h-[3px] bg-[var(--primary)] rounded-[2px] mt-4" />
               <p className="text-base text-[var(--text-muted)] leading-relaxed mt-2">
-                Verify your university credentials<br />and get instant access to the platform.
+                تحقق من بيانات دخولك الجامعية<br />واحصل على وصول فوري للمنصة.
               </p>
             </div>
 
@@ -120,7 +120,7 @@ onRegistered({
                   </svg>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <strong className="text-sm font-bold text-[var(--text)]">Secure Verification</strong>
+                  <strong className="text-sm font-bold text-[var(--text)]">تحقق آمن</strong>
                   <span className="text-[13px] text-[var(--text-muted)]">University ID + Password</span>
                 </div>
               </div>
@@ -131,8 +131,8 @@ onRegistered({
                   </svg>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <strong className="text-sm font-bold text-[var(--text)]">Instant Access</strong>
-                  <span className="text-[13px] text-[var(--text-muted)]">No approval wait time</span>
+                  <strong className="text-sm font-bold text-[var(--text)]">وصول فوري</strong>
+                  <span className="text-[13px] text-[var(--text-muted)]">بدون وقت انتظار للموافقة</span>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -142,7 +142,7 @@ onRegistered({
                   </svg>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <strong className="text-sm font-bold text-[var(--text)]">Ready to Start</strong>
+                  <strong className="text-sm font-bold text-[var(--text)]">جاهز للبدء</strong>
                   <span className="text-[13px] text-[var(--text-muted)]">Browse ideas & build projects</span>
                 </div>
               </div>
@@ -174,12 +174,12 @@ onRegistered({
                     <path d="M22 10v6M2 10l10-5 10 5-10 5z" /><path d="M6 12v5c0 2 6 3 6 3s6-1 6-3v-5" />
                   </svg>
                 </div>
-                <span className="text-lg font-extrabold text-[var(--text)]">SPU Portal</span>
+                <span className="text-lg font-extrabold text-[var(--text)]">بوابة SPU</span>
               </div>
 
               <div>
-                <h2 className="text-[26px] font-extrabold text-[var(--text)] tracking-[-0.5px] mb-1.5 max-[480px]:text-[22px]">Student Verification</h2>
-                <p className="text-sm text-[var(--text-muted)]">Verify your identity to create your account</p>
+                <h2 className="text-[26px] font-extrabold text-[var(--text)] tracking-[-0.5px] mb-1.5 max-[480px]:text-[22px]">تحقق من الطالب</h2>
+                <p className="text-sm text-[var(--text-muted)]">تحقق من هويتك لإنشاء حسابك</p>
               </div>
 
               {/* Info glass - previously sr-info-glass */}
@@ -191,7 +191,7 @@ onRegistered({
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5">
                   <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
                 </svg>
-                <span>Enter your University ID and password to verify your eligibility. Access will be granted automatically.</span>
+                <span>أدخل الرقم الجامعي وكلمة المرور للتحقق من أهليتك. سيتم منح الوصول تلقائياً.</span>
               </div>
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
@@ -208,7 +208,7 @@ onRegistered({
                   <label
                     htmlFor="university_id"
                     className={`text-[13px] font-bold uppercase tracking-[0.5px] transition-colors duration-200 ${focusedField === 'university_id' ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'}`}
-                  >University ID</label>
+                  >الرقم الجامعي</label>
                   <div className="relative flex items-center">
                     <svg className={`absolute left-3.5 pointer-events-none transition-colors duration-200 ${focusedField === 'university_id' ? 'text-[var(--primary)]' : 'text-[var(--text-faint)]'}`} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
@@ -238,7 +238,7 @@ onRegistered({
                   <label
                     htmlFor="sr_password"
                     className={`text-[13px] font-bold uppercase tracking-[0.5px] transition-colors duration-200 ${focusedField === 'password' ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'}`}
-                  >Password</label>
+                  >كلمة المرور</label>
                   <div className="relative flex items-center">
                     <svg className={`absolute left-3.5 pointer-events-none transition-colors duration-200 ${focusedField === 'password' ? 'text-[var(--primary)]' : 'text-[var(--text-faint)]'}`} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -270,7 +270,7 @@ onRegistered({
                   disabled={loading}
                 >
                   <span className="inline-flex items-center">
-                    {loading ? 'Verifying...' : 'Verify & Access Portal'}
+                    {loading ? 'جاري التحقق...' : 'تحقق وادخل للبوابة'}
                   </span>
                   {loading && (
                     <span className="w-[18px] h-[18px] border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -291,7 +291,7 @@ onRegistered({
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
                   </svg>
-                  Back to Login
+                  العودة لتسجيل الدخول
                 </button>
               </form>
 

@@ -61,8 +61,8 @@ export default function ChangeUsername({ user, onSuccess }) {
               <circle cx="12" cy="7" r="4" />
             </svg>
           </div>
-          <h1 className="text-[22px] font-extrabold m-0 mb-1.5 tracking-tight">Choose Your Username</h1>
-          <p className="text-[13px] opacity-90 font-medium m-0">Pick a username you can remember easily</p>
+          <h1 className="text-[22px] font-extrabold m-0 mb-1.5 tracking-tight">اختر اسم المستخدم</h1>
+          <p className="text-[13px] opacity-90 font-medium m-0">اختر اسم مستخدم يمكنك تذكره بسهولة</p>
         </div>
 
         <div className="card-body p-8">
@@ -89,7 +89,7 @@ export default function ChangeUsername({ user, onSuccess }) {
 
           {!loadingSuggestions && suggestions.length > 0 && (
             <div className="mb-5">
-              <p className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Suggestions</p>
+              <p className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">اقتراحات</p>
               <div className="flex flex-wrap gap-2">
                 {suggestions.map((s) => (
                   <button
@@ -118,7 +118,7 @@ export default function ChangeUsername({ user, onSuccess }) {
                 id="new_username"
                 className="form-control mt-1.5"
                 type="text"
-                placeholder="e.g. dr_ahmad or your university ID"
+                placeholder="مثال: dr_ahmad أو الرقم الجامعي"
                 value={newUsername}
                 onChange={(e) => { setNewUsername(e.target.value); setError(''); }}
                 required
@@ -147,10 +147,10 @@ export default function ChangeUsername({ user, onSuccess }) {
               {loading ? (
                 <>
                   <span className="spinner"></span>
-                  Saving...
+                  جاري الحفظ...
                 </>
               ) : (
-                'Set Username'
+                'تعيين اسم المستخدم'
               )}
             </button>
           </form>

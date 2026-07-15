@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { fetchDoctors, fetchDepartments, assignHod } from '../api';
 
 const DEPT_LABELS = {
-  software_engineering:   'Software Engineering',
-  artificial_intelligence:'Artificial Intelligence',
-  information_security:   'Information Security',
-  communications:         'Communications',
+  software_engineering:   'برمجيات',
+  artificial_intelligence:'ذكاء اصطناعي',
+  information_security:   'أمن سيبراني',
+  communications:         'اتصالات',
   control_robotics:       'Control & Robotics',
 };
 
@@ -24,7 +24,7 @@ const Icons = {
   ArrowLeft: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
 };
 
-export default function AssignHod({ onBack }) {
+export default function تعيينHod({ onBack }) {
   const [departments, setDepartments] = useState([]);
   const [doctors, setDoctors]         = useState([]);
   const [search, setSearch]           = useState('');
@@ -65,13 +65,13 @@ export default function AssignHod({ onBack }) {
     <div className="premium-dashboard">
       {onBack && (
         <button className="back-btn" onClick={onBack} aria-label="Back to dashboard">
-          {Icons.ArrowLeft} Back to Dashboard
+          {Icons.ArrowLeft} العودة للوحة التحكم
         </button>
       )}
 
       <div className="page-header">
-        <h1>Assign Department Heads</h1>
-        <p>Select a department and assign a qualified doctor to act as HoD.</p>
+        <h1>تعيين رؤساء الأقسام</h1>
+        <p>اختر قسماً وعين طبيباً مؤهلاً ليكون رئيس القسم.</p>
       </div>
 
       {message && (
@@ -102,7 +102,7 @@ export default function AssignHod({ onBack }) {
                   {dept.hod ? (
                     <span className="text-[13px] text-emerald-600 dark:text-emerald-400 font-semibold">Current: {dept.hod.full_name}</span>
                   ) : (
-                    <span className="text-[13px] text-gray-400 dark:text-gray-500 italic">No HoD assigned</span>
+                    <span className="text-[13px] text-gray-400 dark:text-gray-500 italic">لا يوجد رئيس قسم معين</span>
                   )}
                 </div>
               </div>
@@ -133,12 +133,12 @@ export default function AssignHod({ onBack }) {
               <div className={`max-h-[480px] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-xl mb-6 bg-white dark:bg-gray-800 ${!selected.dept ? 'opacity-50 pointer-events-none' : ''}`} role="listbox">
                 {(!selected.dept) && (
                   <div className="empty-state" style={{ padding: '40px 24px' }}>
-                    <p>Please select a department first.</p>
+                    <p>يرجى اختيار قسم أولاً.</p>
                   </div>
                 )}
                 {selected.dept && filtered.length === 0 && (
                   <div className="empty-state" style={{ padding: '40px 24px' }}>
-                    <p>No matching faculty found.</p>
+                    <p>لا يوجد أعضاء هيئة تدريسية مطابقون.</p>
                   </div>
                 )}
                 {selected.dept && filtered.map(doc => {
@@ -172,7 +172,7 @@ export default function AssignHod({ onBack }) {
                 onClick={handleAssign}
                 disabled={!selected.dept || !selected.doctorId || loading}
               >
-                {loading ? 'Assigning…' : 'Confirm Assignment'}
+                {loading ? 'Assigning…' : 'تأكيد Assignment'}
               </button>
             </div>
           </div>

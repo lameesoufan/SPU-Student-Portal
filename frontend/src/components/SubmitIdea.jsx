@@ -4,10 +4,10 @@ import { PROJECT_TYPES } from '../lib/constants';
 import { ChevronLeft, Lightbulb, CheckCircle, Send, Loader2, Info, AlertCircle } from 'lucide-react';
 
 const DEPARTMENTS = [
-  { value: 'software_engineering',    label: 'Software Engineering' },
-  { value: 'artificial_intelligence', label: 'Artificial Intelligence' },
-  { value: 'information_security',    label: 'Information Security' },
-  { value: 'communications',          label: 'Communications' },
+  { value: 'software_engineering',    label: 'برمجيات' },
+  { value: 'artificial_intelligence', label: 'ذكاء اصطناعي' },
+  { value: 'information_security',    label: 'أمن سيبراني' },
+  { value: 'communications',          label: 'اتصالات' },
   { value: 'control_robotics',        label: 'Control & Robotics' },
 ];
 
@@ -59,8 +59,8 @@ export default function SubmitIdea({ onBack }) {
             <Lightbulb size={20} />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">Submit New Project Idea</h1>
-            <p className="text-sm text-[var(--text-muted)]">Propose a graduation project</p>
+            <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">إرسال فكرة مشروع جديدة</h1>
+            <p className="text-sm text-[var(--text-muted)]">اقتراح مشروع تخرج</p>
           </div>
         </div>
 
@@ -70,12 +70,12 @@ export default function SubmitIdea({ onBack }) {
             <div className="w-[72px] h-[72px] mx-auto mb-5 flex items-center justify-center bg-emerald-500/10 rounded-full text-emerald-500">
               <CheckCircle size={40} />
             </div>
-            <h3 className="text-[22px] font-extrabold text-[var(--text)] mb-2">Idea Submitted Successfully</h3>
+            <h3 className="text-[22px] font-extrabold text-[var(--text)] mb-2">تم إرسال الفكرة بنجاح</h3>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
               <Loader2 size={12} />
               Pending Review
             </span>
-            <p className="text-[var(--text-muted)] text-[15px] mt-3">Your project idea has been received and is awaiting department review.</p>
+            <p className="text-[var(--text-muted)] text-[15px] mt-3">تم استلام فكرة مشروعك وهي بانتظار مراجعة القسم.</p>
             <div className="flex gap-3 mt-6 flex-wrap justify-center">
               <button
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[var(--radius-sm)] bg-[var(--primary)] text-white font-semibold text-sm hover:bg-[var(--primary-hover)] transition-colors"
@@ -104,8 +104,8 @@ export default function SubmitIdea({ onBack }) {
           <Lightbulb size={20} />
         </div>
         <div className="flex-1">
-          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">Submit New Project Idea</h1>
-          <p className="text-sm text-[var(--text-muted)]">Fill in the details below to propose a new graduation project.</p>
+          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">إرسال فكرة مشروع جديدة</h1>
+          <p className="text-sm text-[var(--text-muted)]">املأ التفاصيل أدناه لاقتراح مشروع تخرج جديد.</p>
         </div>
         <button
           className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
@@ -119,7 +119,7 @@ export default function SubmitIdea({ onBack }) {
       {/* ── Info Banner ── */}
       <div className="flex items-center gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm">
         <Info size={16} className="shrink-0" />
-        <span>Your idea will be saved as <strong>Pending Review</strong> and forwarded to the department for evaluation.</span>
+        <span>سيتم حفظ فكرتك كـ <strong>قيد المراجعة</strong> and forwarded to the department for evaluation.</span>
       </div>
 
       {/* ── Form Card ── */}
@@ -156,7 +156,7 @@ export default function SubmitIdea({ onBack }) {
                 id="description" name="description" rows={4}
                 className={`${inputCls} resize-none`}
                 value={form.description} onChange={handleChange}
-                placeholder="Describe the project goals and scope..."
+                placeholder="صف أهداف المشروع ونطاقه..."
                 required
               />
             </div>
@@ -173,7 +173,7 @@ export default function SubmitIdea({ onBack }) {
                   value={form.department} onChange={handleChange}
                   required
                 >
-                  <option value="">Select department</option>
+                  <option value="">اختر القسم</option>
                   {DEPARTMENTS.map((d) => (
                     <option key={d.value} value={d.value}>{d.label}</option>
                   ))}
@@ -204,7 +204,7 @@ export default function SubmitIdea({ onBack }) {
                   value={form.project_type} onChange={handleChange}
                   required
                 >
-                  <option value="" disabled>Select project type</option>
+                  <option value="" disabled>اختر نوع المشروع</option>
                   {PROJECT_TYPES.map((pt) => (
                     <option key={pt.value} value={pt.value}>{pt.label}</option>
                   ))}
@@ -221,9 +221,9 @@ export default function SubmitIdea({ onBack }) {
                 id="required_skills" name="required_skills" type="text"
                 className={inputCls}
                 value={form.required_skills} onChange={handleChange}
-                placeholder="e.g. Python, Machine Learning, React"
+                placeholder="مثال: Python، تعلم الآلة، React"
               />
-              <span className="text-xs text-[var(--text-muted)] mt-1 font-medium">Comma-separated tags</span>
+              <span className="text-xs text-[var(--text-muted)] mt-1 font-medium">وسوم مفصولة بفواصل</span>
             </div>
 
             {/* Submit */}

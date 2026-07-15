@@ -42,8 +42,8 @@ export default function ChangePassword({ user, onSuccess }) {
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
           </div>
-          <h1 className="text-[22px] font-extrabold m-0 mb-1.5 tracking-tight">Change Your Password</h1>
-          <p className="text-[13px] opacity-90 font-medium m-0">You must set a new password before continuing</p>
+          <h1 className="text-[22px] font-extrabold m-0 mb-1.5 tracking-tight">تغيير كلمة المرور</h1>
+          <p className="text-[13px] opacity-90 font-medium m-0">يجب تعيين كلمة مرور جديدة قبل المتابعة</p>
         </div>
 
         <div className="card-body p-8">
@@ -63,12 +63,12 @@ export default function ChangePassword({ user, onSuccess }) {
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label htmlFor="new_password">New Password</label>
+              <label htmlFor="new_password">كلمة المرور الجديدة</label>
               <input
                 id="new_password"
                 className="form-control"
                 type="password"
-                placeholder="At least 8 characters"
+                placeholder="8 أحرف على الأقل"
                 value={form.new_password}
                 onChange={set('new_password')}
                 required
@@ -77,12 +77,12 @@ export default function ChangePassword({ user, onSuccess }) {
             </div>
 
             <div className="form-group">
-              <label htmlFor="confirm_password">Confirm Password</label>
+              <label htmlFor="confirm_password">تأكيد كلمة المرور</label>
               <input
                 id="confirm_password"
                 className="form-control"
                 type="password"
-                placeholder="Repeat your new password"
+                placeholder="أعد إدخال كلمة المرور الجديدة"
                 value={form.confirm_password}
                 onChange={set('confirm_password')}
                 required
@@ -93,13 +93,13 @@ export default function ChangePassword({ user, onSuccess }) {
             {/* Password strength hints */}
             <ul className="list-none m-0 mb-6 p-0 flex flex-col gap-2" aria-label="Password requirements">
               <li className={`text-[13px] font-medium pl-6 relative ${form.new_password.length >= 8 ? hintOk : hintDefault}`}>
-                At least 8 characters
+                8 أحرف على الأقل
               </li>
               <li className={`text-[13px] font-medium pl-6 relative ${/[a-zA-Z]/.test(form.new_password) ? hintOk : hintDefault}`}>
-                Contains letters
+                يحتوي على أحرف
               </li>
               <li className={`text-[13px] font-medium pl-6 relative ${form.new_password !== user.username || !form.new_password ? hintOk : hintFail}`}>
-                Not the same as your university ID
+                ليس نفس الرقم الجامعي
               </li>
             </ul>
 
@@ -107,10 +107,10 @@ export default function ChangePassword({ user, onSuccess }) {
               {loading ? (
                 <>
                   <span className="spinner"></span>
-                  Saving…
+                  جاري الحفظ…
                 </>
               ) : (
-                'Set New Password'
+                'تعيين كلمة مرور جديدة'
               )}
             </button>
           </form>

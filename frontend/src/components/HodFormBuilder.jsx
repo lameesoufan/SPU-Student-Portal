@@ -14,14 +14,14 @@ import {
 } from 'lucide-react';
 
 const FIELD_TYPES = [
-  { value: 'text',     label: 'Short Text' },
-  { value: 'textarea', label: 'Long Text' },
-  { value: 'number',   label: 'Number' },
-  { value: 'select',   label: 'Dropdown' },
-  { value: 'radio',    label: 'Radio Buttons' },
-  { value: 'checkbox', label: 'Checkboxes' },
+  { value: 'text',     label: 'نص قصير' },
+  { value: 'textarea', label: 'نص طويل' },
+  { value: 'number',   label: 'رقم' },
+  { value: 'select',   label: 'قائمة منسدلة' },
+  { value: 'radio',    label: 'أزرار اختيار' },
+  { value: 'checkbox', label: 'مربعات اختيار' },
   { value: 'date',     label: 'Date' },
-  { value: 'file',     label: 'File Upload' },
+  { value: 'file',     label: 'رفع ملف' },
 ];
 
 const optionFieldTypes = ['select', 'radio', 'checkbox'];
@@ -47,7 +47,7 @@ function OptionEditor({ field, index, onChange }) {
   return (
     <div className="flex flex-col gap-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md p-3.5 mt-1">
       <div className="flex justify-between gap-3 flex-wrap items-center">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">Choices</span>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">الخيارات</span>
         <span className="text-xs text-gray-500 dark:text-gray-400 italic">{helper}</span>
       </div>
       <div className="flex gap-2">
@@ -61,7 +61,7 @@ function OptionEditor({ field, index, onChange }) {
               addOption();
             }
           }}
-          placeholder="Type a choice and press Enter"
+          placeholder="اكتب خياراً واضغط Enter"
         />
         <button
           type="button"
@@ -92,23 +92,23 @@ function OptionEditor({ field, index, onChange }) {
           ))}
         </div>
       ) : (
-        <div className="text-xs text-gray-500 dark:text-gray-400 italic">No choices yet. Add at least one before saving.</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 italic">لا توجد خيارات بعد. أضف واحداً على الأقل قبل الحفظ.</div>
       )}
     </div>
   );
 }
 
 const CONTEXT_LABELS = {
-  propose: 'Propose Own Idea',
-  browse:  'Apply on Doctor Idea',
+  propose: 'اقتراح فكرة خاصة',
+  browse:  'التقديم على فكرة طبيب',
 };
 
 const DEFAULT_FIELDS = {
   propose: [
-    { label: 'Project Title',       field_type: 'text',     required: true,  options: [], _default: true },
-    { label: 'Project Description', field_type: 'textarea', required: true,  options: [], _default: true },
-    { label: 'Department',          field_type: 'select',   required: true,  options: [], _default: true },
-    { label: 'Team Size',           field_type: 'number',   required: true,  options: [], _default: true },
+    { label: 'عنوان المشروع',       field_type: 'text',     required: true,  options: [], _default: true },
+    { label: 'وصف المشروع', field_type: 'textarea', required: true,  options: [], _default: true },
+    { label: 'القسم',          field_type: 'select',   required: true,  options: [], _default: true },
+    { label: 'حجم الفريق',           field_type: 'number',   required: true,  options: [], _default: true },
   ],
   browse: [
     { label: 'Department',          field_type: 'select',   required: true,  options: [], _default: true },
@@ -154,7 +154,7 @@ function SortableField({ field, index, onChange, onRemove }) {
         <div className="flex gap-2.5 flex-wrap items-center">
           <input
             className="flex-1 min-w-[140px] py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none disabled:opacity-70 disabled:bg-gray-50 dark:disabled:bg-gray-700/50 disabled:cursor-not-allowed"
-            placeholder="Field label"
+            placeholder="تسمية الحقل"
             value={field.label}
             disabled={field._default}
             onChange={e => onChange(index, 'label', e.target.value)}
@@ -199,7 +199,7 @@ function SortableField({ field, index, onChange, onRemove }) {
         <button
           className="text-red-500 dark:text-red-400 p-1.5 flex-shrink-0 rounded-lg mt-1 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 dark:hover:border-red-700/30"
           onClick={() => onRemove(index)}
-          title="Remove field"
+          title="إزالة الحقل"
         >
           <Trash2 size={16} />
         </button>
@@ -287,7 +287,7 @@ export default function HodFormBuilder({ onBack }) {
         <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400">
           <FileText size={20} />
         </div>
-        <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">Form Builder</h2>
+        <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">منشئ النماذج</h2>
       </div>
 
       {/* ── Context Tabs ── */}

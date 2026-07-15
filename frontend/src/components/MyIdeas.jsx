@@ -3,9 +3,9 @@ import { fetchMyIdeas } from '../api';
 import { getProjectTypeLabel } from '../lib/constants';
 
 const STATUS_META = {
-  pending_review: { label: 'Pending Review', cls: 'badge-warning' },
-  approved:       { label: 'Approved',        cls: 'badge-success' },
-  rejected:       { label: 'Rejected',        cls: 'badge-danger' },
+  pending_review: { label: 'قيد المراجعة', cls: 'badge-warning' },
+  approved:       { label: 'مقبول',        cls: 'badge-success' },
+  rejected:       { label: 'مرفوض',        cls: 'badge-danger' },
 };
 
 export default function MyIdeas({ onBack, onSubmitNew }) {
@@ -33,8 +33,8 @@ export default function MyIdeas({ onBack, onSubmitNew }) {
         <button className="back-btn" onClick={onBack}>← Back to Dashboard</button>
         <div className="flex items-center justify-between gap-4 flex-wrap max-[600px]:flex-col max-[600px]:items-start">
           <div>
-            <h1 className="text-[26px] font-extrabold text-gray-900 dark:text-white m-0">My Project Ideas</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 m-0">Manage and track your submitted project ideas.</p>
+            <h1 className="text-[26px] font-extrabold text-gray-900 dark:text-white m-0">أفكار مشاريعي</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 m-0">إدارة ومتابعة أفكار المشاريع المقدمة.</p>
           </div>
           <button className="btn btn-primary" onClick={onSubmitNew}>+ Submit New Idea</button>
         </div>
@@ -45,15 +45,15 @@ export default function MyIdeas({ onBack, onSubmitNew }) {
         <div className="grid grid-cols-3 gap-4 max-[600px]:grid-cols-1">
           <div className="bg-white dark:bg-gray-800 rounded-xl py-5 px-4 text-center shadow-md border border-gray-200 dark:border-gray-700 border-t-4 border-t-violet-500 transition-all duration-200">
             <span className="block text-[32px] font-extrabold text-gray-900 dark:text-white leading-tight">{counts.pending_review}</span>
-            <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-widest font-bold">Pending Review</span>
+            <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-widest font-bold">قيد المراجعة</span>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl py-5 px-4 text-center shadow-md border border-gray-200 dark:border-gray-700 border-t-4 border-t-emerald-500 transition-all duration-200">
             <span className="block text-[32px] font-extrabold text-gray-900 dark:text-white leading-tight">{counts.approved}</span>
-            <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-widest font-bold">Approved</span>
+            <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-widest font-bold">مقبول</span>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl py-5 px-4 text-center shadow-md border border-gray-200 dark:border-gray-700 border-t-4 border-t-red-500 transition-all duration-200">
             <span className="block text-[32px] font-extrabold text-gray-900 dark:text-white leading-tight">{counts.rejected}</span>
-            <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-widest font-bold">Rejected</span>
+            <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-widest font-bold">مرفوض</span>
           </div>
         </div>
 
@@ -76,9 +76,9 @@ export default function MyIdeas({ onBack, onSubmitNew }) {
                   <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
                 </svg>
               </div>
-              <h3>No ideas yet</h3>
+              <h3>لا توجد أفكار بعد</h3>
               <p>You haven't submitted any project ideas yet. Start by proposing your first idea.</p>
-              <button className="btn btn-primary" onClick={onSubmitNew}>Submit Your First Idea</button>
+              <button className="btn btn-primary" onClick={onSubmitNew}>قدم فكرتك الأولى</button>
             </div>
           </div>
         )}

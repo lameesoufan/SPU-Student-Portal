@@ -39,7 +39,7 @@ export default function ImportProjects({ onBack }) {
   const [file, setFile] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState(null);
+  const [preview, setمعاينة] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [history, setHistory] = useState([]);
@@ -228,7 +228,7 @@ export default function ImportProjects({ onBack }) {
           onClick={onBack}
           className="mb-5 rounded-lg border border-[var(--border,#e2e8f0)] bg-[var(--card,#fff)] px-4 py-2 text-sm font-semibold text-[var(--text,#1e293b)] hover:bg-[var(--bg-hover,#f1f5f9)]"
         >
-          Back to Dashboard
+          العودة للوحة التحكم
         </button>
       )}
 
@@ -237,7 +237,7 @@ export default function ImportProjects({ onBack }) {
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
             <FileSpreadsheet size={14} /> Super Admin Tool
           </div>
-          <h1 className="text-2xl font-bold text-[var(--text,#1e293b)]">Import Projects</h1>
+          <h1 className="text-2xl font-bold text-[var(--text,#1e293b)]">استيراد المشاريع</h1>
           <p className="mt-1 max-w-2xl text-sm text-[var(--text-secondary,#64748b)]">
             Preview and import assigned student projects from a structured XLSX file. Valid rows can be imported while invalid rows remain downloadable for correction.
           </p>
@@ -260,12 +260,12 @@ export default function ImportProjects({ onBack }) {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-lg border border-[var(--border,#e2e8f0)] bg-[var(--card,#fff)] p-5 shadow-sm">
-          <label className="mb-2 block text-sm font-bold text-[var(--text,#1e293b)]">Project XLSX File</label>
+          <label className="mb-2 block text-sm font-bold text-[var(--text,#1e293b)]">ملف مشاريع XLSX</label>
           <div
             role="button"
             tabIndex={0}
             onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(event) => event.key === 'Enter' && fileInputRef.current?.click()}
+            onKeyDown={(event) => event.key === 'إدخال' && fileInputRef.current?.click()}
             onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={(event) => {
@@ -279,7 +279,7 @@ export default function ImportProjects({ onBack }) {
           >
             <UploadCloud className={file ? 'text-emerald-600' : 'text-slate-400'} size={38} />
             <strong className="mt-3 text-sm text-[var(--text,#1e293b)]">
-              {file ? file.name : 'Click to choose or drag an XLSX file here'}
+              {file ? file.name : 'اضغط للاختيار أو اسحب ملف XLSX هنا'}
             </strong>
             <span className="mt-1 text-xs text-[var(--text-secondary,#64748b)]">
               {file ? formatFileSize(file.size) : 'Maximum 10 MB. Legacy .xls is intentionally disabled.'}
@@ -305,7 +305,7 @@ export default function ImportProjects({ onBack }) {
               disabled={!file || loading}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Eye size={18} /> {loading && !result ? 'Processing...' : 'Preview Import'}
+              <Eye size={18} /> {loading && !result ? 'Processing...' : 'معاينة الاستيراد'}
             </button>
             <button
               type="button"
@@ -313,7 +313,7 @@ export default function ImportProjects({ onBack }) {
               disabled={!canExecute || loading}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <PlayCircle size={18} /> {preview?.partial_import ? 'Execute Valid Rows' : 'Execute Import'}
+              <PlayCircle size={18} /> {preview?.partial_import ? 'تنفيذ الصفوف الصالحة' : 'تنفيذ الاستيراد'}
             </button>
           </div>
 
@@ -322,7 +322,7 @@ export default function ImportProjects({ onBack }) {
               <Metric label="Rows" value={summary.total_rows_processed} />
               <Metric label="Valid" value={summary.valid_rows_count} tone="green" />
               <Metric label="Invalid" value={summary.invalid_rows_count} tone="red" />
-              <Metric label={summary.dry_run ? 'Would Create' : 'Created'} value={summary.dry_run ? summary.projects_to_create : summary.created_projects_count} tone="indigo" />
+              <Metric label={summary.dry_run ? 'سيتم إنشاؤه' : 'سيتم إنشاؤه'} value={summary.dry_run ? summary.projects_to_create : summary.created_projects_count} tone="indigo" />
             </div>
           )}
 
@@ -346,7 +346,7 @@ export default function ImportProjects({ onBack }) {
             <div className="mt-5 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <strong className="block">Supervisor credentials export is ready</strong>
+                  <strong className="block">تصدير بيانات المشرفين جاهز</strong>
                   <span className="mt-1 block">{supervisorCredentialExport.security_note}</span>
                 </div>
                 <button
@@ -364,7 +364,7 @@ export default function ImportProjects({ onBack }) {
             <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <strong className="block">Student credentials export is ready</strong>
+                  <strong className="block">تصدير بيانات الطلاب جاهز</strong>
                   <span className="mt-1 block">{studentCredentialExport.security_note}</span>
                 </div>
                 <button
@@ -381,7 +381,7 @@ export default function ImportProjects({ onBack }) {
           {(errors.length > 0 || warnings.length > 0) && (
             <div className="mt-6">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-base font-bold text-[var(--text,#1e293b)]">Validation Details</h2>
+                <h2 className="text-base font-bold text-[var(--text,#1e293b)]">تفاصيل التحقق</h2>
                 <div className="flex gap-2">
                   <button type="button" onClick={copyErrors} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold">
                     <Clipboard size={14} /> Copy Errors
@@ -395,10 +395,10 @@ export default function ImportProjects({ onBack }) {
                 <table className="w-full min-w-[720px] border-collapse text-sm">
                   <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                     <tr>
-                      <th className="px-4 py-3">Type</th>
-                      <th className="px-4 py-3">Row</th>
-                      <th className="px-4 py-3">Field</th>
-                      <th className="px-4 py-3">Message</th>
+                      <th className="px-4 py-3">النوع</th>
+                      <th className="px-4 py-3">صف</th>
+                      <th className="px-4 py-3">الحقل</th>
+                      <th className="px-4 py-3">الرسالة</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -424,10 +424,10 @@ export default function ImportProjects({ onBack }) {
         <aside className="rounded-lg border border-[var(--border,#e2e8f0)] bg-[var(--card,#fff)] p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <History size={18} className="text-indigo-600" />
-            <h2 className="text-base font-bold text-[var(--text,#1e293b)]">Recent Imports</h2>
+            <h2 className="text-base font-bold text-[var(--text,#1e293b)]">الاستيرادات الأخيرة</h2>
           </div>
           {history.length === 0 ? (
-            <p className="text-sm text-[var(--text-secondary,#64748b)]">No project imports yet.</p>
+            <p className="text-sm text-[var(--text-secondary,#64748b)]">لا توجد استيرادات مشاريع بعد.</p>
           ) : (
             <div className="space-y-3">
               {history.map((item) => (
