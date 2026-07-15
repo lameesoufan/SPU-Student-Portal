@@ -3,7 +3,8 @@ from .views import (
     import_users, change_password, list_doctors, list_departments,
     assign_hod_view, student_self_register,
     change_username, username_suggestions,
-    upload_reference,  # ← أضف هذا
+    upload_reference,
+    student_login_request, student_login_verify,
 )
 from .serializers import CustomTokenObtainPairView
 from django.urls import path
@@ -20,5 +21,7 @@ urlpatterns = [
     path('api/departments/',       list_departments,                     name='list_departments'),
     path('api/assign-hod/',        assign_hod_view,                      name='assign_hod'),
     path('api/register/',          student_self_register,                name='student_self_register'),
-    path('api/upload-reference/',  upload_reference,                     name='upload_reference'),  # ← أضف هذا
+    path('api/upload-reference/',  upload_reference,                     name='upload_reference'),
+    path('api/auth/student-login-request/', student_login_request,       name='student_login_request'),
+    path('api/auth/student-login-verify/',  student_login_verify,        name='student_login_verify'),
 ]

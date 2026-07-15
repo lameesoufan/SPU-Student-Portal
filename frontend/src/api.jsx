@@ -621,3 +621,10 @@ export const scheduleApplyAll = (semester) =>
 
 export const scheduleRejectAll = (semester) =>
   api.post('/api/committees/schedule-reject-all/', { semester });
+
+// ── OTP Authentication (2FA for Students) ────────────────────────────────────
+export const studentLoginRequest = (university_id, password) =>
+  api.post('/api/auth/student-login-request/', { university_id, password });
+
+export const studentLoginVerify = (session_token, code) =>
+  api.post('/api/auth/student-login-verify/', { session_token, code });

@@ -90,6 +90,8 @@ def lookup_student_in_reference(university_id: str, password: str) -> dict:
     - لو الـ ID والـ password صحيحين → إرجاع البيانات
     """
     from .models import StudentReference
+    import logging
+    logger = logging.getLogger(__name__)
 
     try:
         ref = StudentReference.objects.get(university_id=university_id)
@@ -98,6 +100,10 @@ def lookup_student_in_reference(university_id: str, password: str) -> dict:
 
     # التحقق من كلمة المرور (لو موجودة في المرجع)
     if ref.password:
+        logger.info(f"DEBUG: Checking password for {university_id}")
+        logger.info(f"DEBUG: ref.password = '{ref.password}' (type: {type(ref.password)})")
+        logger.info(f"DEBUG: input password = '{password}' (type: {type(password)})")
+        logger.info(f"DEBUG: Match? {ref.password == password}")
         if ref.password != password:
             return {'ok': False, 'error': 'Access Denied: Incorrect password.'}
 
@@ -232,3 +238,203 @@ def generate_username_suggestions(*, user: User) -> list[str]:
     available = [u for u in unique if u.lower() not in taken]
 
     return available[:5]
+
+
+
+def generate_otp(*, university_id: str, ip_address: str = None) -> dict:
+    """
+    Generate a new OTP code for the student.
+    Invalidates all previous unverified OTPs for this university_id.
+    
+    Args:
+        university_id: Student's university ID
+        ip_address: Optional IP address of the request
+    
+    Returns:
+        {
+            'ok': True,
+            'session_token': str,  # Used to verify OTP later
+            'expires_in_seconds': int,
+            'otp_code': str  # For testing/email purposes
+        }
+    or:
+        {'ok': False, 'error': str}
+    """
+    from .models import OTPCode
+    from django.db import transaction
+    
+    try:
+        with transaction.atomic():
+            # Invalidate all previous unverified OTPs for this university_id
+            OTPCode.objects.filter(
+                university_id=university_id,
+                is_used=False,
+                is_verified=False
+            ).update(is_used=True)
+            
+            # Create new OTP
+            otp = OTPCode.create_otp(university_id=university_id, ip_address=ip_address)
+            
+            logger.info('OTP generated for %s from IP %s', university_id, ip_address or 'unknown')
+            
+            return {
+                'ok': True,
+                'session_token': otp.session_token,
+                'expires_in_seconds': 600,  # 10 minutes
+                'otp_code': otp.code,
+            }
+    except Exception as e:
+        logger.exception('Failed to generate OTP for %s', university_id)
+        return {'ok': False, 'error': f'Failed to generate OTP: {str(e)}'}
+
+
+def verify_otp(*, session_token: str, code: str, ip_address: str = None) -> dict:
+    """
+    Verify an OTP code against the session token.
+    
+    Args:
+        session_token: Session token from OTP generation
+        code: 6-digit OTP code entered by user
+        ip_address: Optional IP address of the request
+    
+    Returns:
+        {
+            'ok': True,
+            'university_id': str,
+            'student_data': dict  # From StudentReference
+        }
+    or:
+        {'ok': False, 'error': str, 'attempts_remaining': int}
+    """
+    from .models import OTPCode, StudentReference
+    from django.db import transaction
+    
+    try:
+        with transaction.atomic():
+            # Look up OTP by session_token (lock for update)
+            try:
+                otp = OTPCode.objects.select_for_update().get(session_token=session_token)
+            except OTPCode.DoesNotExist:
+                logger.warning('Invalid session token attempt from IP %s', ip_address or 'unknown')
+                return {'ok': False, 'error': 'Invalid or expired session'}
+            
+            # Check if OTP is expired
+            if otp.is_expired():
+                logger.warning('Expired OTP attempt for %s from IP %s', otp.university_id, ip_address or 'unknown')
+                return {'ok': False, 'error': 'OTP code has expired. Please request a new one'}
+            
+            # Check if OTP is already used
+            if otp.is_used or otp.is_verified:
+                logger.warning('Used OTP attempt for %s from IP %s', otp.university_id, ip_address or 'unknown')
+                return {'ok': False, 'error': 'OTP code has already been used'}
+            
+            # Check if too many failed attempts (5 max)
+            if otp.failed_attempts >= 5:
+                logger.warning('Too many failed OTP attempts for %s from IP %s', otp.university_id, ip_address or 'unknown')
+                return {'ok': False, 'error': 'Too many failed attempts. Please request a new OTP'}
+            
+            # Verify the code
+            if otp.code != code:
+                otp.failed_attempts += 1
+                otp.save(update_fields=['failed_attempts'])
+                attempts_remaining = 5 - otp.failed_attempts
+                logger.warning('Invalid OTP attempt for session %s (attempt %d/5)', session_token, otp.failed_attempts)
+                return {
+                    'ok': False,
+                    'error': f'Invalid OTP code. {attempts_remaining} attempts remaining',
+                    'attempts_remaining': attempts_remaining
+                }
+            
+            # OTP is valid - mark as verified
+            otp.is_verified = True
+            otp.is_used = True
+            otp.save(update_fields=['is_verified', 'is_used'])
+            
+            logger.info('OTP verified successfully for %s', otp.university_id)
+            
+            return {
+                'ok': True,
+                'university_id': otp.university_id,
+            }
+            
+    except Exception as e:
+        logger.exception('Failed to verify OTP for session %s', session_token)
+        return {'ok': False, 'error': f'Failed to verify OTP: {str(e)}'}
+
+
+def cleanup_expired_otps() -> int:
+    """
+    Delete OTP records where expires_at < now() - 24 hours.
+    Should be run periodically (e.g., daily via management command or celery task).
+    
+    Returns:
+        Count of deleted OTP records
+    """
+    from .models import OTPCode
+    from django.utils import timezone
+    from datetime import timedelta
+    
+    cutoff_time = timezone.now() - timedelta(hours=24)
+    deleted_count, _ = OTPCode.objects.filter(expires_at__lt=cutoff_time).delete()
+    
+    logger.info('Cleaned up %d expired OTP records older than 24 hours', deleted_count)
+    return deleted_count
+
+
+
+def send_otp_email(*, email: str, full_name: str, otp_code: str) -> bool:
+    """
+    Send OTP email to student.
+    
+    Args:
+        email: Student's email address
+        full_name: Student's full name
+        otp_code: 6-digit OTP code
+    
+    Returns:
+        True if sent successfully, False otherwise
+    """
+    from django.core.mail import send_mail
+    from django.template.loader import render_to_string
+    from django.conf import settings
+    
+    try:
+        # Render HTML email template
+        html_message = render_to_string('accounts/emails/otp_login.html', {
+            'full_name': full_name,
+            'otp_code': otp_code,
+        })
+        
+        # Plain text fallback
+        plain_message = f"""
+مرحباً {full_name},
+
+رمز التحقق الخاص بك لتسجيل الدخول:
+
+{otp_code}
+
+هذا الرمز صالح لمدة 10 دقائق فقط.
+
+تحذير: لا تشارك هذا الرمز مع أي شخص.
+إذا لم تطلب هذا الرمز، يرجى تجاهل هذه الرسالة.
+
+الجامعة السورية الخاصة
+Syrian Private University
+        """.strip()
+        
+        # Send email
+        send_mail(
+            subject='رمز التحقق - Syrian Private University',
+            message=plain_message,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@spu.edu'),
+            recipient_list=[email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+        
+        logger.info('OTP email sent successfully to %s', email)
+        return True
+        
+    except Exception as e:
+        logger.exception('Failed to send OTP email to %s', email)
+        return False

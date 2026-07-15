@@ -73,3 +73,64 @@ class StudentReference(models.Model):
 
     def __str__(self):
         return f'{self.university_id} — {self.full_name}'
+
+
+
+class OTPCode(models.Model):
+    """
+    One-Time Password codes for student 2FA authentication.
+    Each code is valid for 10 minutes and can be used only once.
+    """
+    university_id = models.CharField(max_length=50, db_index=True)
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    is_verified = models.BooleanField(default=False)
+    session_token = models.CharField(max_length=64, unique=True, db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    failed_attempts = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'OTP Code'
+        verbose_name_plural = 'OTP Codes'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['university_id', '-created_at']),
+            models.Index(fields=['session_token']),
+            models.Index(fields=['expires_at']),
+        ]
+
+    def __str__(self):
+        return f'OTP for {self.university_id} - {self.code}'
+
+    def is_expired(self):
+        """Check if the OTP has expired."""
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
+
+    def is_valid(self):
+        """Check if the OTP is valid (not used and not expired)."""
+        return not self.is_used and not self.is_expired()
+
+    @staticmethod
+    def create_otp(university_id: str, ip_address: str = None):
+        """
+        Helper method to create a new OTP with proper expiration.
+        Generates a random 6-digit code and a secure session token.
+        """
+        import secrets
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        code = f'{secrets.randbelow(1000000):06d}'
+        session_token = secrets.token_urlsafe(48)
+        expires_at = timezone.now() + timedelta(minutes=10)
+        
+        return OTPCode.objects.create(
+            university_id=university_id,
+            code=code,
+            session_token=session_token,
+            expires_at=expires_at,
+            ip_address=ip_address,
+        )

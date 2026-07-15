@@ -19,7 +19,12 @@ from django.core.mail import send_mail
 from .models import User, DEPARTMENTS, StudentReference
 from .permissions import IsDeanOrAdmin
 from .selectors import get_doctors
-from .throttles import RegisterRateThrottle, PasswordResetThrottle
+from .throttles import (
+    RegisterRateThrottle, 
+    PasswordResetThrottle,
+    StudentLoginRequestThrottle,
+    StudentLoginVerifyThrottle,
+)
 from .services import (
     create_user_from_import, change_user_password, assign_hod,
     lookup_student_in_reference, register_verified_student,
@@ -347,8 +352,14 @@ def upload_reference(request):
     """
     رفع قاعدة بيانات الطلاب المرجعية.
     يقبل: .xlsx, .xls, .csv
-    الأعمدة المطلوبة: university_id, full_name, department, email, password
+    الأعمدة المطلوبة: university_id, email
+    الأعمدة الاختيارية: full_name, department, password
+    
+    ملاحظة: إذا كانت password فارغة، سيستخدم النظام university_id كـ password افتراضي
     """
+    logger.info("DEBUG UPLOAD: Function called by user %s", request.user.username)
+    logger.info("DEBUG UPLOAD: FILES keys: %s", list(request.FILES.keys()))
+    
     if 'file' not in request.FILES:
         return Response({'error': 'File is required.'}, status=400)
 
@@ -369,6 +380,9 @@ def upload_reference(request):
     else:
         records, parse_errors = _parse_excel_reference(upload)
 
+    logger.info(f"DEBUG UPLOAD: Parsed {len(records)} records, {len(parse_errors)} parse errors")
+    logger.info(f"DEBUG UPLOAD: First record: {records[0] if records else 'NONE'}")
+
     if parse_errors and not records:
         return Response({
             'error': 'Failed to parse file.',
@@ -379,6 +393,8 @@ def upload_reference(request):
         return Response({
             'error': f'File has too many rows. Maximum allowed is {MAX_REFERENCE_ROWS}.'
         }, status=400)
+
+    logger.info(f"DEBUG UPLOAD: Starting to save {len(records)} records...")
 
     # إدخال البيانات بشكل جماعي (update_or_create)
     created_count = 0
@@ -391,22 +407,31 @@ def upload_reference(request):
             row_errors.append({'row': idx, 'error': 'Missing university_id'})
             continue
 
+        # إذا كلمة المرور فارغة، استخدم الرقم الجامعي كـ password افتراضي
+        password = str(record.get('password', '')).strip()
+        if not password:
+            password = university_id
+
+        logger.info(f"DEBUG: Processing row {idx}, university_id={university_id}, password={password}")
+
         try:
-            _, created = StudentReference.objects.update_or_create(
+            obj, created = StudentReference.objects.update_or_create(
                 university_id=university_id,
                 defaults={
                     'full_name':  str(record.get('full_name', '')).strip(),
                     'department': str(record.get('department', '')).strip(),
                     'email':      str(record.get('email', '')).strip(),
-                    'password':   str(record.get('password', '')).strip(),
+                    'password':   password,
                     'uploaded_by': request.user,
                 },
             )
+            logger.info(f"DEBUG: Saved {university_id}, created={created}, obj.id={obj.id}")
             if created:
                 created_count += 1
             else:
                 updated_count += 1
         except Exception as e:
+            logger.exception(f"DEBUG: Error saving {university_id}")
             row_errors.append({
                 'row': idx,
                 'university_id': university_id,
@@ -429,7 +454,12 @@ def upload_reference(request):
 
 
 def _parse_excel_reference(upload):
-    """تحليل ملف Excel — الأعمدة: university_id, full_name, department, email, password"""
+    """
+    تحليل ملف Excel.
+    الأعمدة المطلوبة: university_id, email
+    الأعمدة الاختيارية: full_name, department, password
+    إذا password فارغة = university_id
+    """
     records = []
     errors = []
     try:
@@ -517,3 +547,180 @@ def _detect_columns(header):
                 col_map[field] = col_idx
                 break
     return col_map
+
+
+
+# ── Student OTP Login (2FA) ─────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+# @throttle_classes([StudentLoginRequestThrottle])  # تعطيل مؤقت للتطوير
+def student_login_request(request):
+    """
+    Step 1 of 2FA: Verify credentials and send OTP.
+    
+    Request body:
+        {
+            "university_id": str,
+            "password": str
+        }
+    
+    Response (200):
+        {
+            "message": "OTP sent to your email",
+            "session_token": str,
+            "email_hint": "xxx...@student.spu.edu",
+            "expires_in_seconds": 600
+        }
+    
+    Response (400/403):
+        {"error": str}
+    """
+    from .services import generate_otp, send_otp_email
+    from django.contrib.auth import authenticate
+    
+    university_id = str(request.data.get('university_id', '')).strip()
+    password = str(request.data.get('password', '')).strip()
+    
+    # Validate input
+    if not university_id or not password:
+        return Response({'error': 'University ID and password are required.'}, status=400)
+    
+    # Verify credentials against User table (not StudentReference)
+    user = authenticate(username=university_id, password=password)
+    if not user or user.role != 'student':
+        logger.warning('Failed student login request for %s from IP %s', 
+                      university_id, request.META.get('REMOTE_ADDR', 'unknown'))
+        return Response({'error': 'Invalid credentials'}, status=403)
+    
+    # Get student email
+    email = user.email
+    if not email:
+        logger.error('No email found for student %s', university_id)
+        return Response({'error': 'Student email not configured. Please contact administration.'}, status=500)
+    
+    # Generate OTP
+    ip_address = request.META.get('REMOTE_ADDR', None)
+    otp_result = generate_otp(university_id=university_id, ip_address=ip_address)
+    
+    if not otp_result['ok']:
+        logger.error('Failed to generate OTP for %s', university_id)
+        return Response({'error': 'An error occurred. Please try again later.'}, status=500)
+    
+    # Send OTP email
+    full_name = f"{user.first_name} {user.last_name}".strip() or university_id
+    email_sent = send_otp_email(
+        email=email,
+        full_name=full_name,
+        otp_code=otp_result['otp_code']
+    )
+    
+    if not email_sent:
+        logger.error('Failed to send OTP email for %s', university_id)
+        return Response({'error': 'Failed to send OTP email. Please try again later.'}, status=500)
+    
+    # Mask email for privacy (show first 3 chars and domain)
+    email_parts = email.split('@')
+    if len(email_parts) == 2:
+        email_hint = f"{email_parts[0][:3]}...@{email_parts[1]}"
+    else:
+        email_hint = 'xxx...@student.spu.edu'
+    
+    logger.info('OTP sent for student %s to email %s', university_id, email)
+    
+    return Response({
+        'message': 'OTP sent to your email',
+        'session_token': otp_result['session_token'],
+        'email_hint': email_hint,
+        'expires_in_seconds': otp_result['expires_in_seconds'],
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+# @throttle_classes([StudentLoginVerifyThrottle])  # تعطيل مؤقت للتطوير
+def student_login_verify(request):
+    """
+    Step 2 of 2FA: Verify OTP and complete login.
+    
+    Request body:
+        {
+            "session_token": str,
+            "code": str  # 6-digit OTP
+        }
+    
+    Response (200):
+        {
+            "message": "Login successful",
+            "access": str,
+            "username": str,
+            "role": "student",
+            "must_change_password": bool,
+            "must_change_username": bool,
+            "department": str
+        }
+        + HttpOnly cookies: access_token, refresh_token
+    
+    Response (400/403):
+        {"error": str, "attempts_remaining": int}
+    """
+    from .services import verify_otp
+    
+    session_token = str(request.data.get('session_token', '')).strip()
+    code = str(request.data.get('code', '')).strip()
+    
+    # Validate input
+    if not session_token or not code:
+        return Response({'error': 'Session token and OTP code are required.'}, status=400)
+    
+    # Verify OTP
+    ip_address = request.META.get('REMOTE_ADDR', None)
+    verify_result = verify_otp(session_token=session_token, code=code, ip_address=ip_address)
+    
+    if not verify_result['ok']:
+        error_response = {'error': verify_result['error']}
+        if 'attempts_remaining' in verify_result:
+            error_response['attempts_remaining'] = verify_result['attempts_remaining']
+        return Response(error_response, status=403)
+    
+    # OTP verified successfully - get user from database
+    university_id = verify_result['university_id']
+    
+    # Get user from User table (not StudentReference)
+    try:
+        user = User.objects.get(username=university_id, role='student')
+    except User.DoesNotExist:
+        logger.error('Student %s not found in User table after OTP verification', university_id)
+        return Response({'error': 'Student data not found. Please contact administration.'}, status=403)
+    
+    # Issue JWT tokens
+    refresh = RefreshToken.for_user(user)
+    refresh['role'] = user.role
+    refresh['username'] = user.username
+    refresh['must_change_password'] = user.must_change_password
+    refresh['must_change_username'] = user.must_change_username
+    refresh['department'] = user.department or ''
+    
+    access_token = str(refresh.access_token)
+    refresh_token_str = str(refresh)
+    
+    response = Response({
+        'message': 'Login successful',
+        'access': access_token,
+        'username': user.username,
+        'role': user.role,
+        'must_change_password': user.must_change_password,
+        'must_change_username': user.must_change_username,
+        'department': user.department or '',
+    })
+    
+    # Set HttpOnly cookies
+    secure = getattr(settings, 'JWT_COOKIE_SECURE', not settings.DEBUG)
+    _set_cookie(response, 'access_token', access_token,
+                getattr(settings, 'JWT_COOKIE_ACCESS_MAX_AGE', 86400), secure=secure)
+    _set_cookie(response, 'refresh_token', refresh_token_str,
+                getattr(settings, 'JWT_COOKIE_REFRESH_MAX_AGE', 604800), secure=secure)
+    
+    logger.info('Student %s logged in successfully via OTP', university_id)
+    
+    return response

@@ -86,6 +86,8 @@ REST_FRAMEWORK = {
         'import': os.getenv('IMPORT_RATE_LIMIT', '5/hour'),
         'anon': os.getenv('DRF_ANON_THROTTLE_RATE', '60/minute'),
         'user': os.getenv('DRF_USER_THROTTLE_RATE', '600/minute'),
+        'student_login_request': '12/hour',  # 3 requests per 15 min = 12 per hour
+        'student_login_verify': '10/hour',   # 5 requests per 30 min = 10 per hour
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': int(os.getenv('DRF_PAGE_SIZE', '50')),
@@ -223,6 +225,24 @@ JWT_COOKIE_HTTPONLY = True         # لا يقدر JavaScript يقرأه
 JWT_COOKIE_SAMESITE = 'Lax'        # حماية من CSRF
 JWT_COOKIE_ACCESS_MAX_AGE = 60 * 60 * 24       # يوم واحد (بالثواني)
 JWT_COOKIE_REFRESH_MAX_AGE = 60 * 60 * 24 * 7  # أسبوع
+
+# ── Email Settings (OTP) ──────────────────────────────────────────────────────
+# ── Email Settings (OTP) ──────────────────────────────────────────────────────
+# للاختبار: طباعة OTP في console بدلاً من الإرسال عبر Gmail
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # للإنتاج: استخدم SMTP
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', True)
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'SPU Portal <noreply@spu.edu.sy>')
+
+# ملاحظة: لتفعيل إرسال البريد الحقيقي:
+# 1. غيّر EMAIL_BACKEND إلى smtp
+# 2. احصل على App Password صحيح من Google
+# 3. حطه في .env بدون مسافات
 
 # ── CORS Settings ─────────────────────────────────────────────────────────────
 # MUST NOT use CORS_ALLOW_ALL_ORIGINS with credentials

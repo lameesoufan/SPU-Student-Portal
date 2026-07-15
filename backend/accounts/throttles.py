@@ -54,3 +54,27 @@ class PasswordResetThrottle(SimpleRateThrottle):
         if request.user and request.user.is_authenticated:
             return self.cache_format % {'scope': self.scope, 'ident': request.user.pk}
         return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+
+
+
+class StudentLoginRequestThrottle(SimpleRateThrottle):
+    """Rate limit for OTP generation: 3 requests per 15 minutes per IP."""
+    scope = 'student_login_request'
+
+    def get_cache_key(self, request, view):
+        # Throttle by IP address
+        ident = self.get_ident(request)
+        return self.cache_format % {'scope': self.scope, 'ident': ident}
+
+
+class StudentLoginVerifyThrottle(SimpleRateThrottle):
+    """Rate limit for OTP verification: 5 failed attempts per 30 minutes per session_token."""
+    scope = 'student_login_verify'
+
+    def get_cache_key(self, request, view):
+        # Throttle by session_token instead of IP
+        session_token = str(request.data.get('session_token', '')).strip()
+        if not session_token:
+            # Fallback to IP if no session_token provided
+            return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+        return self.cache_format % {'scope': self.scope, 'ident': f'session_{session_token}'}
