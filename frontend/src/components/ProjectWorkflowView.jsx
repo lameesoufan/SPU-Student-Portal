@@ -9,7 +9,7 @@ import {
 // ─── Status Configuration ────────────────────────────────────────────────────
 const STATUS_CONFIG = {
     scheduled: {
-    label: 'Scheduled',
+    label: 'مجدول',
     icon: Clock,
     dot: 'bg-slate-400',
     badge: 'bg-slate-500/10 text-slate-500 border border-slate-500/20',
@@ -18,7 +18,7 @@ const STATUS_CONFIG = {
     accent: '#64748b',
     },
   pending: {
-    label: 'Pending',
+    label: 'قيد الانتظار',
     icon: Clock,
     dot: 'bg-slate-300',
     badge: 'bg-amber-500/10 text-amber-600 border border-amber-500/20',
@@ -27,7 +27,7 @@ const STATUS_CONFIG = {
     accent: '#94a3b8',
   },
   in_progress: {
-    label: 'In Progress',
+    label: 'قيد التنفيذ',
     icon: Zap,
     dot: 'bg-violet-500 animate-pulse',
     badge: 'bg-violet-500/10 text-violet-600 border border-violet-500/20',
@@ -36,7 +36,7 @@ const STATUS_CONFIG = {
     accent: '#8b5cf6',
   },
   submitted: {
-    label: 'Submitted',
+    label: 'تم الإرسال',
     icon: Send,
     dot: 'bg-blue-500',
     badge: 'bg-blue-500/10 text-blue-600 border border-blue-500/20',
@@ -45,7 +45,7 @@ const STATUS_CONFIG = {
     accent: '#3b82f6',
   },
   approved: {
-    label: 'Approved',
+    label: 'تمت الموافقة',
     icon: CheckCircle2,
     dot: 'bg-emerald-500',
     badge: 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20',
@@ -54,7 +54,7 @@ const STATUS_CONFIG = {
     accent: '#10b981',
   },
   rejected: {
-    label: 'Rejected',
+    label: 'مرفوض',
     icon: XCircle,
     dot: 'bg-red-500',
     badge: 'bg-red-500/10 text-red-500 border border-red-500/20',
@@ -63,7 +63,7 @@ const STATUS_CONFIG = {
     accent: '#ef4444',
   },
   overdue: {
-    label: 'Overdue',
+    label: 'متأخر',
     icon: AlertCircle,
     dot: 'bg-red-500 animate-pulse',
     badge: 'bg-red-500/10 text-red-500 border border-red-500/20',
@@ -112,7 +112,7 @@ function HorizontalPipeline({ stages }) {
                 {completed ? <CheckCircle2 size={18} /> : active ? <Zap size={16} /> : failed ? <XCircle size={16} /> : scheduled ? <Clock size={14} /> : <span className="text-xs font-bold">{idx + 1}</span>}
               </div>
               <span className={`text-[11px] font-medium mt-1.5 text-center max-w-[100px] leading-tight line-clamp-2 ${scheduled ? 'text-slate-400' : 'text-foreground'}`}>
-                {stage?.stage_details?.name || `Stage ${idx + 1}`}
+                {stage?.stage_details?.name || `المرحلة ${idx + 1}`}
               </span>
               <span className={`text-[10px] font-semibold mt-0.5 px-1.5 py-0.5 rounded-full ${
                 completed ? 'bg-emerald-500/10 text-emerald-600' :
@@ -121,11 +121,11 @@ function HorizontalPipeline({ stages }) {
                 scheduled ? 'bg-slate-500/10 text-slate-500' :
                 'bg-muted text-muted-foreground'
               }`}>
-                {completed ? (status === 'approved' ? 'Approved' : 'Submitted') :
-                 active ? 'In Progress' :
-                 failed ? (status === 'overdue' ? 'Overdue' : 'Rejected') :
-                 scheduled ? 'Scheduled' :
-                 'Pending'}
+                {completed ? (status === 'approved' ? 'تمت الموافقة' : 'تم الإرسال') :
+                 active ? 'قيد التنفيذ' :
+                 failed ? (status === 'overdue' ? 'متأخر' : 'مرفوض') :
+                 scheduled ? 'مجدول' :
+                 'قيد الانتظار'}
               </span>
             </div>
 
@@ -165,10 +165,10 @@ function StageCard({ stageInstance, idx, onOpen }) {
     || (hasUnansweredRequired && ['submitted', 'approved'].includes(status));
 
   const actionLabel = status === 'rejected'
-    ? 'Resubmit'
-    : hasUnansweredRequired ? 'Complete New Fields'
-    : status === 'in_progress' ? 'Continue'
-    : 'Fill Form';
+    ? 'إعادة الإرسال'
+    : hasUnansweredRequired ? 'إكمال الحقول الجديدة'
+    : status === 'in_progress' ? 'متابعة'
+    : 'ملء النموذج';
 
   return (
     <div className={`group relative bg-card rounded-xl border overflow-hidden transition-all duration-300 border-l-[3px] ${cfg.card} ${cfg.glow} ${
@@ -189,7 +189,7 @@ function StageCard({ stageInstance, idx, onOpen }) {
           </div>
           <div className="flex-1 min-w-0">
             <h4 className={`text-[15px] font-semibold m-0 leading-tight truncate ${isScheduled ? 'text-slate-500' : 'text-foreground'}`}>
-              {stageInstance?.stage_details?.name || 'Stage'}
+              {stageInstance?.stage_details?.name || 'مرحلة'}
             </h4>
             <div className="flex items-center gap-2 mt-1.5">
               <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${cfg.badge}`}>
@@ -199,7 +199,7 @@ function StageCard({ stageInstance, idx, onOpen }) {
               {fields.length > 0 && !isScheduled && (
                 <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                   <FileText size={9} />
-                  {fields.length} fields
+                  {fields.length} حقول
                 </span>
               )}
             </div>
@@ -210,7 +210,7 @@ function StageCard({ stageInstance, idx, onOpen }) {
         {isScheduled && (
           <div className="flex items-center gap-2 py-2.5 px-3 bg-slate-500/5 border border-dashed border-slate-400/40 rounded-lg text-[13px] text-slate-500">
             <Clock size={14} className="text-slate-400 flex-shrink-0" />
-            <span>This stage will be available on {stageInstance?.due_date ? new Date(stageInstance.due_date).toLocaleDateString() : 'a future date'}</span>
+            <span>ستكون هذه المرحلة متاحة بتاريخ {stageInstance?.due_date ? new Date(stageInstance.due_date).toLocaleDateString() : 'تاريخ لاحق'}</span>
           </div>
         )}
 
@@ -220,7 +220,7 @@ function StageCard({ stageInstance, idx, onOpen }) {
             {stageInstance?.submitted_at && (
               <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground mb-3">
                 <Calendar size={11} className="text-muted-foreground/60" />
-                Submitted on {new Date(stageInstance.submitted_at).toLocaleDateString()}
+                أُرسلت بتاريخ {new Date(stageInstance.submitted_at).toLocaleDateString()}
               </div>
             )}
 
@@ -228,7 +228,7 @@ function StageCard({ stageInstance, idx, onOpen }) {
               <div className="bg-amber-500/5 border-l-[3px] border-l-amber-500 rounded-r-lg px-3 py-2.5 mb-3">
                 <div className="flex items-center gap-1.5 mb-1">
                   <MessageSquare size={11} className="text-amber-600" />
-                  <span className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide">Feedback</span>
+                  <span className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide">ملاحظات</span>
                 </div>
                 <p className="text-[13px] text-foreground/80 m-0 leading-relaxed">{stageInstance.feedback}</p>
               </div>
@@ -247,7 +247,7 @@ function StageCard({ stageInstance, idx, onOpen }) {
             {!hasFields && canSubmit && (
               <div className="flex items-center gap-2 py-2 px-3 bg-muted/50 rounded-lg text-[13px] text-muted-foreground italic">
                 <FileText size={13} className="text-muted-foreground/50" />
-                No form configured for this stage.
+                لا يوجد نموذج مُعدّ لهذه المرحلة.
               </div>
             )}
           </>
@@ -264,6 +264,7 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
     [stageInstance?.stage_details?.fields]
   );
   const [formData, setFormData] = useState({});
+  const [validationErrors, setValidationErrors] = useState({});
 
   useEffect(() => {
     const initialData = {};
@@ -272,10 +273,19 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
       initialData[response.field] = response.value || '';
     });
     setFormData(initialData);
+    setValidationErrors({});
   }, [stageInstance, fields]);
 
   const handleFieldChange = (fieldId, value) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
+    // Clear validation error when user starts typing
+    if (validationErrors[fieldId]) {
+      setValidationErrors(prev => {
+        const next = { ...prev };
+        delete next[fieldId];
+        return next;
+      });
+    }
   };
 
   const handleCheckboxChange = (fieldId, option, checked) => {
@@ -288,17 +298,63 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
       newOptions = currentOptions.filter(o => o !== option);
     }
     setFormData(prev => ({ ...prev, [fieldId]: newOptions.join(',') }));
+    // Clear validation error when user interacts
+    if (validationErrors[fieldId]) {
+      setValidationErrors(prev => {
+        const next = { ...prev };
+        delete next[fieldId];
+        return next;
+      });
+    }
+  };
+
+  // ── Validation helper ──
+  const isFieldEmpty = (field, value) => {
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'string') return value.trim() === '';
+    if (Array.isArray(value)) return value.length === 0;
+    if (typeof value === 'number') return false; // 0 is a valid number
+    if (typeof value === 'object') return Object.keys(value).length === 0;
+    return !value;
+  };
+
+  const validateForm = () => {
+    const errors = {};
+    for (const field of fields) {
+      const value = formData[field.id];
+      if (field.required && isFieldEmpty(field, value)) {
+        errors[field.id] = 'هذا الحقل مطلوب';
+      }
+      // Validate radio/select/checkbox requires non-empty value
+      if (field.required && (field.field_type === 'radio' || field.field_type === 'select' || field.field_type === 'checkbox')) {
+        if (isFieldEmpty(field, value)) {
+          errors[field.id] = 'يرجى اختيار قيمة';
+        }
+      }
+      // Validate file upload
+      if (field.required && field.field_type === 'file' && isFieldEmpty(field, value)) {
+        errors[field.id] = 'يرجى رفع ملف';
+      }
+    }
+    return errors;
   };
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    for (const field of fields) {
-      const value = formData[field.id];
-      if (field.required && (!value || (typeof value === 'string' && !value.trim()))) {
-        alert('يرجى ملء الحقل المطلوب: ' + field.label);
-        return;
+    // ── Run validation ──
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      // Scroll to first error
+      const firstErrorFieldId = Object.keys(errors)[0];
+      const errorElement = document.querySelector(`[data-field-id="${firstErrorFieldId}"]`);
+      if (errorElement) {
+        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        errorElement.focus?.();
       }
+      return;
     }
+    // ── Validation passed, submit ──
+    setValidationErrors({});
     const responseData = {};
     fields.forEach(field => { responseData[field.id] = formData[field.id] || ''; });
     onSubmit(responseData);
@@ -314,55 +370,58 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
+    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
       <div className="p-5 flex flex-col gap-5">
         {fields.map(field => {
           const value = formData[field.id] || '';
           const FieldIcon = FIELD_ICONS[field.field_type] || FileText;
+          const fieldError = validationErrors[field.id];
+          const hasError = !!fieldError;
+          const errorBorderClass = hasError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-border focus:border-violet-500 focus:ring-violet-500/20';
 
           return (
-            <div key={field.id} className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-semibold text-foreground flex items-center gap-1.5">
+            <div key={field.id} className="flex flex-col gap-1.5" data-field-id={field.id}>
+              <label htmlFor={`field-input-${field.id}`} className="text-[13px] font-semibold text-foreground flex items-center gap-1.5">
                 <FieldIcon size={13} className="text-muted-foreground" />
                 {field.label}
                 {field.required && <span className="text-red-500 ml-0.5">*</span>}
               </label>
 
               {field.field_type === 'text' && (
-                <input type="text" className="w-full py-2.5 px-3 text-sm border-[1.5px] border-border rounded-lg bg-input text-foreground transition-all placeholder:text-muted-foreground/50 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none" value={value} onChange={e => handleFieldChange(field.id, e.target.value)} required={field.required} placeholder={`Enter ${field.label.toLowerCase()}...`} />
+                <input id={`field-input-${field.id}`} type="text" data-field-id={field.id} required={field.required || undefined} aria-invalid={hasError || undefined} aria-describedby={hasError ? `error-${field.id}` : undefined} className={`w-full py-2.5 px-3 text-sm border-[1.5px] ${errorBorderClass} rounded-lg bg-input text-foreground transition-all placeholder:text-muted-foreground/50 focus:ring-2 outline-none`} value={value} onChange={e => handleFieldChange(field.id, e.target.value)} placeholder={`أدخل ${field.label}...`} />
               )}
               {field.field_type === 'textarea' && (
-                <textarea className="w-full py-2.5 px-3 text-sm border-[1.5px] border-border rounded-lg bg-input text-foreground transition-all placeholder:text-muted-foreground/50 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none resize-none" rows={4} value={value} onChange={e => handleFieldChange(field.id, e.target.value)} required={field.required} placeholder={`Enter ${field.label.toLowerCase()}...`} />
+                <textarea id={`field-input-${field.id}`} data-field-id={field.id} required={field.required || undefined} aria-invalid={hasError || undefined} aria-describedby={hasError ? `error-${field.id}` : undefined} className={`w-full py-2.5 px-3 text-sm border-[1.5px] ${errorBorderClass} rounded-lg bg-input text-foreground transition-all placeholder:text-muted-foreground/50 focus:ring-2 outline-none resize-none`} rows={4} value={value} onChange={e => handleFieldChange(field.id, e.target.value)} placeholder={`أدخل ${field.label}...`} />
               )}
               {field.field_type === 'number' && (
-                <input type="number" className="w-full py-2.5 px-3 text-sm border-[1.5px] border-border rounded-lg bg-input text-foreground transition-all placeholder:text-muted-foreground/50 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none" value={value} onChange={e => handleFieldChange(field.id, e.target.value)} required={field.required} min="0" step="any" />
+                <input id={`field-input-${field.id}`} type="number" data-field-id={field.id} required={field.required || undefined} aria-invalid={hasError || undefined} aria-describedby={hasError ? `error-${field.id}` : undefined} className={`w-full py-2.5 px-3 text-sm border-[1.5px] ${errorBorderClass} rounded-lg bg-input text-foreground transition-all placeholder:text-muted-foreground/50 focus:ring-2 outline-none`} value={value} onChange={e => handleFieldChange(field.id, e.target.value)} min="0" step="any" />
               )}
               {field.field_type === 'date' && (
                 <div className="relative flex items-center">
                   <Calendar size={15} className="absolute left-3 text-muted-foreground pointer-events-none z-[1]" />
-                  <input type="date" className="w-full !py-2.5 !pl-9 !pr-3 text-sm border-[1.5px] border-border rounded-lg bg-input text-foreground transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-40 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:hover:opacity-100" value={value} onChange={e => handleFieldChange(field.id, e.target.value)} required={field.required} />
+                  <input id={`field-input-${field.id}`} type="date" data-field-id={field.id} required={field.required || undefined} aria-invalid={hasError || undefined} aria-describedby={hasError ? `error-${field.id}` : undefined} className={`w-full !py-2.5 !pl-9 !pr-3 text-sm border-[1.5px] ${errorBorderClass} rounded-lg bg-input text-foreground transition-all focus:ring-2 outline-none [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-40 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:hover:opacity-100`} value={value} onChange={e => handleFieldChange(field.id, e.target.value)} />
                 </div>
               )}
               {field.field_type === 'select' && (
-                <select className="w-full py-2.5 px-3 text-sm border-[1.5px] border-border rounded-lg bg-input text-foreground transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none" value={value} onChange={e => handleFieldChange(field.id, e.target.value)} required={field.required}>
-                  <option value="">Select an option...</option>
+                <select id={`field-input-${field.id}`} data-field-id={field.id} required={field.required || undefined} aria-invalid={hasError || undefined} aria-describedby={hasError ? `error-${field.id}` : undefined} className={`w-full py-2.5 px-3 text-sm border-[1.5px] ${errorBorderClass} rounded-lg bg-input text-foreground transition-all focus:ring-2 outline-none`} value={value} onChange={e => handleFieldChange(field.id, e.target.value)}>
+                  <option value="">اختر خياراً...</option>
                   {(field.options || []).map((option, optIdx) => (
                     <option key={optIdx} value={option}>{option}</option>
                   ))}
                 </select>
               )}
               {field.field_type === 'radio' && (
-                <div className="flex flex-col gap-2.5 mt-1">
+                <div data-field-id={field.id} role="radiogroup" aria-invalid={hasError || undefined} aria-describedby={hasError ? `error-${field.id}` : undefined} className={`flex flex-col gap-2.5 mt-1 p-2 rounded-lg ${hasError ? 'bg-red-500/5 border border-red-500/20' : ''}`}>
                   {(field.options || []).map((option, optIdx) => (
                     <label key={optIdx} className="flex items-center gap-2.5 text-[14px] text-foreground cursor-pointer group/radio">
-                      <input type="radio" name={'field-' + field.id} value={option} checked={value === option} onChange={e => handleFieldChange(field.id, e.target.value)} required={field.required} className="accent-violet-600 w-4 h-4 cursor-pointer" />
+                      <input type="radio" name={'field-' + field.id} value={option} checked={value === option} onChange={e => handleFieldChange(field.id, e.target.value)} className="accent-violet-600 w-4 h-4 cursor-pointer" />
                       <span className="group-hover/radio:text-violet-600 transition-colors">{option}</span>
                     </label>
                   ))}
                 </div>
               )}
               {field.field_type === 'checkbox' && (
-                <div className="flex flex-col gap-2.5 mt-1">
+                <div data-field-id={field.id} role="group" aria-invalid={hasError || undefined} aria-describedby={hasError ? `error-${field.id}` : undefined} className={`flex flex-col gap-2.5 mt-1 p-2 rounded-lg ${hasError ? 'bg-red-500/5 border border-red-500/20' : ''}`}>
                   {(field.options || []).map((option, optIdx) => {
                     const selectedOptions = value ? value.split(',') : [];
                     return (
@@ -375,30 +434,46 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
                 </div>
               )}
               {field.field_type === 'file' && (
-                <input type="file" className="w-full py-2 px-3 text-sm border-[1.5px] border-border rounded-lg bg-input text-foreground transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-[13px] file:font-semibold file:bg-violet-600 file:text-white hover:file:bg-violet-700 file:cursor-pointer cursor-pointer" onChange={e => { const file = e.target.files[0]; if (file) { setFormData(prev => ({ ...prev, [field.id]: file.name })); } }} required={field.required} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif" />
+                <input id={`field-input-${field.id}`} type="file" data-field-id={field.id} required={field.required || undefined} aria-invalid={hasError || undefined} aria-describedby={hasError ? `error-${field.id}` : undefined} className={`w-full py-2 px-3 text-sm border-[1.5px] ${errorBorderClass} rounded-lg bg-input text-foreground transition-all focus:ring-2 outline-none file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-[13px] file:font-semibold file:bg-violet-600 file:text-white hover:file:bg-violet-700 file:cursor-pointer cursor-pointer`} onChange={e => { const file = e.target.files[0]; if (file) { handleFieldChange(field.id, file.name); } }} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif" />
+              )}
+
+              {hasError && (
+                <div id={`error-${field.id}`} className="flex items-center gap-1.5 text-[12px] text-red-600 mt-0.5 font-medium">
+                  <AlertCircle size={12} className="flex-shrink-0" />
+                  <span>{fieldError}</span>
+                </div>
               )}
             </div>
           );
         })}
 
         {error && (
-          <div className="flex items-center gap-2 py-2.5 px-3.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[13px] text-red-600">
-            <AlertCircle size={14} />
-            {error}
+          <div role="alert" aria-live="assertive" className="flex items-center gap-2 py-2.5 px-3.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[13px] text-red-600">
+            <AlertCircle size={14} className="flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {Object.keys(validationErrors).length > 0 && (
+          <div role="alert" aria-live="assertive" className="flex items-center gap-2 py-2.5 px-3.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[13px] text-red-600 font-medium">
+            <AlertCircle size={14} className="flex-shrink-0" />
+            <span>
+              يرجى ملء {Object.keys(validationErrors).length} حقلاً مطلوباً مميزاً بعلامة <span className="text-red-500 font-bold">*</span>
+            </span>
           </div>
         )}
 
         <div className="flex justify-end gap-3 pt-5 mt-2 border-t border-border">
           <button type="button" className="inline-flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-lg bg-muted text-muted-foreground border border-border hover:bg-border transition-colors" onClick={onCancel}>
-            Cancel
+            إلغاء
           </button>
-          <button type="submit" className="inline-flex items-center justify-center gap-1.5 py-2 px-5 text-sm font-semibold rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]" disabled={submitting}>
+          <button type="button" className="inline-flex items-center justify-center gap-1.5 py-2 px-5 text-sm font-semibold rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]" disabled={submitting} onClick={handleSubmit}>
             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-            {submitting ? 'Submitting...' : 'Submit'}
+            {submitting ? 'جاري الإرسال...' : 'إرسال'}
           </button>
         </div>
       </div>
-    </form>
+    </div>
   );
 }
 
@@ -418,7 +493,7 @@ export default function ProjectWorkflowView({ projectBoardId }) {
       setWorkflow(res.data);
       setError('');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load workflow.');
+      setError(err.response?.data?.error || 'فشل تحميل سير العمل.');
       setWorkflow(null);
     } finally {
       setLoading(false);
@@ -447,7 +522,16 @@ export default function ProjectWorkflowView({ projectBoardId }) {
       await loadWorkflow();
       setSelectedStage(null);
     } catch (err) {
-      setError('Failed to submit stage. ' + (err.response?.data?.error || 'Please try again.'));
+      const data = err.response?.data;
+      if (Array.isArray(data?.missing_fields) && data.missing_fields.length) {
+        setError(`يرجى ملء الحقول المطلوبة: ${data.missing_fields.join('، ')}`);
+      } else if (data?.error) {
+        setError(data.error);
+      } else if (data && typeof data === 'object') {
+        setError(Object.values(data).flat().join(' '));
+      } else {
+        setError('فشل إرسال المرحلة. حاول مرة أخرى.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -458,7 +542,7 @@ export default function ProjectWorkflowView({ projectBoardId }) {
     return (
       <div className="w-full overflow-x-hidden flex flex-col items-center justify-center py-16 gap-4">
         <div className="w-10 h-10 border-[3px] border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
-        <span className="text-[15px] text-muted-foreground">Loading workflow...</span>
+        <span className="text-[15px] text-muted-foreground">جارٍ تحميل سير العمل...</span>
       </div>
     );
   }
@@ -472,7 +556,7 @@ export default function ProjectWorkflowView({ projectBoardId }) {
         </div>
         <p className="text-[15px] text-muted-foreground max-w-[400px] m-0">{error}</p>
         <button className="mt-1 inline-flex items-center gap-1.5 py-2 px-4 text-sm font-medium rounded-lg bg-muted text-muted-foreground border border-border hover:bg-border hover:border-violet-500 hover:text-violet-600 transition-all" onClick={() => { setError(''); loadWorkflow(); }}>
-          Retry
+          إعادة المحاولة
         </button>
       </div>
     );
@@ -485,7 +569,7 @@ export default function ProjectWorkflowView({ projectBoardId }) {
         <div className="w-14 h-14 rounded-full bg-violet-500/10 flex items-center justify-center">
           <GitBranch size={24} className="text-violet-500" />
         </div>
-        <p className="text-[15px] text-muted-foreground max-w-[400px] m-0">No workflow assigned to this project yet.</p>
+        <p className="text-[15px] text-muted-foreground max-w-[400px] m-0">لا يوجد سير عمل معيّن لهذا المشروع بعد.</p>
       </div>
     );
   }
@@ -501,7 +585,7 @@ export default function ProjectWorkflowView({ projectBoardId }) {
             onClick={() => setSelectedStage(null)}
           >
             <ArrowLeft size={15} />
-            Back to Workflow
+            العودة إلى سير العمل
           </button>
 
           <div className="flex items-center gap-3 mb-2">
@@ -514,7 +598,7 @@ export default function ProjectWorkflowView({ projectBoardId }) {
               <Sparkles size={18} />
             </div>
             <div>
-              <h3 className="text-[18px] font-bold text-foreground m-0 leading-tight">{selectedStage?.stage_details?.name || 'Stage'}</h3>
+              <h3 className="text-[18px] font-bold text-foreground m-0 leading-tight">{selectedStage?.stage_details?.name || 'مرحلة'}</h3>
               <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full mt-0.5 ${cfg.badge}`}>
                 {cfg.label}
               </span>
@@ -554,8 +638,8 @@ export default function ProjectWorkflowView({ projectBoardId }) {
               <GitBranch size={20} className="text-white" />
             </div>
             <div>
-              <h2 className="text-[22px] font-bold text-foreground m-0 leading-tight">Project Workflow</h2>
-              <p className="text-[15px] text-muted-foreground m-0">{workflow?.template_details?.name || 'Workflow'}</p>
+              <h2 className="text-[22px] font-bold text-foreground m-0 leading-tight">سير عمل المشروع</h2>
+              <p className="text-[15px] text-muted-foreground m-0">{workflow?.template_details?.name || 'سير العمل'}</p>
             </div>
           </div>
 
@@ -570,7 +654,7 @@ export default function ProjectWorkflowView({ projectBoardId }) {
         <div className="mb-7">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[14px] text-muted-foreground font-medium">
-              {completedCount} of {stages.length} stages completed
+              اكتملت {completedCount} من {stages.length} مرحلة
             </span>
             <span className={`text-[14px] font-bold px-2.5 py-0.5 rounded-full ${
               progress === 100 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-violet-500/10 text-violet-600'
@@ -594,7 +678,7 @@ export default function ProjectWorkflowView({ projectBoardId }) {
         <div className="mb-7 bg-card rounded-xl border border-border p-4">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
-            Pipeline Progress
+            تقدّم المراحل
           </h3>
           <HorizontalPipeline stages={stages} />
         </div>
@@ -613,9 +697,9 @@ export default function ProjectWorkflowView({ projectBoardId }) {
 
         {/* Error */}
         {error && (
-          <div className="flex items-center gap-2 py-2.5 px-3.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[13px] text-red-600 mt-4">
-            <AlertCircle size={14} />
-            {error}
+          <div role="alert" aria-live="assertive" className="flex items-center gap-2 py-2.5 px-3.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[13px] text-red-600 mt-4">
+            <AlertCircle size={14} className="flex-shrink-0" />
+            <span>{error}</span>
           </div>
         )}
       </div>

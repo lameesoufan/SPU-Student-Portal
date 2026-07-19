@@ -99,12 +99,22 @@ def lookup_student_in_reference(university_id: str, password: str) -> dict:
         return {'ok': False, 'error': 'Access Denied: ID not found in University records.'}
 
     # التحقق من كلمة المرور (لو موجودة في المرجع)
+    # SECURITY: use Django's constant-time check_password() to avoid
+    # timing attacks and to support hashed passwords stored in the DB.
+    from django.contrib.auth.hashers import check_password, identify_hasher
     if ref.password:
-        logger.info(f"DEBUG: Checking password for {university_id}")
-        logger.info(f"DEBUG: ref.password = '{ref.password}' (type: {type(ref.password)})")
-        logger.info(f"DEBUG: input password = '{password}' (type: {type(password)})")
-        logger.info(f"DEBUG: Match? {ref.password == password}")
-        if ref.password != password:
+        try:
+            identify_hasher(ref.password)
+            is_valid = check_password(password, ref.password)
+        except Exception:
+            # Legacy plain-text value: do a one-shot comparison, then
+            # opportunistically upgrade it to a hashed value.
+            is_valid = (ref.password == password)
+            if is_valid:
+                from django.contrib.auth.hashers import make_password
+                ref.password = make_password(password)
+                ref.save(update_fields=['password'])
+        if not is_valid:
             return {'ok': False, 'error': 'Access Denied: Incorrect password.'}
 
     return {
@@ -255,7 +265,7 @@ def generate_otp(*, university_id: str, ip_address: str = None) -> dict:
             'ok': True,
             'session_token': str,  # Used to verify OTP later
             'expires_in_seconds': int,
-            'otp_code': str  # For testing/email purposes
+            'otp_code': str  # Internal use only: send by email, do not expose in API response
         }
     or:
         {'ok': False, 'error': str}
@@ -281,6 +291,8 @@ def generate_otp(*, university_id: str, ip_address: str = None) -> dict:
                 'ok': True,
                 'session_token': otp.session_token,
                 'expires_in_seconds': 600,  # 10 minutes
+                # SECURITY: callers may use otp_code to send email, but must not
+                # include it in any API response body.
                 'otp_code': otp.code,
             }
     except Exception as e:

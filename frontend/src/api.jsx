@@ -87,6 +87,8 @@ export const fetchProjectImportHistory = (params = {}) =>
 export const fetchProjectImportRows = (sessionId) =>
   api.get(`/api/import/history/${sessionId}/rows/`);
 
+export const fetchCurrentUser = () => api.get('/api/auth/me/');
+
 export const logoutUser = () =>
   api.post('/api/logout/');
 

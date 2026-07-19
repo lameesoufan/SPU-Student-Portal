@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import usePageHistory from './hooks/usePageHistory';
 import './index.css';
 import UploadReference from './components/UploadReference';
-import { logoutUser, clearAccessToken } from './api';
+import { logoutUser, clearAccessToken, fetchCurrentUser } from './api';
 import Login from './components/Login';
 import SelfRegister from './components/SelfRegister';
 import Navbar from './components/Navbar';
@@ -21,6 +21,28 @@ function AppInner() {
   const [user, setUser]     = useState(null);
   const [page, setPage, goBack] = usePageHistory('dashboard');
   const [screen, setScreen] = useState('login'); // 'login' | 'register'
+  const [bootstrapped, setBootstrapped] = useState(false);
+
+  // ── Restore session on app mount ──
+  // If the HttpOnly JWT cookies are still valid, fetch the current user
+  // from the backend so the user is not bounced to the login screen on
+  // every page refresh.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchCurrentUser();
+        if (!cancelled && res.data) {
+          setUser(res.data);
+        }
+      } catch {
+        // Not authenticated — that's fine, stay on the login screen.
+      } finally {
+        if (!cancelled) setBootstrapped(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleLogin      = (u) => { setUser(u); setPage('dashboard'); setScreen('login'); };
   const handleRegistered = (u) => { setUser(u); setPage('dashboard'); };
@@ -36,14 +58,21 @@ function AppInner() {
 
 
 
+  // Show a minimal loader while we check if the session is still valid.
+  if (!bootstrapped) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+      </div>
+    );
+  }
+
   if (!user) {
     if (screen === 'register')
       return <SelfRegister onRegistered={handleRegistered} onBack={() => setScreen('login')} />;
     return <Login onLogin={handleLogin} onRegister={() => setScreen('register')} />;
   }
 
-  if (user.must_change_password)
-    return <ChangePassword user={user} onSuccess={handlePasswordChanged} />;
   if (user.must_change_password)
     return <ChangePassword user={user} onSuccess={handlePasswordChanged} />;
 

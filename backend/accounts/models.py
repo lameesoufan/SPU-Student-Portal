@@ -56,6 +56,8 @@ class StudentReference(models.Model):
     full_name     = models.CharField(max_length=255, blank=True)
     department    = models.CharField(max_length=50, blank=True)
     email         = models.EmailField(blank=True, default='')
+    # SECURITY: stored as a Django hashed password (make_password).
+    #           Never store plain-text passwords here.
     password      = models.CharField(max_length=255, blank=True, default='')
     uploaded_at   = models.DateTimeField(auto_now=True)
     uploaded_by   = models.ForeignKey(

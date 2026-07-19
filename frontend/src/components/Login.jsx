@@ -75,15 +75,32 @@ export default function Login({ onLogin, onRegister }) {
         // Student login - use OTP flow
         const res = await studentLoginRequest(form.username, form.password);
         const data = res.data;
-        
-        // Show OTP verification screen
-        setOtpData({
-          sessionToken: data.session_token,
-          emailHint: data.email_hint,
-          expiresIn: data.expires_in_seconds,
-          universityId: form.username,
-        });
-        setShowOTP(true);
+
+        // First login still uses OTP. Later logins can return a direct JWT response.
+        if (data.session_token) {
+          setOtpData({
+            sessionToken: data.session_token,
+            emailHint: data.email_hint,
+            expiresIn: data.expires_in_seconds,
+            universityId: form.username,
+          });
+          setShowOTP(true);
+          return;
+        }
+
+        if (data.access) {
+          setAccessToken(data.access);
+          onLogin({
+            username: data.username || form.username,
+            role: data.role,
+            must_change_password: data.must_change_password,
+            must_change_username: data.must_change_username ?? true,
+            department: data.department,
+          });
+          return;
+        }
+
+        throw new Error('Unexpected student login response.');
       } else {
         // Doctor/Admin/HOD login - use regular login
         const res = await login(form.username, form.password);

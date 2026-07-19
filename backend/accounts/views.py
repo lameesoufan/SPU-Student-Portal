@@ -408,7 +408,10 @@ def upload_reference(request):
             continue
 
         # إذا كلمة المرور فارغة، استخدم الرقم الجامعي كـ password افتراضي
-        password = str(record.get('password', '')).strip()
+        raw_password = str(record.get('password', '')).strip()
+        # SECURITY: hash on write; never store plain text.
+        from django.contrib.auth.hashers import make_password
+        password = make_password(raw_password) if raw_password else ''
         if not password:
             password = university_id
 
@@ -598,6 +601,38 @@ def student_login_request(request):
     if not email:
         logger.error('No email found for student %s', university_id)
         return Response({'error': 'Student email not configured. Please contact administration.'}, status=500)
+
+    # After the first successful password change, student login becomes direct.
+    # OTP is only used while must_change_password is still required.
+    if not user.must_change_password:
+        refresh = RefreshToken.for_user(user)
+        refresh['role'] = user.role
+        refresh['username'] = user.username
+        refresh['must_change_password'] = user.must_change_password
+        refresh['must_change_username'] = user.must_change_username
+        refresh['department'] = user.department or ''
+
+        access_token = str(refresh.access_token)
+        refresh_token_str = str(refresh)
+
+        response = Response({
+            'message': 'Login successful',
+            'access': access_token,
+            'username': user.username,
+            'role': user.role,
+            'must_change_password': user.must_change_password,
+            'must_change_username': user.must_change_username,
+            'department': user.department or '',
+        })
+
+        secure = getattr(settings, 'JWT_COOKIE_SECURE', not settings.DEBUG)
+        _set_cookie(response, 'access_token', access_token,
+                    getattr(settings, 'JWT_COOKIE_ACCESS_MAX_AGE', 86400), secure=secure)
+        _set_cookie(response, 'refresh_token', refresh_token_str,
+                    getattr(settings, 'JWT_COOKIE_REFRESH_MAX_AGE', 604800), secure=secure)
+
+        logger.info('Student %s logged in directly after password change', university_id)
+        return response
     
     # Generate OTP
     ip_address = request.META.get('REMOTE_ADDR', None)

@@ -1,4 +1,4 @@
-from .token_views import CookieTokenObtainPairView, CookieTokenRefreshView, cookie_logout
+from .token_views import CookieTokenObtainPairView, CookieTokenRefreshView, cookie_logout, current_user
 from .views import (
     import_users, change_password, list_doctors, list_departments,
     assign_hod_view, student_self_register,
@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/token/', CookieTokenObtainPairView.as_view()),
     path('api/token/refresh/', CookieTokenRefreshView.as_view()),
     path('api/logout/', cookie_logout),
+    path('api/auth/me/', current_user, name='current_user'),
     path('api/change-password/',   change_password,                      name='change_password'),
     path('api/change-username/',   change_username,                      name='change_username'),
     path('api/username-suggestions/', username_suggestions,               name='username_suggestions'),

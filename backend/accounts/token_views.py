@@ -63,6 +63,29 @@ class CookieTokenObtainPairView(CustomTokenObtainPairView):
         return response
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def current_user(request):
+    """Return the current authenticated user's info.
+
+    Used by the front-end on app mount to restore the session after a page
+    refresh, so the user is not bounced back to the login screen when the
+    HttpOnly JWT cookies are still valid.
+    """
+    user = request.user
+    return Response({
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'role': user.role,
+        'department': user.department,
+        'must_change_password': getattr(user, 'must_change_password', False),
+        'must_change_username': getattr(user, 'must_change_username', False),
+    })
+
+
 class CookieTokenRefreshView(TokenRefreshView):
     """Refresh — reads refresh token from cookie, sets new cookies + returns access in body."""
 

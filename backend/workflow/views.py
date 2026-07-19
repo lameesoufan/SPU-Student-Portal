@@ -681,10 +681,26 @@ def submit_workflow_stage(request, stage_instance_id):
     for field_id in field_responses.keys():
         if str(field_id) not in fields_by_id:
             return Response({'error': f'Invalid field for this stage: {field_id}'}, status=400)
+    # ── Strict required-field validation ──
+    # Reject empty strings, whitespace-only, and missing values for required fields.
+    missing_required = []
     for field in fields_by_id.values():
-        if field.required and not field_responses.get(str(field.id)):
-            return Response({'error': f'Field is required: {field.label}'}, status=400)
-        # Validate field types and options
+        if not field.required:
+            continue
+        raw_value = field_responses.get(str(field.id))
+        if raw_value is None:
+            missing_required.append(field.label)
+            continue
+        # Normalize to string and strip whitespace
+        str_value = str(raw_value).strip()
+        if str_value == '':
+            missing_required.append(field.label)
+    if missing_required:
+        return Response({
+            'error': 'يرجى ملء جميع الحقول المطلوبة',
+            'missing_fields': missing_required,
+        }, status=400)
+    # Validate field types and options
     for field_id_str, value in field_responses.items():
         field_obj = fields_by_id.get(field_id_str)
         if field_obj:
