@@ -36,7 +36,7 @@ from .serializers import (
 # ── Permission helpers ────────────────────────────────────────────────────────
 
 def _is_student(user): return getattr(user, 'role', None) == 'student'
-def _is_doctor(user):  return getattr(user, 'role', None) in ('doctor', 'dean', 'hod')
+def _is_doctor(user):  return getattr(user, 'role', None) in ('doctor', 'dean')
 def _is_dean(user):    return getattr(user, 'role', None) == 'dean'
 def _is_hod(user):     return getattr(user, 'role', None) in ('hod', 'dean')
 
@@ -61,16 +61,8 @@ def _student_belongs_to_project(user, source, pid):
 
 
 def _doctor_is_chair_for(user, source, pid, committee_type):
-    """هل الدكتور رئيس لجنة من هذا النوع للمشروع؟
-    رئيس القسم (HoD) يُعامَل كرئيس إذا كان عضواً في اللجنة."""
-    from django.db.models import Q
-    if _is_hod(user) and not _is_dean(user):
-        # رئيس القسم: يُعامَل كرئيس إذا كان رئيساً أو عضواً في اللجنة
-        qs = Committee.objects.filter(
-            committee_type=committee_type
-        ).filter(Q(chair=user) | Q(members=user))
-    else:
-        qs = Committee.objects.filter(committee_type=committee_type, chair=user)
+    """هل الدكتور رئيس لجنة من هذا النوع للمشروع؟"""
+    qs = Committee.objects.filter(committee_type=committee_type, chair=user)
     if source == 'IdeaApplication':
         return qs.filter(applications__id=pid).exists()
     return qs.filter(proposals__id=pid).exists()
@@ -487,10 +479,8 @@ class MyCommitteeGradesView(APIView):
             mode         = CommitteeGradingMode.objects.filter(committee=c).first()
             collective   = mode.collective if mode else False
 
-            # رئيس القسم يرى كل اللجان اللي هو فيها (رئيس أو عضو)
-            # الدكتور العادي: يرى فقط لجانه كرئيس، أو إذا وضع التقييم الجماعي مفعّل
-            is_hod_user = _is_hod(user) and not _is_dean(user)
-            if not is_chair and not collective and not is_hod_user:
+            # إذا لم يكن رئيساً ووضع التقييم الجماعي غير مُفعَّل → لا تُظهر اللجنة
+            if not is_chair and not collective:
                 continue
 
             projects_data = []
