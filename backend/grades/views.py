@@ -36,7 +36,7 @@ from .serializers import (
 # ── Permission helpers ────────────────────────────────────────────────────────
 
 def _is_student(user): return getattr(user, 'role', None) == 'student'
-def _is_doctor(user):  return getattr(user, 'role', None) in ('doctor', 'dean')
+def _is_doctor(user):  return getattr(user, 'role', None) in ('doctor', 'dean', 'hod')
 def _is_dean(user):    return getattr(user, 'role', None) == 'dean'
 def _is_hod(user):     return getattr(user, 'role', None) in ('hod', 'dean')
 
@@ -63,6 +63,16 @@ def _student_belongs_to_project(user, source, pid):
 def _doctor_is_chair_for(user, source, pid, committee_type):
     """هل الدكتور رئيس لجنة من هذا النوع للمشروع؟"""
     qs = Committee.objects.filter(committee_type=committee_type, chair=user)
+    if source == 'IdeaApplication':
+        return qs.filter(applications__id=pid).exists()
+    return qs.filter(proposals__id=pid).exists()
+
+
+def _doctor_is_member_for(user, source, pid, committee_type):
+    """هل الدكتور/رئيس القسم عضو في لجنة من هذا النوع للمشروع؟"""
+    from django.db.models import Q
+    qs = Committee.objects.filter(committee_type=committee_type)
+    qs = qs.filter(Q(chair=user) | Q(members=user))
     if source == 'IdeaApplication':
         return qs.filter(applications__id=pid).exists()
     return qs.filter(proposals__id=pid).exists()
@@ -239,10 +249,12 @@ class EnterGradeView(APIView):
 
         if not _is_dean(user):
             if not _doctor_is_chair_for(user, source, pid, ctype):
-                return Response(
-                    {'detail': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+                # رئيس القسم يُسمح له إذا كان عضواً في اللجنة
+                if not (_is_hod(user) and _doctor_is_member_for(user, source, pid, ctype)):
+                    return Response(
+                        {'detail': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
         if ctype == 'final_discussion':
             if not ProjectReport.objects.filter(project_source=source, project_id=pid).exists():
@@ -333,10 +345,12 @@ class EnterBulkGradesView(APIView):
 
         if not _is_dean(user):
             if not _doctor_is_chair_for(user, source, pid, ctype):
-                return Response(
-                    {'detail': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+                # رئيس القسم يُسمح له إذا كان عضواً في اللجنة
+                if not (_is_hod(user) and _doctor_is_member_for(user, source, pid, ctype)):
+                    return Response(
+                        {'detail': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
         if ctype == 'final_discussion':
             if not ProjectReport.objects.filter(project_source=source, project_id=pid).exists():
@@ -480,7 +494,8 @@ class MyCommitteeGradesView(APIView):
             collective   = mode.collective if mode else False
 
             # إذا لم يكن رئيساً ووضع التقييم الجماعي غير مُفعَّل → لا تُظهر اللجنة
-            if not is_chair and not collective:
+            # استثناء: رئيس القسم يرى اللجان التي هو عضو فيها دائماً
+            if not is_chair and not collective and not _is_hod(user):
                 continue
 
             projects_data = []
