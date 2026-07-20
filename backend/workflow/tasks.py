@@ -3,6 +3,8 @@ from datetime import timedelta
 from django.utils import timezone
 import logging
 
+from .models import ProjectWorkflow, WorkflowStage, WorkflowStageInstance
+
 logger = logging.getLogger(__name__)
 
 
@@ -12,8 +14,6 @@ def generate_recurring_stages():
     مهمة بتشتغل كل يوم بتشيك إذا في مراحل متكررة
     لازم تنشئ instances جديدة
     """
-    from .models import WorkflowStage, WorkflowStageInstance, ProjectWorkflow
-
     today = timezone.now().date()
 
     # نلاقي كل المراحل المتكررة النشطة
@@ -46,8 +46,6 @@ def activate_scheduled_stages():
     مهمة بتشتغل كل يوم بتفحص المراحل المجدولة (scheduled)
     وتحولها لـ pending لما يجي وقت التفعيل (due_date <= اليوم)
     """
-    from .models import WorkflowStageInstance
-
     today = timezone.now().date()
 
     # نلاقي كل المراحل المجدولة اللي وصل وقتها

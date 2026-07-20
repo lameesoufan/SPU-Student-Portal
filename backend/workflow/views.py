@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import IntegrityError, transaction
 from datetime import datetime, timedelta
+from django.utils import timezone
 from .serializers import (
     WorkflowTemplateSerializer, WorkflowStageSerializer,
     ProjectWorkflowSerializer, WorkflowStageInstanceSerializer
@@ -409,7 +410,7 @@ def update_workflow_template(request, template_id):
 
                     # تحديد حالة المرحلة: scheduled إذا لم يحن وقت التفعيل بعد
                     initial_status = 'pending'
-                    today = datetime.now().date()
+                    today = timezone.localdate()
                     if due_date and due_date > today and new_stage.trigger_type in ('after_days', 'date'):
                         initial_status = 'scheduled'
 
@@ -511,7 +512,7 @@ def apply_workflow_to_project(request):
         except IntegrityError:
             return Response({'error': 'Project already has an active workflow'}, status=400)
         
-        project_start_date = datetime.now().date()
+        project_start_date = timezone.localdate()
         for stage in template.stages.all():
             due_date = None
             if stage.trigger_type == 'project_start':
@@ -697,7 +698,7 @@ def submit_workflow_stage(request, stage_instance_id):
             missing_required.append(field.label)
     if missing_required:
         return Response({
-            'error': 'يرجى ملء جميع الحقول المطلوبة',
+            'error': 'Please fill all required fields. يرجى ملء جميع الحقول المطلوبة',
             'missing_fields': missing_required,
         }, status=400)
     # Validate field types and options
@@ -744,7 +745,7 @@ def submit_workflow_stage(request, stage_instance_id):
         ).delete()
 
         stage_instance.status = 'submitted'
-        stage_instance.submitted_at = datetime.now()
+        stage_instance.submitted_at = timezone.now()
         stage_instance.save(update_fields=['status', 'submitted_at', 'updated_at'])
     
     return Response(WorkflowStageInstanceSerializer(stage_instance).data)
@@ -757,6 +758,40 @@ def cleanup_duplicate_stages(request):
 
     from .models import WorkflowStageField, WorkflowFieldResponse
     from django.db.models import Count
+
+    status_rank = {
+        'scheduled': 0,
+        'pending': 1,
+        'in_progress': 2,
+        'submitted': 3,
+        'overdue': 3,
+        'rejected': 4,
+        'approved': 4,
+    }
+
+    def merge_instance_metadata(target_instance, source_instance):
+        target_status = status_rank.get(target_instance.status, -1)
+        source_status = status_rank.get(source_instance.status, -1)
+
+        if source_status <= target_status:
+            return
+
+        target_instance.status = source_instance.status
+
+        if source_instance.due_date and not target_instance.due_date:
+            target_instance.due_date = source_instance.due_date
+        if source_instance.submitted_at and not target_instance.submitted_at:
+            target_instance.submitted_at = source_instance.submitted_at
+        if source_instance.reviewed_at and not target_instance.reviewed_at:
+            target_instance.reviewed_at = source_instance.reviewed_at
+        if source_instance.reviewed_by and not target_instance.reviewed_by:
+            target_instance.reviewed_by = source_instance.reviewed_by
+        if source_instance.feedback and not target_instance.feedback:
+            target_instance.feedback = source_instance.feedback
+
+        target_instance.save(update_fields=[
+            'status', 'due_date', 'submitted_at', 'reviewed_at', 'reviewed_by', 'feedback', 'updated_at'
+        ])
 
     results = {'merged': [], 'deleted': [], 'errors': []}
 
@@ -806,6 +841,7 @@ def cleanup_duplicate_stages(request):
                         ).first()
 
                         if existing_instance:
+                            merge_instance_metadata(existing_instance, instance)
                             # نقل الردود
                             for response in instance.field_responses.all():
                                 field_in_original = original.fields.filter(label=response.field.label).first()
@@ -871,7 +907,7 @@ def review_workflow_stage(request, stage_instance_id):
         stage_instance.status = 'approved' if action == 'approve' else 'rejected'
         stage_instance.feedback = feedback
         stage_instance.reviewed_by = request.user
-        stage_instance.reviewed_at = datetime.now()
+        stage_instance.reviewed_at = timezone.now()
         stage_instance.save()
     
     return Response(WorkflowStageInstanceSerializer(stage_instance).data)
@@ -1008,7 +1044,7 @@ def apply_workflow_bulk(request):
     }
 
     results = {'applied': [], 'replaced': [], 'skipped': [], 'errors': []}
-    project_start_date = datetime.now().date()
+    project_start_date = timezone.localdate()
 
     for pid in project_ids:
         try:
@@ -1037,7 +1073,7 @@ def apply_workflow_bulk(request):
                     status__in=['pending', 'in_progress', 'submitted', 'overdue']
                 ).delete()
                 old_workflow.is_active = False
-                old_workflow.completed_at = datetime.now()
+                old_workflow.completed_at = timezone.now()
                 old_workflow.save()
 
             try:
@@ -1137,7 +1173,7 @@ def replace_workflow_for_project(request, project_board_id):
             old_workflow.stage_instances.all().delete()
 
         old_workflow.is_active = False
-        old_workflow.completed_at = datetime.now()
+        old_workflow.completed_at = timezone.now()
         old_workflow.save()
 
         try:
@@ -1149,7 +1185,7 @@ def replace_workflow_for_project(request, project_board_id):
         except IntegrityError:
             return Response({'error': 'Conflict creating new workflow'}, status=400)
 
-        project_start_date = datetime.now().date()
+        project_start_date = timezone.localdate()
         for stage in new_template.stages.all():
             due_date = None
             if stage.trigger_type == 'project_start':
