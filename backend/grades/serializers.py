@@ -86,6 +86,8 @@ class EnterGradeSerializer(serializers.Serializer):
         min_value=0, max_value=30, required=False, allow_null=True
     )
     notes            = serializers.CharField(required=False, allow_blank=True, default='')
+    confirm_update   = serializers.BooleanField(required=False, default=False, 
+                                                 help_text='تأكيد تعديل علامة موجودة')
 
     def validate(self, data):
         ctype = data['committee_type']
@@ -131,6 +133,8 @@ class EnterBulkGradesSerializer(serializers.Serializer):
     committee_id   = serializers.IntegerField(required=False, allow_null=True)
     semester       = serializers.CharField(max_length=50, required=False, default='')
     grades         = StudentGradeItem(many=True)
+    confirm_update = serializers.BooleanField(required=False, default=False,
+                                              help_text='تأكيد تعديل علامات موجودة')
 
     def validate(self, data):
         ctype = data['committee_type']

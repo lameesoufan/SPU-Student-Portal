@@ -512,12 +512,39 @@ export const fetchMyCommitteeGrades = (semester) =>
 export const fetchMyGrades = () =>
   api.get('/api/grades/my-grades/');
 
-export const fetchGradesSummary = (semester) =>
-  api.get('/api/grades/summary/', { params: semester ? { semester } : {} });
+export const fetchGradesSummary = (semester, department, projectType) =>
+  api.get('/api/grades/summary/', { 
+    params: { 
+      ...(semester ? { semester } : {}),
+      ...(department ? { department } : {}),
+      ...(projectType ? { project_type: projectType } : {}),
+    } 
+  });
 
-export const exportGrades = (semester) =>
+export const fetchHodGradesSummary = (semester, projectType) =>
+  api.get('/api/grades/hod-summary/', { 
+    params: { 
+      ...(semester ? { semester } : {}),
+      ...(projectType ? { project_type: projectType } : {}),
+    } 
+  });
+
+export const exportGrades = (semester, department, projectType) =>
   api.get('/api/grades/export/', {
-    params: semester ? { semester } : {},
+    params: { 
+      ...(semester ? { semester } : {}),
+      ...(department ? { department } : {}),
+      ...(projectType ? { project_type: projectType } : {}),
+    },
+    responseType: 'blob',
+  });
+
+export const exportHodGradesWord = (semester, projectType) =>
+  api.get('/api/grades/export/word/', {
+    params: { 
+      ...(semester ? { semester } : {}),
+      ...(projectType ? { project_type: projectType } : {}),
+    },
     responseType: 'blob',
   });
 

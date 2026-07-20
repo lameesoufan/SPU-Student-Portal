@@ -1,34 +1,26 @@
 /**
- * GradesSummary — العميد يرى ويصدّر علامات كل المشاريع
+ * HodGradesSummary — رئيس القسم يرى علامات مشاريع قسمه مع إمكانية الفلترة
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchGradesSummary, exportGrades } from '../api';
+import { fetchHodGradesSummary } from '../api';
 
 const S = {
   wrap:       { padding: 24, direction: 'rtl' },
   toolbar:    { display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' },
   title:      { fontSize: '1.3rem', fontWeight: 700, flex: 1 },
   btn:        { padding: '8px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: '0.87rem', fontWeight: 600 },
-  btnExport:  { background: '#10b981', color: '#fff' },
   btnFilter:  { background: '#f0f0ff', color: '#5b5fc7', border: '1.5px solid #c0c7ff' },
   semInput:   { padding: '7px 12px', borderRadius: 8, border: '1.5px solid #c0c7ff', fontSize: '0.87rem', width: 160 },
   table:      { width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' },
   th:         { background: '#4F46E5', color: '#fff', padding: '9px 12px', textAlign: 'center', fontWeight: 600, whiteSpace: 'nowrap' },
   td:         { padding: '8px 12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle' },
   tdTitle:    { textAlign: 'right', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  tdStudents: { textAlign: 'right', fontSize: '0.78rem', color: '#555' },
   scoreCell:  { fontWeight: 600, color: '#4F46E5' },
   nullCell:   { color: '#bbb' },
   totalCell:  { fontWeight: 800, color: '#059669' },
   evenRow:    { background: '#f8f7ff' },
-  badge:      { display: 'inline-block', padding: '2px 8px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 600 },
   error:      { padding: '10px 14px', background: '#fff5f5', color: '#c0392b', borderRadius: 8, marginBottom: 12, fontSize: '0.85rem' },
   empty:      { textAlign: 'center', padding: 60, color: '#888' },
-};
-
-const DEPT_AR = {
-  software_engineering:'برمجيات', artificial_intelligence:'ذكاء اصطناعي',
-  information_security:'أمن سيبراني', communications:'اتصالات', control_robotics:'تحكم وروبوتات',
 };
 
 const PROJECT_TYPE_AR = {
@@ -37,15 +29,6 @@ const PROJECT_TYPE_AR = {
   graduation_2: 'تخرج 2',
 };
 
-const DEPT_OPTIONS = [
-  { value: '', label: 'كل الأقسام' },
-  { value: 'software_engineering', label: 'برمجيات' },
-  { value: 'artificial_intelligence', label: 'ذكاء اصطناعي' },
-  { value: 'information_security', label: 'أمن سيبراني' },
-  { value: 'communications', label: 'اتصالات' },
-  { value: 'control_robotics', label: 'تحكم وروبوتات' },
-];
-
 const PROJECT_TYPE_OPTIONS = [
   { value: '', label: 'كل الأنواع' },
   { value: 'semester', label: 'فصلي' },
@@ -53,60 +36,36 @@ const PROJECT_TYPE_OPTIONS = [
   { value: 'graduation_2', label: 'تخرج 2' },
 ];
 
-export default function GradesSummary() {
-  const [data,       setData]       = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [exporting,  setExporting]  = useState(false);
-  const [error,      setError]      = useState('');
-  const [semester,   setSemester]   = useState('');
-  const [department, setDepartment] = useState('');
-  const [projectType,setProjectType]= useState('');
-  const [draftSem,   setDraftSem]   = useState('');
-  const [draftDept,  setDraftDept]  = useState('');
-  const [draftType,  setDraftType]  = useState('');
+export default function HodGradesSummary() {
+  const [data,        setData]        = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState('');
+  const [semester,    setSemester]    = useState('');
+  const [projectType, setProjectType] = useState('');
+  const [draftSem,    setDraftSem]    = useState('');
+  const [draftType,   setDraftType]   = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try { 
-      const r = await fetchGradesSummary(
+      const r = await fetchHodGradesSummary(
         semester || undefined,
-        department || undefined,
         projectType || undefined
       ); 
       setData(r.data); 
     }
     catch (e) { setError(e.response?.data?.detail || 'تعذّر التحميل.'); }
     finally { setLoading(false); }
-  }, [semester, department, projectType]);
+  }, [semester, projectType]);
 
   useEffect(() => { load(); }, [load]);
-
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      const r   = await exportGrades(
-        semester || undefined,
-        department || undefined,
-        projectType || undefined
-      );
-      const url = URL.createObjectURL(new Blob([r.data], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `grades${semester ? '_' + semester : ''}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) { setError('فشل التصدير.'); }
-    finally { setExporting(false); }
-  };
 
   const projects = data?.projects || [];
 
   return (
     <div style={S.wrap}>
       <div style={S.toolbar}>
-        <div style={S.title}>علامات المشاريع ({data?.count ?? '…'})</div>
+        <div style={S.title}>علامات مشاريع القسم ({data?.count ?? '…'})</div>
         <input
           style={S.semInput}
           placeholder="الفصل الدراسي (اختياري)"
@@ -114,15 +73,6 @@ export default function GradesSummary() {
           onChange={(e) => setDraftSem(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && setSemester(draftSem)}
         />
-        <select
-          style={S.semInput}
-          value={draftDept}
-          onChange={(e) => setDraftDept(e.target.value)}
-        >
-          {DEPT_OPTIONS.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
         <select
           style={S.semInput}
           value={draftType}
@@ -136,14 +86,10 @@ export default function GradesSummary() {
           style={{ ...S.btn, ...S.btnFilter }} 
           onClick={() => {
             setSemester(draftSem);
-            setDepartment(draftDept);
             setProjectType(draftType);
           }}
         >
           تصفية
-        </button>
-        <button style={{ ...S.btn, ...S.btnExport }} onClick={handleExport} disabled={exporting || loading}>
-          {exporting ? 'جاري التصدير...' : '⬇ تصدير Excel'}
         </button>
       </div>
 
@@ -161,7 +107,6 @@ export default function GradesSummary() {
             <thead>
               <tr>
                 <th style={S.th}>المشروع</th>
-                <th style={S.th}>القسم</th>
                 <th style={S.th}>النوع</th>
                 <th style={S.th}>الطالب</th>
                 <th style={S.th}>الرقم الجامعي</th>
@@ -185,7 +130,6 @@ export default function GradesSummary() {
                   <tr key={`${p.project_source}-${p.project_id}-${p.student_uid}`}
                       style={isEven ? S.evenRow : {}}>
                     <td style={{ ...S.td, ...S.tdTitle }} title={p.title}>{p.title}</td>
-                    <td style={S.td}>{DEPT_AR[p.department] || p.department}</td>
                     <td style={S.td}>{PROJECT_TYPE_AR[p.project_type] || p.project_type || '—'}</td>
                     <td style={{ ...S.td, textAlign: 'right' }}>{p.student_name}</td>
                     <td style={S.td}>{p.student_uid}</td>

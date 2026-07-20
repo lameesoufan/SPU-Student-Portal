@@ -27,3 +27,4 @@ celery==5.4.0
 cryptography==44.0.0
 arabic_reshaper==3.0.0
 python-bidi==0.4.2
+python-docx==0.8.11

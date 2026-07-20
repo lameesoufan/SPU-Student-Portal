@@ -33,6 +33,7 @@ import ApplyWorkflow from './ApplyWorkflow';
 import WorkflowReview from './WorkflowReview';import MyIdeas from './MyIdeas';         
 import SubmitIdea from './SubmitIdea';
 import CollectiveGradingSettings from './CollectiveGradingSettings';
+import HodGradesSummary from './HodGradesSummary';
 import { useTheme } from '../ThemeContext';
 import {
   fetchUnreadCount,
@@ -85,6 +86,7 @@ const NAV_ITEMS = [
   { id: 'applyworkflow', label: 'تطبيق سير العمل', IconComp: Icon.ClipboardList },
   { id: 'reviewworkflow', label: 'مراجعة سير العمل', IconComp: Icon.CheckCircle },
   { id: 'grading-settings', label: 'إعدادات التقييم', IconComp: Icon.CheckCircle },
+  { id: 'hod-grades', label: 'علامات المشاريع', IconComp: Icon.BarChart },
 ];
 
 /* ── Module Cards ── */
@@ -151,6 +153,13 @@ const MODULE_CARDS = [
     desc: 'مراجعة والموافقة على طلبات سير العمل من الطلاب',
     page: 'reviewworkflow',
     gradient: 'linear-gradient(135deg, #f97316, #fb923c)',
+  },
+  {
+    IconComp: Icon.BarChart,
+    label: 'علامات المشاريع',
+    desc: 'عرض وتصفية علامات مشاريع القسم حسب النوع والفصل الدراسي',
+    page: 'hod-grades',
+    gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)',
   },
 ];
 
@@ -321,6 +330,13 @@ usePolling(async () => {
       return (
         <div className="std-page-wrapper">
           <CollectiveGradingSettings user={user} />
+        </div>
+      );
+    }
+    if (page === 'hod-grades') {
+      return (
+        <div className="std-page-wrapper">
+          <HodGradesSummary onBack={goBack} />
         </div>
       );
     }

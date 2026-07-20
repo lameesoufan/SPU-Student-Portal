@@ -266,6 +266,16 @@ class EnterGradeView(APIView):
             defaults={'semester': semester, 'committee_id': committee_id, 'entered_by': user},
         )
 
+        # التحقق من التعديل - إذا كانت العلامة موجودة ولم يؤكد المستخدم
+        if not created:
+            confirm_update = d.get('confirm_update', False)
+            if not confirm_update:
+                return Response({
+                    'requires_confirmation': True,
+                    'message': 'العلامة موجودة بالفعل. هل تريد تغيير العلامة بالتأكيد؟',
+                    'existing_grade': ProjectGradeSerializer(grade).data,
+                }, status=status.HTTP_409_CONFLICT)
+
         old_main   = grade.score_main
         old_report = grade.score_report
 
@@ -319,6 +329,7 @@ class EnterBulkGradesView(APIView):
         ctype        = d['committee_type']
         committee_id = d.get('committee_id')
         semester     = d.get('semester', '')
+        confirm_update = d.get('confirm_update', False)
 
         if not _is_dean(user):
             if not _doctor_is_chair_for(user, source, pid, ctype):
@@ -333,6 +344,21 @@ class EnterBulkGradesView(APIView):
                     {'detail': 'لا يمكن إدخال علامة المناقشة النهائية قبل رفع تقرير المشروع.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+        # التحقق من وجود علامات سابقة - إذا كان هناك أي علامة موجودة ولم يؤكد المستخدم
+        if not confirm_update:
+            existing_grades = ProjectGrade.objects.filter(
+                project_source=source,
+                project_id=pid,
+                committee_type=ctype,
+                student__in=[item['student_id'] for item in d['grades']]
+            ).exists()
+            
+            if existing_grades:
+                return Response({
+                    'requires_confirmation': True,
+                    'message': 'توجد علامات مدخلة سابقاً لأحد الطلاب أو أكثر. هل تريد تغيير العلامات بالتأكيد؟',
+                }, status=status.HTTP_409_CONFLICT)
 
         saved = []
         for item in d['grades']:
@@ -554,7 +580,35 @@ class GradesSummaryView(APIView):
             return Response({'detail': 'مسموح للعميد فقط.'}, status=status.HTTP_403_FORBIDDEN)
 
         semester = request.query_params.get('semester')
-        return Response(_build_summary(semester, request))
+        department = request.query_params.get('department')
+        project_type = request.query_params.get('project_type')
+        return Response(_build_summary(semester, request, department, project_type))
+
+
+class HodGradesSummaryView(APIView):
+    """رئيس القسم يرى علامات مشاريع قسمه فقط."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if not _is_hod(user):
+            return Response({'detail': 'مسموح لرئيس القسم فقط.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # جلب قسم رئيس القسم
+        department = getattr(user, 'department', None)
+        if not department and not _is_dean(user):
+            return Response(
+                {'detail': 'حساب رئيس القسم غير مرتبط بقسم.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        semester = request.query_params.get('semester')
+        project_type = request.query_params.get('project_type')
+        
+        # إذا كان عميد يشوف كل الأقسام، وإلا بيشوف قسمه فقط
+        dept_filter = None if _is_dean(user) else department
+        
+        return Response(_build_summary(semester, request, dept_filter, project_type))
 
 
 class GradesExportView(APIView):
@@ -566,13 +620,40 @@ class GradesExportView(APIView):
             return Response({'detail': 'مسموح للعميد فقط.'}, status=status.HTTP_403_FORBIDDEN)
 
         semester = request.query_params.get('semester')
-        content  = _build_excel(semester)
+        department = request.query_params.get('department')
+        project_type = request.query_params.get('project_type')
+        content  = _build_excel(semester, department, project_type)
 
         resp = HttpResponse(
             content,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
         fname = f'grades_{timezone.now():%Y%m%d_%H%M}.xlsx'
+        resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+        return resp
+
+
+class HodGradesExportWordView(APIView):
+    """رئيس القسم يصدّر علامات مشاريع قسمه بصيغة Word."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if not _is_hod(request.user):
+            return Response({'detail': 'مسموح لرئيس القسم فقط.'}, status=status.HTTP_403_FORBIDDEN)
+
+        semester = request.query_params.get('semester')
+        project_type = request.query_params.get('project_type')
+        
+        # رئيس القسم يرى فقط قسمه
+        department = getattr(request.user, 'department', None)
+        
+        content = _build_word_grades(semester, department, project_type)
+
+        resp = HttpResponse(
+            content,
+            content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        )
+        fname = f'hod_grades_{timezone.now():%Y%m%d_%H%M}.docx'
         resp['Content-Disposition'] = f'attachment; filename="{fname}"'
         return resp
 
@@ -632,9 +713,10 @@ class MyGradesView(APIView):
 
 # ── Helper functions ──────────────────────────────────────────────────────────
 
-def _build_summary(semester, request):
+def _build_summary(semester, request, department=None, project_type_filter=None):
     """
     بناء ملخص العلامات: كل مشروع → كل طالب → علاماته في كل لجنة.
+    يدعم الفلترة حسب القسم ونوع المشروع.
     """
     grade_qs = ProjectGrade.objects.select_related('student').all()
     if semester:
@@ -651,7 +733,13 @@ def _build_summary(semester, request):
 
     rows = []
     for (source, pid), students_data in sorted(project_student_grades.items()):
-        title, all_students, department = _get_project_info(source, pid)
+        title, all_students, proj_department, proj_type = _get_project_info(source, pid)
+        
+        # الفلترة حسب القسم ونوع المشروع
+        if department and proj_department != department:
+            continue
+        if project_type_filter and proj_type != project_type_filter:
+            continue
 
         for s_id, grades_by_type in students_data.items():
             s1 = grades_by_type.get('seminar_1')
@@ -683,7 +771,8 @@ def _build_summary(semester, request):
                 'project_source':    source,
                 'project_id':        pid,
                 'title':             title,
-                'department':        department,
+                'department':        proj_department,
+                'project_type':      proj_type,
                 'student_name':      student_name,
                 'student_uid':       student_uid,
                 'seminar_1':         s1.score_main   if s1 else None,
@@ -699,19 +788,21 @@ def _build_summary(semester, request):
 
 def _get_project_info(source, pid):
     from projects.models import IdeaApplication, StudentIdeaProposal, ProjectParticipation
-    title = department = ''
+    title = department = project_type = ''
     students = []
 
     if source == 'IdeaApplication':
         app = IdeaApplication.objects.select_related('idea').filter(pk=pid).first()
         if app:
-            title      = app.idea.title
-            department = app.idea.department
+            title        = app.idea.title
+            department   = app.idea.department
+            project_type = app.idea.project_type  # semester / graduation_1 / graduation_2
     else:
         prop = StudentIdeaProposal.objects.filter(pk=pid).first()
         if prop:
-            title      = prop.title
-            department = prop.department
+            title        = prop.title
+            department   = prop.department
+            project_type = prop.project_type
 
     parts = ProjectParticipation.objects.filter(
         status='active'
@@ -726,13 +817,14 @@ def _get_project_info(source, pid):
         students.append({
             'name':      p.student.get_full_name() or p.student.username,
             'id':        p.student.username,
+            'pk':        p.student.pk,
             'is_leader': p.role == 'leader',
         })
 
-    return title, students, department
+    return title, students, department, project_type
 
 
-def _build_excel(semester):
+def _build_excel(semester, department=None, project_type_filter=None):
     """بناء ملف Excel بكل علامات المشاريع."""
     try:
         import openpyxl
@@ -741,7 +833,7 @@ def _build_excel(semester):
         raise ImportError('openpyxl مطلوب لتصدير Excel')
 
     from committees.models import DEPARTMENT_AR
-    summary = _build_summary(semester, None)
+    summary = _build_summary(semester, None, department, project_type_filter)
     rows    = summary['projects']
 
     wb = openpyxl.Workbook()
@@ -1108,3 +1200,149 @@ def _recalculate_average(committee, source, pid, student, ctype, semester, trigg
             old_value=str(old_report) if old_report is not None else None,
             new_value=str(avg_report),
         )
+
+
+def _build_word_grades(semester, department, project_type_filter):
+    """
+    بناء ملف Word بتنسيق يشابه النموذج الرسمي.
+    يعرض علامات مشاريع القسم بطريقة احترافية.
+    """
+    try:
+        from docx import Document
+        from docx.shared import Inches, Pt, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+    except ImportError:
+        raise ImportError('python-docx مطلوب لتصدير Word')
+
+    from committees.models import DEPARTMENT_AR, PROJECT_TYPE_AR
+    from projects.models import IdeaApplication, StudentIdeaProposal
+
+    # جلب البيانات
+    summary = _build_summary(semester, None, department, project_type_filter)
+    projects = summary['projects']
+
+    # إنشاء مستند جديد
+    doc = Document()
+    doc.default_tab_stops.tabs[0].position = Inches(0.5)
+
+    # إضافة العنوان والمعلومات
+    title = doc.add_paragraph('وثيقة علامات مشاريع القسم', style='Heading 1')
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in title.runs:
+        run.font.size = Pt(16)
+        run.font.bold = True
+        run.font.color.rgb = RGBColor(79, 70, 229)
+
+    # معلومات القسم
+    dept_text = doc.add_paragraph()
+    dept_name = DEPARTMENT_AR.get(department, department) if department else 'جميع الأقسام'
+    dept_text.add_run(f'القسم: {dept_name}').font.size = Pt(12)
+    dept_text.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # نوع المشروع
+    if project_type_filter:
+        proj_type_text = doc.add_paragraph()
+        proj_type_name = PROJECT_TYPE_AR.get(project_type_filter, project_type_filter)
+        proj_type_text.add_run(f'نوع المشروع: {proj_type_name}').font.size = Pt(12)
+        proj_type_text.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # الفصل الدراسي
+    if semester:
+        sem_text = doc.add_paragraph()
+        sem_text.add_run(f'الفصل: {semester}').font.size = Pt(12)
+        sem_text.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    doc.add_paragraph()  # مسافة
+
+    # إنشاء الجدول
+    table = doc.add_table(rows=1, cols=10)
+    table.style = 'Light Grid Accent 1'
+    table.autofit = False
+    table.allow_autofit = False
+
+    # رؤوس الأعمدة
+    headers = [
+        'المشروع', 'النوع', 'الطالب', 'الرقم الجامعي',
+        'سيمينار 1\n/10', 'سيمينار 2\n/10', 'لجنة فنية\n/20',
+        'مناقشة نهائية\n/30', 'تقرير\n/30', 'المجموع\n/100',
+    ]
+
+    hdr_cells = table.rows[0].cells
+    for i, header_text in enumerate(headers):
+        cell = hdr_cells[i]
+        cell.text = header_text
+
+        # تنسيق رأس العمود
+        paragraph = cell.paragraphs[0]
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in paragraph.runs:
+            run.font.bold = True
+            run.font.size = Pt(11)
+            run.font.color.rgb = RGBColor(255, 255, 255)
+
+        # تلوين الخلية (أزرق)
+        _set_cell_background(cell, '4F46E5')
+
+    # إضافة البيانات
+    for proj in projects:
+        row_cells = table.add_row().cells
+
+        row_cells[0].text = proj['title'][:50]
+        row_cells[1].text = PROJECT_TYPE_AR.get(proj['project_type'], proj['project_type'] or '—')
+        row_cells[2].text = proj['student_name']
+        row_cells[3].text = str(proj['student_uid'])
+        row_cells[4].text = str(proj['seminar_1']) if proj['seminar_1'] is not None else '—'
+        row_cells[5].text = str(proj['seminar_2']) if proj['seminar_2'] is not None else '—'
+        row_cells[6].text = str(proj['technical']) if proj['technical'] is not None else '—'
+        row_cells[7].text = str(proj['final_discussion']) if proj['final_discussion'] is not None else '—'
+        row_cells[8].text = str(proj['report']) if proj['report'] is not None else '—'
+        row_cells[9].text = str(proj['total'])
+
+        # تنسيق البيانات
+        for i, cell in enumerate(row_cells):
+            for paragraph in cell.paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in paragraph.runs:
+                    run.font.size = Pt(10)
+
+            # تلوين الصفوف بالتناوب
+            if len(table.rows) % 2 == 0:
+                _set_cell_background(cell, 'F8F7FF')
+
+    # تعيين عرض الأعمدة
+    col_widths = [1.2, 0.8, 1.2, 1.0, 0.8, 0.8, 1.0, 1.0, 0.8, 0.8]
+    for i, width in enumerate(col_widths):
+        for row in table.rows:
+            row.cells[i].width = Inches(width)
+
+    # إضافة توقيع
+    doc.add_paragraph()
+    sig_para = doc.add_paragraph()
+    sig_para.add_run('التوقيع: _______________________').font.size = Pt(10)
+
+    # إعداد RTL
+    for section in doc.sections:
+        section_properties = section._sectPr
+        bidi_element = OxmlElement('w:bidi')
+        section_properties.append(bidi_element)
+
+    # حفظ في buffer
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf.read()
+
+
+def _set_cell_background(cell, fill_color):
+    """تعيين لون خلفية للخلية في جدول Word."""
+    try:
+        from docx.oxml import parse_xml
+        shading_elm = parse_xml(r'<w:shd {} w:fill="{}"/>'.format(
+            'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"',
+            fill_color
+        ))
+        cell._element.get_or_add_tcPr().append(shading_elm)
+    except Exception:
+        pass

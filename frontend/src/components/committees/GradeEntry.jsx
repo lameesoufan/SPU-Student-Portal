@@ -121,6 +121,7 @@ function ProjectSection({ project: p, committee: c, onReload }) {
   const [msg,        setMsg]        = useState('');
   const [msgType,    setMsgType]    = useState('');
   const [downloading,setDown]       = useState(false);
+  const [confirmUpdate, setConfirmUpdate] = useState(false);
 
   const setField = (studentId, field, val) =>
     setScores((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [field]: val } }));
@@ -151,6 +152,7 @@ function ProjectSection({ project: p, committee: c, onReload }) {
           grades,
         });
         setMsg('تم حفظ مسودتك. العلامة النهائية ستُحسب بعد اكتمال تقييمات الأعضاء.'); setMsgType('ok');
+        setConfirmUpdate(false);
       } else {
         // وضع فردي → bulk final
         await enterBulkGrades({
@@ -160,15 +162,27 @@ function ProjectSection({ project: p, committee: c, onReload }) {
           committee_id:   c.committee_id,
           semester:       c.semester,
           grades,
+          confirm_update: confirmUpdate,  // إضافة حقل التأكيد على مستوى المشروع
         });
         setMsg('تم حفظ العلامات.'); setMsgType('ok');
+        setConfirmUpdate(false);
       }
       onReload();
     } catch (e) {
       const d = e.response?.data;
+      // إذا كانت الاستجابة تطلب تأكيد
+      if (e.response?.status === 409 && d?.requires_confirmation) {
+        setMsg(d.message || 'توجد علامات مدخلة سابقاً. هل تريد تغيير العلامات بالتأكيد؟');
+        setMsgType('warn');
+        setSaving(false);
+        return; // نخرج بدون رمي خطأ
+      }
       setMsg(typeof d === 'string' ? d : d?.detail || JSON.stringify(d) || 'فشل الحفظ.');
       setMsgType('err');
-    } finally { setSaving(false); }
+      setConfirmUpdate(false);
+    } finally { 
+      setSaving(false);
+    }
   };
 
   const handleDownload = async () => {
@@ -202,8 +216,36 @@ function ProjectSection({ project: p, committee: c, onReload }) {
       </div>
 
       {msg && (
-        <div style={{ ...S.msg, ...(msgType === 'ok' ? S.msgOk : S.msgErr), marginBottom: 8 }}>
+        <div style={{ 
+          ...S.msg, 
+          ...(msgType === 'ok' ? S.msgOk : msgType === 'warn' ? { background: '#fffbeb', color: '#92400e' } : S.msgErr), 
+          marginBottom: 8 
+        }}>
           {msg}
+          {msgType === 'warn' && (
+            <div style={{ marginTop: 8, display: 'flex', gap: 10 }}>
+              <button
+                style={{ ...S.btn, ...S.btnPrimary }}
+                onClick={() => {
+                  setConfirmUpdate(true);
+                  setMsg('');
+                  setTimeout(() => handleSave(), 100);
+                }}
+              >
+                نعم، تغيير العلامة
+              </button>
+              <button
+                style={{ ...S.btn, background: '#e5e7eb', color: '#374151' }}
+                onClick={() => {
+                  setMsg('');
+                  setMsgType('');
+                  setConfirmUpdate(false);
+                }}
+              >
+                لا، إلغاء
+              </button>
+            </div>
+          )}
         </div>
       )}
 
