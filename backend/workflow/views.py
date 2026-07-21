@@ -674,51 +674,61 @@ def submit_workflow_stage(request, stage_instance_id):
     ):
         return Response({'error': 'Not allowed to submit this workflow stage'}, status=403)
     
-    field_responses = request.data.get('field_responses', {})
-    if not isinstance(field_responses, dict):
+    field_responses_data = request.data.get('field_responses', {})
+    if not isinstance(field_responses_data, dict):
         return Response({'error': 'field_responses must be an object'}, status=400)
 
     fields_by_id = {str(field.id): field for field in stage_instance.stage.fields.all()}
-    for field_id in field_responses.keys():
+    for field_id in field_responses_data.keys():
         if str(field_id) not in fields_by_id:
             return Response({'error': f'Invalid field for this stage: {field_id}'}, status=400)
+    
     # ── Strict required-field validation ──
     # Reject empty strings, whitespace-only, and missing values for required fields.
     missing_required = []
     for field in fields_by_id.values():
         if not field.required:
             continue
-        raw_value = field_responses.get(str(field.id))
-        if raw_value is None:
+        raw_value = field_responses_data.get(str(field.id))
+        # For file fields, check if file is uploaded
+        if field.field_type == 'file':
+            if raw_value is None and request.FILES.get(f'field_{field.id}') is None:
+                missing_required.append(field.label)
+        elif raw_value is None:
             missing_required.append(field.label)
             continue
-        # Normalize to string and strip whitespace
-        str_value = str(raw_value).strip()
-        if str_value == '':
-            missing_required.append(field.label)
+        else:
+            # Normalize to string and strip whitespace
+            str_value = str(raw_value).strip()
+            if str_value == '':
+                missing_required.append(field.label)
     if missing_required:
         return Response({
             'error': 'Please fill all required fields. يرجى ملء جميع الحقول المطلوبة',
             'missing_fields': missing_required,
         }, status=400)
+    
     # Validate field types and options
-    for field_id_str, value in field_responses.items():
+    for field_id_str, value in field_responses_data.items():
         field_obj = fields_by_id.get(field_id_str)
         if field_obj:
             error = _validate_field_response(field_obj, value)
             if error:
                 return Response({'error': error}, status=400)
+    
     with transaction.atomic():
        
         stage_instance = WorkflowStageInstance.objects.select_for_update().get(pk=stage_instance.pk)
 
         # ── Upsert: تحديث أو إنشاء الردود ──
-        for field_id_str, value in field_responses.items():
+        for field_id_str, value in field_responses_data.items():
             try:
                 field_id_int = int(field_id_str)
             except (ValueError, TypeError):
                 continue
 
+            field_obj = fields_by_id.get(field_id_str)
+            
             # تنظيف السجلات المكررة
             duplicates = WorkflowFieldResponse.objects.filter(
                 stage_instance=stage_instance,
@@ -728,11 +738,37 @@ def submit_workflow_stage(request, stage_instance_id):
                 latest = duplicates.order_by('-id').first()
                 duplicates.exclude(pk=latest.pk).delete()
 
-            WorkflowFieldResponse.objects.update_or_create(
-                stage_instance=stage_instance,
-                field_id=field_id_int,
-                defaults={'value': value}
-            )
+            # Handle file uploads
+            if field_obj and field_obj.field_type == 'file':
+                uploaded_file = request.FILES.get(f'field_{field_id_int}')
+                if uploaded_file:
+                    # Update or create with file
+                    response_obj, _ = WorkflowFieldResponse.objects.update_or_create(
+                        stage_instance=stage_instance,
+                        field_id=field_id_int,
+                        defaults={'value': value, 'file': uploaded_file}
+                    )
+                else:
+                    # Keep existing file if no new upload
+                    existing = WorkflowFieldResponse.objects.filter(
+                        stage_instance=stage_instance,
+                        field_id=field_id_int
+                    ).first()
+                    if existing:
+                        existing.value = value
+                        existing.save()
+                    else:
+                        WorkflowFieldResponse.objects.create(
+                            stage_instance=stage_instance,
+                            field_id=field_id_int,
+                            value=value
+                        )
+            else:
+                WorkflowFieldResponse.objects.update_or_create(
+                    stage_instance=stage_instance,
+                    field_id=field_id_int,
+                    defaults={'value': value}
+                )
 
         # ═══ التصحيح الرئيسي: حذف فقط ردود الحقول المحذوفة من التيمبلت ═══
         # نحذف فقط الردود اللي حقولها لم تعد موجودة في المرحلة
@@ -748,7 +784,7 @@ def submit_workflow_stage(request, stage_instance_id):
         stage_instance.submitted_at = timezone.now()
         stage_instance.save(update_fields=['status', 'submitted_at', 'updated_at'])
     
-    return Response(WorkflowStageInstanceSerializer(stage_instance).data)
+    return Response(WorkflowStageInstanceSerializer(stage_instance, context={'request': request}).data)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsHodOrDoctor])

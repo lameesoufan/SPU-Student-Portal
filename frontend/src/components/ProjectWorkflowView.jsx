@@ -264,6 +264,7 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
     [stageInstance?.stage_details?.fields]
   );
   const [formData, setFormData] = useState({});
+  const [fileFields, setFileFields] = useState({}); // Store actual File objects
   const [validationErrors, setValidationErrors] = useState({});
 
   useEffect(() => {
@@ -273,12 +274,26 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
       initialData[response.field] = response.value || '';
     });
     setFormData(initialData);
+    setFileFields({});
     setValidationErrors({});
   }, [stageInstance, fields]);
 
   const handleFieldChange = (fieldId, value) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
     // Clear validation error when user starts typing
+    if (validationErrors[fieldId]) {
+      setValidationErrors(prev => {
+        const next = { ...prev };
+        delete next[fieldId];
+        return next;
+      });
+    }
+  };
+
+  const handleFileChange = (fieldId, file) => {
+    setFormData(prev => ({ ...prev, [fieldId]: file ? file.name : '' }));
+    setFileFields(prev => ({ ...prev, [fieldId]: file }));
+    // Clear validation error when user uploads file
     if (validationErrors[fieldId]) {
       setValidationErrors(prev => {
         const next = { ...prev };
@@ -434,7 +449,24 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
                 </div>
               )}
               {field.field_type === 'file' && (
-                <input id={`field-input-${field.id}`} type="file" data-field-id={field.id} required={field.required || undefined} aria-invalid={hasError || undefined} aria-describedby={hasError ? `error-${field.id}` : undefined} className={`w-full py-2 px-3 text-sm border-[1.5px] ${errorBorderClass} rounded-lg bg-input text-foreground transition-all focus:ring-2 outline-none file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-[13px] file:font-semibold file:bg-violet-600 file:text-white hover:file:bg-violet-700 file:cursor-pointer cursor-pointer`} onChange={e => { const file = e.target.files[0]; if (file) { handleFieldChange(field.id, file.name); } }} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif" />
+                <input 
+                  id={`field-input-${field.id}`} 
+                  type="file" 
+                  data-field-id={field.id} 
+                  required={field.required || undefined} 
+                  aria-invalid={hasError || undefined} 
+                  aria-describedby={hasError ? `error-${field.id}` : undefined} 
+                  className={`w-full py-2 px-3 text-sm border-[1.5px] ${errorBorderClass} rounded-lg bg-input text-foreground transition-all focus:ring-2 outline-none file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-[13px] file:font-semibold file:bg-violet-600 file:text-white hover:file:bg-violet-700 file:cursor-pointer cursor-pointer`} 
+                  onChange={e => { 
+                    const file = e.target.files[0]; 
+                    if (file) { 
+                      handleFileChange(field.id, file); 
+                    } else {
+                      handleFileChange(field.id, null);
+                    }
+                  }} 
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif" 
+                />
               )}
 
               {hasError && (
