@@ -661,11 +661,12 @@ class HodGradesExportWordView(APIView):
 
         semester = request.query_params.get('semester')
         project_type = request.query_params.get('project_type')
+        committee_type = request.query_params.get('committee_type')
         
         # رئيس القسم يرى فقط قسمه
         department = getattr(request.user, 'department', None)
         
-        content = _build_word_grades(semester, department, project_type)
+        content = _build_word_grades(semester, department, project_type, committee_type)
 
         resp = HttpResponse(
             content,
@@ -881,7 +882,7 @@ def _get_project_info(source, pid):
     return title, students, department, project_type
 
 
-def _build_excel(semester, department=None, project_type_filter=None):
+def _build_excel(semester, department=None, project_type_filter=None, committee_type_filter=None):
     """بناء ملف Excel بكل علامات المشاريع."""
     try:
         import openpyxl
@@ -889,7 +890,7 @@ def _build_excel(semester, department=None, project_type_filter=None):
     except ImportError:
         raise ImportError('openpyxl مطلوب لتصدير Excel')
 
-    from committees.models import DEPARTMENT_AR
+    from committees.models import DEPARTMENT_AR, COMMITTEE_TYPE_AR
     summary = _build_summary(semester, None, department, project_type_filter, committee_type_filter)
     rows    = summary['projects']
 
@@ -906,12 +907,24 @@ def _build_excel(semester, department=None, project_type_filter=None):
         top=Side(style='thin'), bottom=Side(style='thin'),
     )
 
-    headers = [
-        'رقم المشروع', 'عنوان المشروع', 'القسم', 'الطالب', 'الرقم الجامعي',
-        'سيمينار 1 (10)', 'سيمينار 2 (10)', 'لجنة فنية (20)',
-        'مناقشة نهائية (30)', 'تقرير (30)', 'المجموع (100)',
-    ]
-    col_widths = [12, 32, 16, 22, 14, 14, 14, 16, 18, 12, 14]
+    # ── وضع فلتر نوع اللجنة: أعمدة مختلفة ──
+    if committee_type_filter:
+        # عرض بسيط: عمود علامة واحد فقط
+        committee_label = COMMITTEE_TYPE_AR.get(committee_type_filter, committee_type_filter)
+        max_score = COMMITTEE_MAX_SCORES.get(committee_type_filter, "N/A")
+        headers = [
+            'رقم المشروع', 'عنوان المشروع', 'القسم', 'الطالب', 'الرقم الجامعي',
+            f'{committee_label} ({max_score})',
+        ]
+        col_widths = [12, 32, 16, 22, 14, 18]
+    else:
+        # العرض الكامل: كل العلامات
+        headers = [
+            'رقم المشروع', 'عنوان المشروع', 'القسم', 'الطالب', 'الرقم الجامعي',
+            'سيمينار 1 (10)', 'سيمينار 2 (10)', 'لجنة فنية (20)',
+            'مناقشة نهائية (30)', 'تقرير (30)', 'المجموع (100)',
+        ]
+        col_widths = [12, 32, 16, 22, 14, 14, 14, 16, 18, 12, 14]
 
     # الهيدر
     for col_idx, (h, w) in enumerate(zip(headers, col_widths), start=1):
@@ -929,26 +942,40 @@ def _build_excel(semester, department=None, project_type_filter=None):
         fill = alt_fill if row_idx % 2 == 0 else PatternFill()
         dept_ar  = DEPARTMENT_AR.get(proj['department'], proj['department'])
 
-        values = [
-            f"{proj['project_source'][:3]}-{proj['project_id']}",
-            proj['title'],
-            dept_ar,
-            proj['student_name'],
-            proj['student_uid'],
-            proj['seminar_1']        if proj['seminar_1']        is not None else '—',
-            proj['seminar_2']        if proj['seminar_2']        is not None else '—',
-            proj['technical']        if proj['technical']        is not None else '—',
-            proj['final_discussion'] if proj['final_discussion'] is not None else '—',
-            proj['report']           if proj['report']           is not None else '—',
-            proj['total'],
-        ]
+        # ── وضع فلتر نوع اللجنة: عمود علامة واحد فقط ──
+        if committee_type_filter:
+            values = [
+                f"{proj['project_source'][:3]}-{proj['project_id']}",
+                proj['title'],
+                dept_ar,
+                proj['student_name'],
+                proj['student_uid'],
+                proj['score'] if proj.get('score') is not None else '—',
+            ]
+        else:
+            # العرض الكامل: كل العلامات
+            values = [
+                f"{proj['project_source'][:3]}-{proj['project_id']}",
+                proj['title'],
+                dept_ar,
+                proj['student_name'],
+                proj['student_uid'],
+                proj['seminar_1']        if proj['seminar_1']        is not None else '—',
+                proj['seminar_2']        if proj['seminar_2']        is not None else '—',
+                proj['technical']        if proj['technical']        is not None else '—',
+                proj['final_discussion'] if proj['final_discussion'] is not None else '—',
+                proj['report']           if proj['report']           is not None else '—',
+                proj['total'],
+            ]
 
         for col_idx, val in enumerate(values, start=1):
             cell = ws.cell(row=row_idx, column=col_idx, value=val)
             cell.fill      = fill
             cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             cell.border    = thin_border
-            if col_idx == 11:  # المجموع
+            # تمييز عمود المجموع أو عمود العلامة الفلترت
+            if (not committee_type_filter and col_idx == 11) or \
+               (committee_type_filter and col_idx == 6):
                 cell.font = Font(bold=True)
         ws.row_dimensions[row_idx].height = 20
 
@@ -1259,7 +1286,7 @@ def _recalculate_average(committee, source, pid, student, ctype, semester, trigg
         )
 
 
-def _build_word_grades(semester, department, project_type_filter):
+def _build_word_grades(semester, department, project_type_filter, committee_type_filter=None):
     """
     بناء ملف Word بتنسيق يشابه النموذج الرسمي.
     يعرض علامات مشاريع القسم بطريقة احترافية.
@@ -1273,11 +1300,11 @@ def _build_word_grades(semester, department, project_type_filter):
     except ImportError:
         raise ImportError('python-docx مطلوب لتصدير Word')
 
-    from committees.models import DEPARTMENT_AR, PROJECT_TYPE_AR
+    from committees.models import DEPARTMENT_AR, PROJECT_TYPE_AR, COMMITTEE_TYPE_AR
     from projects.models import IdeaApplication, StudentIdeaProposal
 
     # جلب البيانات
-    summary = _build_summary(semester, None, department, project_type_filter)
+    summary = _build_summary(semester, None, department, project_type_filter, committee_type_filter)
     projects = summary['projects']
 
     # إنشاء مستند جديد
