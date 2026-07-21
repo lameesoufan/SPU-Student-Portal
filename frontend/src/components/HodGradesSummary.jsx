@@ -36,31 +36,73 @@ const PROJECT_TYPE_OPTIONS = [
   { value: 'graduation_2', label: 'تخرج 2' },
 ];
 
+const COMMITTEE_TYPE_OPTIONS = [
+  { value: '',                label: 'كل اللجان' },
+  { value: 'seminar_1',       label: 'سيمينار 1' },
+  { value: 'seminar_2',       label: 'سيمينار 2' },
+  { value: 'technical',       label: 'لجنة فنية' },
+  { value: 'final_discussion',label: 'مناقشة نهائية' },
+];
+
+// الحد الأقصى لكل نوع لجنة (لعرضه بجانب العلامة)
+const COMMITTEE_MAX = {
+  seminar_1: 10,
+  seminar_2: 10,
+  technical: 20,
+  final_discussion: 30,
+};
+
 export default function HodGradesSummary() {
-  const [data,        setData]        = useState(null);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState('');
-  const [semester,    setSemester]    = useState('');
-  const [projectType, setProjectType] = useState('');
-  const [draftSem,    setDraftSem]    = useState('');
-  const [draftType,   setDraftType]   = useState('');
+  const [data,          setData]          = useState(null);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState('');
+  const [semester,      setSemester]      = useState('');
+  const [projectType,   setProjectType]   = useState('');
+  const [committeeType, setCommitteeType] = useState('');
+  const [draftSem,      setDraftSem]      = useState('');
+  const [draftType,     setDraftType]     = useState('');
+  const [draftCommittee,setDraftCommittee]= useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
-    try { 
+    try {
       const r = await fetchHodGradesSummary(
         semester || undefined,
-        projectType || undefined
-      ); 
-      setData(r.data); 
+        projectType || undefined,
+        committeeType || undefined
+      );
+      setData(r.data);
     }
     catch (e) { setError(e.response?.data?.detail || 'تعذّر التحميل.'); }
     finally { setLoading(false); }
-  }, [semester, projectType]);
+  }, [semester, projectType, committeeType]);
 
   useEffect(() => { load(); }, [load]);
 
   const projects = data?.projects || [];
+  // وضع فلتر لجنة محدد: عرض عمود علامة واحد فقط
+  const singleCommitteeMode = Boolean(committeeType);
+  const selectedCommitteeLabel = data?.active_committee?.label || COMMITTEE_TYPE_OPTIONS.find(o => o.value === committeeType)?.label || '';
+  const selectedCommitteeMax = data?.active_committee?.max_score || COMMITTEE_MAX[committeeType] || null;
+
+  const visibleColumns = singleCommitteeMode
+    ? [
+        { key: 'student_name', label: 'اسم الطالب' },
+        { key: 'title', label: 'عنوان المشروع' },
+        { key: 'student_uid', label: 'الرقم الجامعي' },
+        { key: 'score', label: `علامة ${selectedCommitteeLabel || 'اللجنة'}${selectedCommitteeMax ? ` /${selectedCommitteeMax}` : ''}` },
+      ]
+    : [
+        { key: 'student_name', label: 'اسم الطالب' },
+        { key: 'title', label: 'عنوان المشروع' },
+        { key: 'student_uid', label: 'الرقم الجامعي' },
+        { key: 'seminar_1', label: 'سيمينار 1 /10' },
+        { key: 'seminar_2', label: 'سيمينار 2 /10' },
+        { key: 'technical', label: 'لجنة فنية /20' },
+        { key: 'final_discussion', label: 'مناقشة نهائية /30' },
+        { key: 'report', label: 'تقرير /30' },
+        { key: 'total', label: 'المجموع /100' },
+      ];
 
   return (
     <div style={S.wrap}>
@@ -82,11 +124,21 @@ export default function HodGradesSummary() {
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
-        <button 
-          style={{ ...S.btn, ...S.btnFilter }} 
+        <select
+          style={S.semInput}
+          value={draftCommittee}
+          onChange={(e) => setDraftCommittee(e.target.value)}
+        >
+          {COMMITTEE_TYPE_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <button
+          style={{ ...S.btn, ...S.btnFilter }}
           onClick={() => {
             setSemester(draftSem);
             setProjectType(draftType);
+            setCommitteeType(draftCommittee);
           }}
         >
           تصفية
@@ -106,16 +158,9 @@ export default function HodGradesSummary() {
           <table style={S.table}>
             <thead>
               <tr>
-                <th style={S.th}>المشروع</th>
-                <th style={S.th}>النوع</th>
-                <th style={S.th}>الطالب</th>
-                <th style={S.th}>الرقم الجامعي</th>
-                <th style={S.th}>سيمينار 1 /10</th>
-                <th style={S.th}>سيمينار 2 /10</th>
-                <th style={S.th}>لجنة فنية /20</th>
-                <th style={S.th}>مناقشة نهائية /30</th>
-                <th style={S.th}>تقرير /30</th>
-                <th style={S.th}>المجموع /100</th>
+                {visibleColumns.map((column) => (
+                  <th key={column.key} style={S.th}>{column.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -123,22 +168,26 @@ export default function HodGradesSummary() {
                 const isEven = idx % 2 === 0;
                 const Score = ({ val, max }) =>
                   val != null
-                    ? <span style={S.scoreCell}>{val}<span style={{ color: '#999', fontWeight: 400 }}>/{max}</span></span>
+                    ? <span style={S.scoreCell}>{val}<span style={{ color: '#999', fontWeight: 400 }}>{max != null ? `/${max}` : ''}</span></span>
                     : <span style={S.nullCell}>—</span>;
 
                 return (
                   <tr key={`${p.project_source}-${p.project_id}-${p.student_uid}`}
                       style={isEven ? S.evenRow : {}}>
-                    <td style={{ ...S.td, ...S.tdTitle }} title={p.title}>{p.title}</td>
-                    <td style={S.td}>{PROJECT_TYPE_AR[p.project_type] || p.project_type || '—'}</td>
                     <td style={{ ...S.td, textAlign: 'right' }}>{p.student_name}</td>
+                    <td style={{ ...S.td, ...S.tdTitle }} title={p.title}>{p.title}</td>
                     <td style={S.td}>{p.student_uid}</td>
-                    <td style={S.td}><Score val={p.seminar_1}        max={10} /></td>
-                    <td style={S.td}><Score val={p.seminar_2}        max={10} /></td>
-                    <td style={S.td}><Score val={p.technical}        max={20} /></td>
-                    <td style={S.td}><Score val={p.final_discussion} max={30} /></td>
-                    <td style={S.td}><Score val={p.report}           max={30} /></td>
-                    <td style={S.td}><span style={S.totalCell}>{p.total}</span></td>
+                    {singleCommitteeMode
+                      ? <td style={S.td}><Score val={p.score} max={selectedCommitteeMax} /></td>
+                      : <>
+                          <td style={S.td}><Score val={p.seminar_1}        max={10} /></td>
+                          <td style={S.td}><Score val={p.seminar_2}        max={10} /></td>
+                          <td style={S.td}><Score val={p.technical}        max={20} /></td>
+                          <td style={S.td}><Score val={p.final_discussion} max={30} /></td>
+                          <td style={S.td}><Score val={p.report}           max={30} /></td>
+                          <td style={S.td}><span style={S.totalCell}>{p.total}</span></td>
+                        </>
+                    }
                   </tr>
                 );
               })}

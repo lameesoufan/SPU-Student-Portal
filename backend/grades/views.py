@@ -597,7 +597,8 @@ class GradesSummaryView(APIView):
         semester = request.query_params.get('semester')
         department = request.query_params.get('department')
         project_type = request.query_params.get('project_type')
-        return Response(_build_summary(semester, request, department, project_type))
+        committee_type = request.query_params.get('committee_type')
+        return Response(_build_summary(semester, request, department, project_type, committee_type))
 
 
 class HodGradesSummaryView(APIView):
@@ -619,11 +620,12 @@ class HodGradesSummaryView(APIView):
 
         semester = request.query_params.get('semester')
         project_type = request.query_params.get('project_type')
-        
+        committee_type = request.query_params.get('committee_type')
+
         # إذا كان عميد يشوف كل الأقسام، وإلا بيشوف قسمه فقط
         dept_filter = None if _is_dean(user) else department
-        
-        return Response(_build_summary(semester, request, dept_filter, project_type))
+
+        return Response(_build_summary(semester, request, dept_filter, project_type, committee_type))
 
 
 class GradesExportView(APIView):
@@ -637,7 +639,8 @@ class GradesExportView(APIView):
         semester = request.query_params.get('semester')
         department = request.query_params.get('department')
         project_type = request.query_params.get('project_type')
-        content  = _build_excel(semester, department, project_type)
+        committee_type = request.query_params.get('committee_type')
+        content  = _build_excel(semester, department, project_type, committee_type)
 
         resp = HttpResponse(
             content,
@@ -728,14 +731,33 @@ class MyGradesView(APIView):
 
 # ── Helper functions ──────────────────────────────────────────────────────────
 
-def _build_summary(semester, request, department=None, project_type_filter=None):
+def _build_summary(semester, request, department=None, project_type_filter=None, committee_type_filter=None):
     """
     بناء ملخص العلامات: كل مشروع → كل طالب → علاماته في كل لجنة.
     يدعم الفلترة حسب القسم ونوع المشروع.
+    عند تمرير committee_type_filter يُرجع عمود علامة واحداً (score + committee_type)
+    ويُخفي الطلاب الذين ليس لديهم علامة من النوع المختار.
     """
+    from committees.models import ALL_COMMITTEE_TYPES
+    from .models import COMMITTEE_MAX_SCORES
+
+    # التحقق من صحة فلتر نوع اللجنة
+    if committee_type_filter and committee_type_filter not in ALL_COMMITTEE_TYPES:
+        return {'projects': [], 'count': 0, 'error': 'committee_type غير صالح'}
+
+    active_committee = None
+    if committee_type_filter:
+        active_committee = {
+            'type': committee_type_filter,
+            'label': committee_type_filter,
+            'max_score': COMMITTEE_MAX_SCORES.get(committee_type_filter),
+        }
+
     grade_qs = ProjectGrade.objects.select_related('student').all()
     if semester:
         grade_qs = grade_qs.filter(semester=semester)
+    if committee_type_filter:
+        grade_qs = grade_qs.filter(committee_type=committee_type_filter)
 
     # تجميع: (source, pid, student_id) → {committee_type: grade}
     from collections import defaultdict
@@ -749,7 +771,7 @@ def _build_summary(semester, request, department=None, project_type_filter=None)
     rows = []
     for (source, pid), students_data in sorted(project_student_grades.items()):
         title, all_students, proj_department, proj_type = _get_project_info(source, pid)
-        
+
         # الفلترة حسب القسم ونوع المشروع
         if department and proj_department != department:
             continue
@@ -762,14 +784,34 @@ def _build_summary(semester, request, department=None, project_type_filter=None)
             tc = grades_by_type.get('technical')
             fd = grades_by_type.get('final_discussion')
 
+            # ── وضع فلتر نوع اللجنة: عمود علامة واحد فقط ──
+            if committee_type_filter:
+                selected = grades_by_type.get(committee_type_filter)
+                # إخفاء الطلاب الذين ليس لديهم علامة من النوع المختار
+                if not selected:
+                    continue
+                student_name = '—'
+                student_uid  = '—'
+                if selected.student:
+                    student_name = selected.student.get_full_name() or selected.student.username
+                    student_uid  = selected.student.username
+                rows.append({
+                    'project_source': source,
+                    'project_id':     pid,
+                    'title':          title,
+                    'department':     proj_department,
+                    'project_type':   proj_type,
+                    'student_name':   student_name,
+                    'student_uid':    student_uid,
+                    'committee_type': committee_type_filter,
+                    'score':          selected.score_main if selected.score_main is not None else None,
+                })
+                continue
+
             # اسم الطالب
+            any_grade = s1 or s2 or tc or fd
             student_name = '—'
             student_uid  = '—'
-            for s in all_students:
-                if s.get('pk') == s_id or True:  # نبحث بالـ id
-                    pass
-            # نجلبه من grade مباشرة
-            any_grade = s1 or s2 or tc or fd
             if any_grade and any_grade.student:
                 student_name = any_grade.student.get_full_name() or any_grade.student.username
                 student_uid  = any_grade.student.username
@@ -798,7 +840,7 @@ def _build_summary(semester, request, department=None, project_type_filter=None)
                 'total':             total,
             })
 
-    return {'projects': rows, 'count': len(rows)}
+    return {'projects': rows, 'count': len(rows), 'active_committee': active_committee}
 
 
 def _get_project_info(source, pid):
@@ -848,7 +890,7 @@ def _build_excel(semester, department=None, project_type_filter=None):
         raise ImportError('openpyxl مطلوب لتصدير Excel')
 
     from committees.models import DEPARTMENT_AR
-    summary = _build_summary(semester, None, department, project_type_filter)
+    summary = _build_summary(semester, None, department, project_type_filter, committee_type_filter)
     rows    = summary['projects']
 
     wb = openpyxl.Workbook()
