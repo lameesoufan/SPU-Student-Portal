@@ -542,11 +542,12 @@ export const exportGrades = (semester, department, projectType, committeeType) =
     responseType: 'blob',
   });
 
-export const exportHodGradesWord = (semester, projectType) =>
+export const exportHodGradesWord = (semester, projectType, committeeType) =>
   api.get('/api/grades/export/word/', {
     params: { 
       ...(semester ? { semester } : {}),
       ...(projectType ? { project_type: projectType } : {}),
+      ...(committeeType ? { committee_type: committeeType } : {}),
     },
     responseType: 'blob',
   });
