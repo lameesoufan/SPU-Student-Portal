@@ -229,10 +229,10 @@ export default function WorkflowReview({ onBack }) {
                     </span>
                     <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 break-all">
                       {response.value && response.field_type === 'file' ? (
-                        <a href={`http://localhost:8000/media/${response.value}`}
+                        <a href={`${response.file_url || `http://localhost:8000/media/${response.value}`}`}
                            target="_blank" rel="noopener noreferrer"
                            className="text-violet-600 dark:text-violet-400 no-underline font-medium hover:underline">
-                          {response.value}
+                          {response.file_name || response.value}
                         </a>
                       ) : (
                         response.value || '—'

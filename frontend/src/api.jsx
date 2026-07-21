@@ -340,8 +340,31 @@ export const fetchProjectWorkflow = (projectBoardId) =>
 export const fetchPendingWorkflowStages = () =>
   api.get('/api/workflow/pending/');
 
-export const submitWorkflowStage = (stageInstanceId, data) =>
-  api.post(`/api/workflow/stage/${stageInstanceId}/submit/`, data);
+export const submitWorkflowStage = (stageInstanceId, data) => {
+  // Check if any field is a File object
+  const hasFiles = Object.values(data).some(v => v instanceof File);
+  
+  if (hasFiles) {
+    // Use FormData for file uploads
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      if (value instanceof File) {
+        formData.append(`field_${key}`, value);
+      } else {
+        formData.append(`field_${key}`, value);
+      }
+    });
+    
+    return api.post(`/api/workflow/stage/${stageInstanceId}/submit/`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  }
+  
+  // Regular JSON request
+  return api.post(`/api/workflow/stage/${stageInstanceId}/submit/`, data);
+};
 
 export const reviewWorkflowStage = (stageInstanceId, data) =>
   api.post(`/api/workflow/stage/${stageInstanceId}/review/`, data);

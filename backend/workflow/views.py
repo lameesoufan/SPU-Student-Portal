@@ -674,7 +674,18 @@ def submit_workflow_stage(request, stage_instance_id):
     ):
         return Response({'error': 'Not allowed to submit this workflow stage'}, status=403)
     
-    field_responses_data = request.data.get('field_responses', {})
+    # Handle both JSON and multipart/form-data requests
+    if request.FILES:
+        # Multipart form data (file uploads)
+        field_responses_data = {}
+        for key in request.data.keys():
+            if key.startswith('field_'):
+                field_id = key.replace('field_', '')
+                field_responses_data[field_id] = request.data.get(key, '')
+    else:
+        # JSON request
+        field_responses_data = request.data.get('field_responses', {})
+    
     if not isinstance(field_responses_data, dict):
         return Response({'error': 'field_responses must be an object'}, status=400)
 

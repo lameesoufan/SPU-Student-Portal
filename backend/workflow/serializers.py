@@ -109,10 +109,11 @@ class WorkflowFieldResponseSerializer(serializers.ModelSerializer):
     field_label = serializers.CharField(source='field.label', read_only=True)
     field_type = serializers.CharField(source='field.field_type', read_only=True)
     file_url = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
     
     class Meta:
         model = WorkflowFieldResponse
-        fields = ['id', 'field', 'field_label', 'field_type', 'value', 'file_url']
+        fields = ['id', 'field', 'field_label', 'field_type', 'value', 'file_url', 'file_name']
     
     def get_file_url(self, obj):
         if obj.file:
@@ -120,6 +121,11 @@ class WorkflowFieldResponseSerializer(serializers.ModelSerializer):
             if request:
                 return request.build_absolute_uri(obj.file.url)
             return obj.file.url
+        return None
+    
+    def get_file_name(self, obj):
+        if obj.file:
+            return obj.file.name.split('/')[-1]  # Return just the filename
         return None
 
 

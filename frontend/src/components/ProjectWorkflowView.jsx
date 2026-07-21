@@ -372,6 +372,12 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
     setValidationErrors({});
     const responseData = {};
     fields.forEach(field => { responseData[field.id] = formData[field.id] || ''; });
+    // Include actual File objects from fileFields
+    Object.entries(fileFields).forEach(([fieldId, file]) => {
+      if (file instanceof File) {
+        responseData[fieldId] = file;
+      }
+    });
     onSubmit(responseData);
   };
 
@@ -538,19 +544,36 @@ export default function ProjectWorkflowView({ projectBoardId }) {
     setError('');
     setSubmitting(true);
     try {
-      const cleanData = {};
-      Object.entries(formData).forEach(([key, value]) => {
-        if (value === null || value === undefined) {
-          cleanData[key] = '';
-        } else if (value instanceof File) {
-          cleanData[key] = value.name;
-        } else if (typeof value === 'object' && !(value instanceof Array)) {
-          cleanData[key] = '';
-        } else {
-          cleanData[key] = String(value);
-        }
-      });
-      await submitWorkflowStage(selectedStage.id, { field_responses: cleanData });
+      // Check if we have any File objects
+      const hasFiles = Object.values(formData).some(v => v instanceof File);
+      
+      if (hasFiles) {
+        // Send FormData directly, don't clean File objects
+        const formDataToSend = new FormData();
+        Object.entries(formData).forEach(([key, value]) => {
+          if (value instanceof File) {
+            formDataToSend.append(`field_${key}`, value);
+          } else {
+            formDataToSend.append(`field_${key}`, value || '');
+          }
+        });
+        
+        await submitWorkflowStage(selectedStage.id, formData);
+      } else {
+        // Regular JSON submission
+        const cleanData = {};
+        Object.entries(formData).forEach(([key, value]) => {
+          if (value === null || value === undefined) {
+            cleanData[key] = '';
+          } else if (typeof value === 'object' && !(value instanceof Array)) {
+            cleanData[key] = '';
+          } else {
+            cleanData[key] = String(value);
+          }
+        });
+        await submitWorkflowStage(selectedStage.id, { field_responses: cleanData });
+      }
+      
       await loadWorkflow();
       setSelectedStage(null);
     } catch (err) {
