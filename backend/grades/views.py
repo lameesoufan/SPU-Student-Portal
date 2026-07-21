@@ -909,14 +909,14 @@ def _build_excel(semester, department=None, project_type_filter=None, committee_
 
     # ── وضع فلتر نوع اللجنة: أعمدة مختلفة ──
     if committee_type_filter:
-        # عرض بسيط: عمود علامة واحد فقط
+        # عرض بسيط: 4 أعمدة فقط (اسم الطالب، الرقم الجامعي، عنوان المشروع، العلامة)
         committee_label = COMMITTEE_TYPE_AR.get(committee_type_filter, committee_type_filter)
         max_score = COMMITTEE_MAX_SCORES.get(committee_type_filter, "N/A")
         headers = [
-            'رقم المشروع', 'عنوان المشروع', 'القسم', 'الطالب', 'الرقم الجامعي',
-            f'{committee_label} ({max_score})',
+            'اسم الطالب', 'الرقم الجامعي', 'عنوان المشروع',
+            f'{committee_label} /{max_score}',
         ]
-        col_widths = [12, 32, 16, 22, 14, 18]
+        col_widths = [30, 18, 40, 20]
     else:
         # العرض الكامل: كل العلامات
         headers = [
@@ -942,14 +942,12 @@ def _build_excel(semester, department=None, project_type_filter=None, committee_
         fill = alt_fill if row_idx % 2 == 0 else PatternFill()
         dept_ar  = DEPARTMENT_AR.get(proj['department'], proj['department'])
 
-        # ── وضع فلتر نوع اللجنة: عمود علامة واحد فقط ──
+        # ── وضع فلتر نوع اللجنة: 4 أعمدة فقط ──
         if committee_type_filter:
             values = [
-                f"{proj['project_source'][:3]}-{proj['project_id']}",
-                proj['title'],
-                dept_ar,
                 proj['student_name'],
                 proj['student_uid'],
+                proj['title'],
                 proj['score'] if proj.get('score') is not None else '—',
             ]
         else:
@@ -973,9 +971,11 @@ def _build_excel(semester, department=None, project_type_filter=None, committee_
             cell.fill      = fill
             cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             cell.border    = thin_border
-            # تمييز عمود المجموع أو عمود العلامة الفلترت
-            if (not committee_type_filter and col_idx == 11) or \
-               (committee_type_filter and col_idx == 6):
+            # تمييز عمود العلامة (العمود الرابع في حالة الفلترة)
+            if committee_type_filter and col_idx == 4:
+                cell.font = Font(bold=True)
+            # تمييز عمود المجموع في العرض الكامل
+            elif not committee_type_filter and col_idx == 11:
                 cell.font = Font(bold=True)
         ws.row_dimensions[row_idx].height = 20
 

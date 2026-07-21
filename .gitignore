@@ -1,6 +1,6 @@
 ```
 # Database
-*.sqlite3
+db.sqlite3
 
 # Environment
 .env
@@ -13,40 +13,16 @@ venv/
 .venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
 
-# Build artifacts
-dist/
-build/
-*.egg-info/
-
-# Logs
+# Logs and temp files
 *.log
-
-# OS generated files
-.DS_Store
-Thumbs.db
+*.tmp
 
 # Editors
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Python specific
-*.pyc
-__pycache__/
-*.pyo
-*.pyd
-.Python
-*.so
-.coverage
-.pytest_cache/
-.mypy_cache/
+# OS
+.DS_Store
+Thumbs.db
 ```

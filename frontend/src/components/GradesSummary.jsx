@@ -144,6 +144,33 @@ export default function GradesSummary() {
         { key: 'total', label: 'المجموع /100' },
       ];
 
+  const getExportColumns = () => {
+    if (singleCommitteeMode) {
+      return [
+        'project_id',
+        'title',
+        'department',
+        'student_name',
+        'student_uid',
+        'score',
+      ];
+    } else {
+      return [
+        'project_id',
+        'title',
+        'department',
+        'student_name',
+        'student_uid',
+        'seminar_1',
+        'seminar_2',
+        'technical',
+        'final_discussion',
+        'report',
+        'total',
+      ];
+    }
+  };
+
   return (
     <div style={S.wrap}>
       <div style={S.toolbar}>
