@@ -1,558 +1,283 @@
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
-
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: '',
   withCredentials: true,
 });
 
-// ── In-memory access token (fallback if cookies don't work) ──
-let _accessToken = null;
-
-export function setAccessToken(token) {
-  _accessToken = token;
-  if (token) {
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  } else {
-    delete api.defaults.headers.common['Authorization'];
+// Interceptor لإضافة الـ CSRF token وحل مشاكل التوكن
+api.interceptors.request.use((config) => {
+  const csrftoken = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith('csrftoken='))
+    ?.split('=')[1];
+  if (csrftoken) {
+    config.headers['X-CSRFToken'] = csrftoken;
   }
-}
+  return config;
+});
 
-export function clearAccessToken() {
-  _accessToken = null;
-  delete api.defaults.headers.common['Authorization'];
-}
-
-let refreshPromise = null;
-
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const original = error.config;
-    const status = error.response?.status;
-    const isTokenRequest = original?.url?.includes('/api/token/');
-
-    if (status !== 401 || !original || original._retry || isTokenRequest) {
-      return Promise.reject(error);
-    }
-
-    original._retry = true;
-    try {
-      if (!refreshPromise) {
-        refreshPromise = axios.post(`${API_BASE}/api/token/refresh/`, {}, {
-          withCredentials: true,
-        }).then((res) => {
-          const newAccess = res.data?.access;
-          if (newAccess) setAccessToken(newAccess);
-          return res;
-        }).finally(() => { refreshPromise = null; });
-      }
-      await refreshPromise;
-      return api(original);
-    } catch (refreshError) {
-      clearAccessToken();
-      return Promise.reject(refreshError);
-    }
-  }
-);
-
+// Auth APIs
 export const login = (username, password) =>
   api.post('/api/token/', { username, password });
 
-export const importUsers = (file, role) => {
-  const form = new FormData();
-  form.append('file', file);
-  form.append('role', role);
-  return api.post('/api/import-users/', form, {
+export const studentLoginRequest = (university_id) =>
+  api.post('/api/auth/student-login-request/', { university_id });
+
+export const studentLoginVerify = (university_id, otp) =>
+  api.post('/api/auth/student-login-verify/', { university_id, otp });
+
+export const logout = () => api.post('/api/logout/');
+
+export const getMe = () => api.get('/api/auth/me/');
+
+export const registerStudent = (data) => api.post('/api/register/', data);
+
+// User Management
+export const importUsers = (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post('/api/import-users/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
 
-export const importProjects = (file, { dry_run = true, preview_result_id = null } = {}) => {
-  const form = new FormData();
-  form.append('file', file);
-  if (preview_result_id) form.append('preview_result_id', preview_result_id);
-  return api.post(`/api/import/projects/?dry_run=${dry_run ? 'true' : 'false'}`, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+export const assignHod = (userId, department) =>
+  api.post('/api/assign-hod/', { user_id: userId, department });
+
+// Projects
+export const getProjectIdeas = (params) =>
+  api.get('/api/projects/ideas/', { params });
+
+export const submitIdea = (data) => api.post('/api/projects/ideas/', data);
+
+export const reviewIdea = (id, data) =>
+  api.patch(`/api/projects/ideas/${id}/`, data);
+
+export const getMyProposals = () => api.get('/api/projects/my-proposals/');
+
+export const submitProposal = (data) =>
+  api.post('/api/projects/proposals/', data);
+
+export const getProposalInvitations = () =>
+  api.get('/api/projects/proposal-invitations/');
+
+export const respondToInvitation = (id, status) =>
+  api.patch(`/api/projects/proposal-invitations/${id}/`, { status });
+
+export const getTeamInvitations = () =>
+  api.get('/api/projects/team-invitations/');
+
+export const respondToTeamInvitation = (id, status) =>
+  api.patch(`/api/projects/team-invitations/${id}/`, { status });
+
+export const getMyProject = () => api.get('/api/projects/my-project/');
+
+export const getProjectDetails = (id) =>
+  api.get(`/api/projects/my-project/${id}/`);
+
+export const updateProjectStatus = (id, status) =>
+  api.patch(`/api/projects/my-project/${id}/`, { status });
+
+export const getApplications = (params) =>
+  api.get('/api/projects/applications/', { params });
+
+export const submitApplication = (data) =>
+  api.post('/api/projects/applications/', data);
+
+export const reviewApplication = (id, data) =>
+  api.patch(`/api/projects/applications/${id}/`, data);
+
+export const getDoctorProjects = () => api.get('/api/projects/doctor-projects/');
+
+export const getSupervisorProjects = () =>
+  api.get('/api/projects/supervisor-projects/');
+
+// Project Management (Kanban)
+export const getKanbanBoard = (projectId) =>
+  api.get(`/api/project-management/boards/${projectId}/`);
+
+export const createTask = (projectId, data) =>
+  api.post(`/api/project-management/boards/${projectId}/tasks/`, data);
+
+export const updateTask = (projectId, taskId, data) =>
+  api.patch(
+    `/api/project-management/boards/${projectId}/tasks/${taskId}/`,
+    data
+  );
+
+export const deleteTask = (projectId, taskId) =>
+  api.delete(`/api/project-management/boards/${projectId}/tasks/${taskId}/`);
+
+export const addTaskComment = (projectId, taskId, data) =>
+  api.post(
+    `/api/project-management/boards/${projectId}/tasks/${taskId}/comments/`,
+    data
+  );
+
+export const uploadTaskAttachment = (projectId, taskId, file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post(
+    `/api/project-management/boards/${projectId}/tasks/${taskId}/attachments/`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } }
+  );
 };
 
-export const downloadProjectImportTemplate = () =>
-  api.get('/api/import/template/', { responseType: 'blob' });
+// Dynamic Forms
+export const getDynamicForms = (context) =>
+  api.get('/api/dy-forms/forms/', { params: { context } });
 
-export const fetchProjectImportHistory = (params = {}) =>
-  api.get('/api/import/history/', { params });
+export const createDynamicForm = (data) =>
+  api.post('/api/dy-forms/forms/', data);
 
-export const fetchProjectImportRows = (sessionId) =>
-  api.get(`/api/import/history/${sessionId}/rows/`);
+export const updateDynamicForm = (id, data) =>
+  api.patch(`/api/dy-forms/forms/${id}/`, data);
 
-export const fetchCurrentUser = () => api.get('/api/auth/me/');
+export const deleteDynamicForm = (id) =>
+  api.delete(`/api/dy-forms/forms/${id}/`);
 
-export const logoutUser = () =>
-  api.post('/api/logout/');
+export const submitFormResponse = (formId, data) =>
+  api.post(`/api/dy-forms/forms/${formId}/responses/`, data);
 
-export const changePassword = (new_password, confirm_password) =>
-  api.post('/api/change-password/', { new_password, confirm_password });
-export const changeUsername = (new_username) =>
-  api.post('/api/change-username/', { new_username });
+export const getFormResponses = (formId) =>
+  api.get(`/api/dy-forms/forms/${formId}/responses/`);
 
-export const fetchUsernameSuggestions = () =>
-  api.get('/api/username-suggestions/');
-export const fetchDoctors = () => api.get('/api/doctors/');
-export const fetchDepartments = () => api.get('/api/departments/');
-export const assignHod = (doctor_id, department) =>
-  api.post('/api/assign-hod/', { doctor_id, department });
-
-export const uploadReferenceDb = (file) => {
-  const form = new FormData();
-  form.append('file', file);
-  return api.post('/api/upload-reference/', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-};
-
-export const studentSelfRegister = (university_id, password) =>
-  api.post('/api/register/', { university_id, password });
-
-// ── Projects: Doctor (UC-01) ──────────────────────────────────────────────────
-export const submitProjectIdea = (data) =>
-  api.post('/api/projects/ideas/submit/', data);
-
-export const fetchMyIdeas = () =>
-  api.get('/api/projects/ideas/');
-
-// ── Projects: Student (UC-02) ─────────────────────────────────────────────────
-export const submitStudentProposal = (data) =>
-  api.post('/api/projects/proposals/submit/', data);
-
-export const fetchMyProposal = () =>
-  api.get('/api/projects/proposals/mine/');
-
-export const cancelProposal = (proposalId) =>
-  api.post(`/api/projects/proposals/${proposalId}/cancel/`);
-
-// ── Projects: UC-03 Browse & Apply ───────────────────────────────────────────
-export const browseIdeas = () =>
-  api.get('/api/projects/ideas/browse/');
-
-export const applyOnIdea = (ideaId, data) =>
-  api.post(`/api/projects/ideas/${ideaId}/apply/`, data);
-
-export const fetchMyIdeaApplication = () =>
-  api.get('/api/projects/applications/mine/');
-
-// ── Projects: Doctor reviews applications ─────────────────────────────────────
-export const fetchDoctorPendingApplications = () =>
-  api.get('/api/projects/applications/pending-doctor/');
-
-export const doctorReviewApplication = (appId, data) =>
-  api.post(`/api/projects/applications/${appId}/doctor-review/`, data);
-
-// ── Projects: Supervisor review ───────────────────────────────────────────────
-export const fetchSupervisorPending = () =>
-  api.get('/api/projects/proposals/pending-supervisor/');
-
-export const supervisorReview = (proposalId, data) =>
-  api.post(`/api/projects/proposals/${proposalId}/supervisor-review/`, data);
-
-// ── Projects: HoD review ──────────────────────────────────────────────────────
-export const fetchHodPending = () =>
-  api.get('/api/projects/proposals/pending-hod/');
-
-export const hodReview = (proposalId, data) =>
-  api.post(`/api/projects/proposals/${proposalId}/hod-review/`, data);
-
-export const fetchHodPendingDoctorIdeas = () =>
-  api.get('/api/projects/ideas/pending-hod/');
-
-export const hodReviewDoctorIdea = (ideaId, data) =>
-  api.post(`/api/projects/ideas/${ideaId}/hod-review/`, data);
-
-export const fetchHodPendingApplications = () =>
-  api.get('/api/projects/applications/pending-hod/');
-
-export const hodReviewApplication = (appId, data) =>
-  api.post(`/api/projects/applications/${appId}/hod-review/`, data);
-
-// ── Team invitations ──────────────────────────────────────────────────────────
-export const fetchMyInvitations = () =>
-  api.get('/api/projects/invitations/mine/');
-
-export const respondToInvitation = (invId, action) =>
-  api.post(`/api/projects/invitations/${invId}/respond/`, { action });
-
-// ── Proposal invitations (student proposals) ──────────────────────────────────
-export const fetchMyProposalInvitations = () =>
-  api.get('/api/projects/proposal-invitations/mine/');
-
-export const respondToProposalInvitation = (invId, action) =>
-  api.post(`/api/projects/proposal-invitations/${invId}/respond/`, { action });
-
-export const replaceProposalMember = (proposalId, old_member_id, new_member_id) =>
-  api.post(`/api/projects/proposals/${proposalId}/replace-member/`, { old_member_id, new_member_id });
-
-export const replaceApplicationMember = (appId, old_member_id, new_member_id) =>
-  api.post(`/api/projects/applications/${appId}/replace-member/`, { old_member_id, new_member_id });
-
-export const fetchStudentStatusManagement = (params = {}) =>
-  api.get('/api/projects/participations/status-management/', { params });
-
-export const fetchStudentStatusStats = (params = {}) =>
-  api.get('/api/projects/participations/status-management/stats/', { params });
-
-export const markParticipationFailed = (participationId, payload = {}) =>
-  api.post(`/api/projects/participations/${participationId}/mark-failed/`, payload);
-
-export const markParticipationWithdrawn = (participationId, payload = {}) =>
-  api.post(`/api/projects/participations/${participationId}/mark-withdrawn/`, payload);
-
-export const reverseParticipationToActive = (participationId, payload = {}) =>
-  api.post(`/api/projects/participations/${participationId}/reverse-to-active/`, payload);
-
-export const fetchParticipationHistory = (participationId) =>
-  api.get(`/api/projects/participations/${participationId}/history/`);
-
-export const designateStudentStatus = (studentId, payload = {}) =>
-  api.post(`/api/projects/students/${studentId}/designate-status/`, payload);
-
-export const fetchStudentParticipationHistory = (studentId) =>
-  api.get(`/api/projects/students/${studentId}/participation-history/`);
-
-// ── Doctors list (for supervisor dropdown) ────────────────────────────────────
-export const fetchDoctorsList = () =>
-  api.get('/api/projects/doctors/');
-
-export const searchStudents = (q) =>
-  api.get('/api/projects/students/', { params: { q } });
-
-export default api;
-
-// ── Notifications ─────────────────────────────────────────────────────────────
-export const fetchNotifications = () =>
-  api.get('/api/notifications/');
-
-export const fetchUnreadCount = () =>
-  api.get('/api/notifications/unread-count/');
-
-export const markNotifRead = (id) =>
-  api.post(`/api/notifications/${id}/read/`);
-
-export const markAllNotifsRead = () =>
-  api.post('/api/notifications/mark-all-read/');
-
-// ── Dynamic Forms ─────────────────────────────────────────────────────────────
-export const fetchHodForm = (context) =>
-  api.get(`/api/dy-forms/hod/${context}/`);
-
-export const saveHodForm = (context, data) =>
-  api.post(`/api/dy-forms/hod/${context}/save/`, data);
-
-export const fetchStudentForm = (department, context) =>
-  api.get(`/api/dy-forms/${department}/${context}/`);
-
-export const submitFormResponse = (data) =>
-  api.post('/api/dy-forms/responses/submit/', data);
-
-export const fetchHodFormResponses = (context) =>
-  api.get(`/api/dy-forms/hod/${context}/responses/`);
-
-export const fetchResponseByProposal = (proposalId) =>
-  api.get(`/api/dy-forms/responses/proposal/${proposalId}/`);
-
-export const fetchResponseByApplication = (applicationId) =>
-  api.get(`/api/dy-forms/responses/application/${applicationId}/`);
-
-// ── Project Management (Kanban Board) ─────────────────────────────────────────
-export const fetchMyBoard = () =>
-  api.get('/api/project-management/board/');
-
-export const updateBoard = (boardId, data) =>
-  api.patch(`/api/project-management/board/${boardId}/update/`, data);
-
-export const fetchSupervisorBoards = () =>
-  api.get('/api/project-management/supervisor/boards/');
-
-export const createTask = (boardId, data) =>
-  api.post(`/api/project-management/board/${boardId}/tasks/`, data);
-
-export const updateTask = (boardId, taskId, data) =>
-  api.patch(`/api/project-management/board/${boardId}/tasks/${taskId}/`, data);
-
-export const deleteTask = (boardId, taskId) =>
-  api.delete(`/api/project-management/board/${boardId}/tasks/${taskId}/delete/`);
-
-// ── Task Comments ──────────────────────────────────────────────────────────────
-export const fetchComments = (boardId, taskId) =>
-  api.get(`/api/project-management/board/${boardId}/tasks/${taskId}/comments/`);
-
-export const postComment = (boardId, taskId, body) =>
-  api.post(`/api/project-management/board/${boardId}/tasks/${taskId}/comments/`, { body });
-
-export const deleteComment = (boardId, taskId, commentId) =>
-  api.delete(`/api/project-management/board/${boardId}/tasks/${taskId}/comments/${commentId}/delete/`);
-
-// ── Task Attachments ───────────────────────────────────────────────────────────
-export const uploadAttachment = (boardId, taskId, file) => {
-  const form = new FormData();
-  form.append('file', file);
-  return api.post(`/api/project-management/board/${boardId}/tasks/${taskId}/attachments/`, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-};
-
-export const deleteAttachment = (boardId, taskId, attachmentId) =>
-  api.delete(`/api/project-management/board/${boardId}/tasks/${taskId}/attachments/${attachmentId}/delete/`);
-
-// ── Board Activity ─────────────────────────────────────────────────────────────
-export const fetchBoardActivity = (boardId) =>
-  api.get(`/api/project-management/board/${boardId}/activity/`);
-
-// ── HoD & Dean ─────────────────────────────────────────────────────────────────
-export const fetchHodBoards = () =>
-  api.get('/api/project-management/hod/boards/');
-
-export const fetchHodStats = () =>
-  api.get('/api/project-management/hod/stats/');
-
-// ── Workflow Management ────────────────────────────────────────────────────────
-export const fetchWorkflowTemplates = () =>
+// Workflow
+export const getWorkflowTemplates = () =>
   api.get('/api/workflow/templates/');
 
-export const fetchWorkflowTemplate = (templateId) =>
-  api.get(`/api/workflow/templates/${templateId}/`);
-
 export const createWorkflowTemplate = (data) =>
-  api.post('/api/workflow/templates/create/', data);
+  api.post('/api/workflow/templates/', data);
 
-export const updateWorkflowTemplate = (templateId, data) =>
-  api.put(`/api/workflow/templates/${templateId}/update/`, data);
+export const updateWorkflowTemplate = (id, data) =>
+  api.patch(`/api/workflow/templates/${id}/`, data);
 
-export const deleteWorkflowTemplate = (templateId) =>
-  api.delete(`/api/workflow/templates/${templateId}/delete/`);
+export const deleteWorkflowTemplate = (id) =>
+  api.delete(`/api/workflow/templates/${id}/`);
 
-export const applyWorkflowToProject = (data) =>
-  api.post('/api/workflow/apply/', data);
+export const getProjectWorkflow = (projectId) =>
+  api.get(`/api/workflow/projects/${projectId}/workflow/`);
 
-export const fetchProjectWorkflow = (projectBoardId) =>
-  api.get(`/api/workflow/project/${projectBoardId}/`);
-
-export const fetchPendingWorkflowStages = () =>
-  api.get('/api/workflow/pending/');
-
-export const submitWorkflowStage = (stageInstanceId, data) => {
-  // Check if any field is a File object
-  const hasFiles = Object.values(data).some(v => v instanceof File);
-  
-  if (hasFiles) {
-    // Use FormData for file uploads
-    const formData = new FormData();
-    Object.entries(data).forEach(([key, value]) => {
-      if (value instanceof File) {
-        formData.append(`field_${key}`, value);
-      } else {
-        formData.append(`field_${key}`, value);
-      }
-    });
-    
-    return api.post(`/api/workflow/stage/${stageInstanceId}/submit/`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-  }
-  
-  // Regular JSON request
-  return api.post(`/api/workflow/stage/${stageInstanceId}/submit/`, data);
+export const fetchProjectWorkflow = async (projectId) => {
+  const response = await api.get(`/api/workflow/projects/${projectId}/workflow/`);
+  return response.data;
 };
 
-export const reviewWorkflowStage = (stageInstanceId, data) =>
-  api.post(`/api/workflow/stage/${stageInstanceId}/review/`, data);
+export const getReviewableProjects = async () => {
+  const response = await api.get('/api/workflow/reviewable-projects/');
+  return response.data;
+};
 
-export const fetchAvailableProjects = () =>
-  api.get('/api/workflow/available-projects/');
+export const reviewWorkflowStage = async (stageInstanceId, data) => {
+  // Handle file uploads if present
+  if (data.files && data.files.length > 0) {
+    const formData = new FormData();
+    formData.append('status', data.status || 'approved');
+    if (data.comments) {
+      formData.append('comments', data.comments);
+    }
+    data.files.forEach((file) => {
+      formData.append('files', file);
+    });
+    
+    const response = await api.post(
+      `/api/workflow/stage-instances/${stageInstanceId}/review/`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data;
+  } else {
+    const response = await api.post(
+      `/api/workflow/stage-instances/${stageInstanceId}/review/`,
+      {
+        status: data.status || 'approved',
+        comments: data.comments || '',
+      }
+    );
+    return response.data;
+  }
+};
 
-export const fetchReviewableProjects = () =>
-  api.get('/api/workflow/reviewable-projects/');
+export const submitWorkflowStage = (projectId, stageId, data) =>
+  api.post(`/api/workflow/projects/${projectId}/stages/${stageId}/submit/`, data);
 
-export const applyWorkflowBulk = (data) =>
-  api.post('/api/workflow/apply-bulk/', data);
+// Notifications
+export const getNotifications = () => api.get('/api/notifications/');
 
-export const replaceWorkflowForProject = (projectBoardId, data) =>
-  api.put(`/api/workflow/project/${projectBoardId}/replace/`, data);
+export const markNotificationAsRead = (id) =>
+  api.patch(`/api/notifications/${id}/`, { is_read: true });
 
-export const fetchProjectsWorkflowStatus = () =>
-  api.get('/api/workflow/projects-status/');
-// ── Committees (Dean) ────────────────────────────────────────────────────────
-// Backend endpoints (all require Dean role):
-//   GET    /api/committees/dashboard/
-//   GET    /api/committees/templates/                POST  /api/committees/templates/
-//   GET    /api/committees/templates/{id}/           PATCH /api/committees/templates/{id}/
-//   DELETE /api/committees/templates/{id}/
-//   POST   /api/committees/templates/{id}/spawn/
-//   POST   /api/committees/templates/{id}/approve/
-//   POST   /api/committees/templates/{id}/copy/
-//   GET    /api/committees/templates/{id}/preview_distribution/
-//   GET    /api/committees/committees/               GET   /api/committees/committees/{id}/
-//   PATCH  /api/committees/committees/{id}/
-//   POST   /api/committees/committees/{id}/doctors/
-//   POST   /api/committees/committees/{id}/swap_project/
-//   POST   /api/committees/distribute/
-//   GET    /api/committees/export/?format=pdf|xlsx
+export const markAllNotificationsAsRead = () =>
+  api.post('/api/notifications/mark-all-read/');
 
-export const fetchCommitteesDashboard = (semester) =>
-  api.get('/api/committees/dashboard/', { params: semester ? { semester } : {} });
-
-export const fetchCommitteeTemplates = () =>
+// Committees
+export const getCommitteeTemplates = () =>
   api.get('/api/committees/templates/');
-
-export const fetchCommitteeTemplate = (id) =>
-  api.get(`/api/committees/templates/${id}/`);
 
 export const createCommitteeTemplate = (data) =>
   api.post('/api/committees/templates/', data);
 
-export const updateCommitteeTemplate = (id, data) =>
-  api.patch(`/api/committees/templates/${id}/`, data);
+export const getCommittees = (params) =>
+  api.get('/api/committees/', { params });
 
-export const deleteCommitteeTemplate = (id) =>
-  api.delete(`/api/committees/templates/${id}/`);
+export const createCommittee = (data) =>
+  api.post('/api/committees/', data);
 
-export const spawnCommitteesForTemplate = (id) =>
-  api.post(`/api/committees/templates/${id}/spawn/`);
+export const distributeProjects = (templateId) =>
+  api.post(`/api/committees/templates/${templateId}/distribute/`);
 
-export const approveCommitteeTemplate = (id) =>
-  api.post(`/api/committees/templates/${id}/approve/`);
+export const runScheduling = (templateId, preview = false) =>
+  api.post(`/api/committees/templates/${templateId}/schedule/`, { preview });
 
-export const copyCommitteeTemplate = (id, data) =>
-  api.post(`/api/committees/templates/${id}/copy/`, data);
+export const applyScheduling = (runId) =>
+  api.post(`/api/committees/scheduling-runs/${runId}/apply/`);
 
-export const previewTemplateDistribution = (id) =>
-  api.get(`/api/committees/templates/${id}/preview_distribution/`);
+export const rejectScheduling = (runId) =>
+  api.post(`/api/committees/scheduling-runs/${runId}/reject/`);
 
-export const fetchCommittees = (params = {}) =>
-  api.get('/api/committees/committees/', {
-    params: { ...params, _t: Date.now() },  // cache-busting
-  });
+export const getRooms = () => api.get('/api/committees/rooms/');
 
-export const fetchCommittee = (id) =>
-  api.get(`/api/committees/committees/${id}/`);
+export const createRoom = (data) => api.post('/api/committees/rooms/', data);
 
-export const updateCommittee = (id, data) =>
-  api.patch(`/api/committees/committees/${id}/`, data);
+export const getDoctorAvailability = (doctorId, params) =>
+  api.get(`/api/committees/doctors/${doctorId}/availability/`, { params });
 
-export const deleteCommittee = (id) =>
-  api.delete(`/api/committees/committees/${id}/`);
+export const setDoctorAvailability = (doctorId, data) =>
+  api.post(`/api/committees/doctors/${doctorId}/availability/`, data);
 
-export const updateCommitteeDoctors = (id, data) =>
-  api.post(`/api/committees/committees/${id}/doctors/`, data);
+export const getDoctorExceptions = (doctorId, params) =>
+  api.get(`/api/committees/doctors/${doctorId}/exceptions/`, { params });
 
-export const swapCommitteeProject = (id, data) =>
-  api.post(`/api/committees/committees/${id}/swap_project/`, data);
+export const setDoctorException = (doctorId, data) =>
+  api.post(`/api/committees/doctors/${doctorId}/exceptions/`, data);
 
-export const distributeProjects = (data) =>
-  api.post('/api/committees/distribute/', data);
-
-export const exportCommittees = (format, semester) =>
-  api.get('/api/committees/export/', {
-    params: { format, ...(semester ? { semester } : {}) },
-    responseType: 'blob',
-  });
-
-export const fetchProjectsAssignment = (semester) =>
-  api.get('/api/committees/projects-assignment/', {
-    params: semester ? { semester } : {},
-  });
-
-export const exportProjectsAssignment = (semester) =>
-  api.get('/api/committees/projects-assignment/export/', {
-    params: semester ? { semester } : {},
-    responseType: 'blob',
-  });
-
-// Fetch available committees for swapping (same type, dept, project_type)
-export const fetchAvailableCommitteesForSwap = (committeeId, projectSource, projectId) =>
-  api.get(`/api/committees/committees/${committeeId}/available-for-swap/`, {
-    params: { project_source: projectSource, project_id: projectId },
-  });
-
-// Swap/move a project to another committee
-export const swapProject = (committeeId, data) =>
-  api.post(`/api/committees/committees/${committeeId}/swap_project/`, data);
-
-// Update project schedules (date, time, location)
-export const updateProjectSchedules = (updates) =>
-  api.post('/api/committees/update-schedules/', { updates });
-
-// ── Doctors list for committee template form ────────────────────────────────
-// Reuse existing /api/doctors/ endpoint (same as AssignHod).
-// Returns: [{id, username, first_name, last_name, department, role}, ...]
-export function getAccessToken() {
-  return _accessToken;
-}
-
-// ── Doctor Committee Schedule ─────────────────────────────────────────────────
-export const fetchMyCommitteeSchedule = (semester) =>
-  api.get('/api/committees/my-schedule/', { params: semester ? { semester } : {} });
-
-// ── Grades ────────────────────────────────────────────────────────────────────
-export const uploadProjectReport = (formData) =>
-  api.post('/api/grades/report/upload/', formData, {
+// Grades
+export const uploadReport = (data) => {
+  const formData = new FormData();
+  formData.append('report', data.report);
+  if (data.project_application)
+    formData.append('project_application', data.project_application);
+  if (data.student_proposal)
+    formData.append('student_proposal', data.student_proposal);
+  return api.post('/api/grades/report/upload/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+};
 
-export const fetchProjectReport = (source, pid) =>
-  api.get(`/api/grades/report/${source}/${pid}/`);
+export const enterGrade = (data) => api.post('/api/grades/enter/', data);
 
-export const downloadProjectReport = (source, pid) =>
-  api.get(`/api/grades/report/${source}/${pid}/download/`, { responseType: 'blob' });
-
-export const enterGrade = (data) =>
-  api.post('/api/grades/enter/', data);
-
-export const enterBulkGrades = (data) =>
+export const bulkEnterGrades = (data) =>
   api.post('/api/grades/enter/bulk/', data);
 
-// Collective grading
-export const fetchGradingModes = () =>
-  api.get('/api/grades/grading-mode/');
+export const getMyGrades = () => api.get('/api/grades/my-grades/');
 
-export const setGradingMode = (committee_id, collective) =>
-  api.post('/api/grades/grading-mode/', { committee_id, collective });
+export const getHodGradesSummary = (params) =>
+  api.get('/api/grades/hod-summary/', { params });
 
-export const submitGradeDraft = (data) =>
-  api.post('/api/grades/draft/', data);
-
-export const fetchGradeDrafts = (committee_id, project_source, project_id, committee_type) =>
-  api.get('/api/grades/draft/', { params: { committee_id, project_source, project_id, committee_type } });
-
-export const fetchProjectGrades = (source, pid) =>
-  api.get(`/api/grades/project/${source}/${pid}/`);
-
-export const fetchMyCommitteeGrades = (semester) =>
-  api.get('/api/grades/my-committee-grades/', { params: semester ? { semester } : {} });
-
-export const fetchMyGrades = () =>
-  api.get('/api/grades/my-grades/');
-
-export const fetchGradesSummary = (semester, department, projectType, committeeType) =>
-  api.get('/api/grades/summary/', { 
-    params: { 
-      ...(semester ? { semester } : {}),
-      ...(department ? { department } : {}),
-      ...(projectType ? { project_type: projectType } : {}),
-      ...(committeeType ? { committee_type: committeeType } : {}),
-    } 
-  });
-
-export const fetchHodGradesSummary = (semester, projectType, committeeType) =>
-  api.get('/api/grades/hod-summary/', {
-    params: {
-      ...(semester ? { semester } : {}),
-      ...(projectType ? { project_type: projectType } : {}),
-      ...(committeeType ? { committee_type: committeeType } : {}),
-    }
-  });
+export const getDeanGradesSummary = (params) =>
+  api.get('/api/grades/dean-summary/', { params });
 
 export const exportGrades = (semester, department, projectType, committeeType) =>
   api.get('/api/grades/export/', {
@@ -565,122 +290,56 @@ export const exportGrades = (semester, department, projectType, committeeType) =
     responseType: 'blob',
   });
 
-export const exportHodGradesWord = (semester, projectType, committeeType) =>
+export const exportGradesWord = (semester, department, projectType, committeeType) =>
   api.get('/api/grades/export/word/', {
     params: { 
       ...(semester ? { semester } : {}),
+      ...(department ? { department } : {}),
       ...(projectType ? { project_type: projectType } : {}),
       ...(committeeType ? { committee_type: committeeType } : {}),
     },
     responseType: 'blob',
   });
 
-// ── Scheduling: Rooms ─────────────────────────────────────────────────────────
-export const fetchRooms = (params = {}) =>
-  api.get('/api/committees/rooms/', { params });
+export const getGradingMode = (committeeId) =>
+  api.get(`/api/grades/committees/${committeeId}/mode/`);
 
-export const fetchRoom = (id) =>
-  api.get(`/api/committees/rooms/${id}/`);
+export const setGradingMode = (committeeId, mode) =>
+  api.post(`/api/grades/committees/${committeeId}/mode/`, { mode });
 
-export const createRoom = (data) =>
-  api.post('/api/committees/rooms/', data);
+export const submitDoctorGradeDraft = (data) =>
+  api.post('/api/grades/doctor-draft/', data);
 
-export const updateRoom = (id, data) =>
-  api.patch(`/api/committees/rooms/${id}/`, data);
+// Project Imports
+export const previewImport = (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post('/api/project-imports/preview/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
 
-export const deleteRoom = (id) =>
-  api.delete(`/api/committees/rooms/${id}/`);
+export const confirmImport = (data) =>
+  api.post('/api/project-imports/confirm/', data);
 
-// ── Scheduling: Doctor availability (Dean manages any doctor) ────────────────
-export const fetchDoctorAvailability = (doctorId) =>
-  api.get('/api/committees/availability/', { params: doctorId ? { doctor_id: doctorId } : {} });
+// GitLab Integration
+export const linkGitLabProject = (projectId, gitLabData) =>
+  api.post(`/api/gitlab/projects/${projectId}/link/`, gitLabData);
 
-export const createDoctorAvailability = (data) =>
-  api.post('/api/committees/availability/', data);
+export const unlinkGitLabProject = (projectId) =>
+  api.delete(`/api/gitlab/projects/${projectId}/unlink/`);
 
-export const deleteDoctorAvailability = (id) =>
-  api.delete(`/api/committees/availability/${id}/`);
+export const getGitLabWebhooks = (projectId) =>
+  api.get(`/api/gitlab/projects/${projectId}/webhooks/`);
 
-export const fetchDoctorExceptions = (doctorId) =>
-  api.get('/api/committees/availability/exceptions/', { params: doctorId ? { doctor_id: doctorId } : {} });
+// Student Status Management
+export const getStudentParticipations = (params) =>
+  api.get('/api/projects/participations/status-management/', { params });
 
-export const createDoctorException = (data) =>
-  api.post('/api/committees/availability/exceptions/', data);
+export const updateStudentStatus = (participationId, status, reason) =>
+  api.patch(`/api/projects/participations/${participationId}/status/`, {
+    status,
+    reason,
+  });
 
-export const deleteDoctorException = (id) =>
-  api.delete(`/api/committees/availability/exceptions/${id}/`);
-
-// ── Scheduling: Doctor self-availability ─────────────────────────────────────
-export const fetchMyAvailability = () =>
-  api.get('/api/committees/my-availability/');
-
-export const setMyAvailability = (weekdays) =>
-  api.post('/api/committees/my-availability/', { weekdays });
-
-export const addMyAvailabilityDay = (weekday) =>
-  api.post('/api/committees/my-availability/', { weekday });
-
-export const deleteMyAvailability = (id) =>
-  api.delete(`/api/committees/my-availability/${id}/`);
-
-export const fetchMyExceptions = () =>
-  api.get('/api/committees/my-availability/exceptions/');
-
-export const createMyException = (data) =>
-  api.post('/api/committees/my-availability/exceptions/', data);
-
-export const deleteMyException = (id) =>
-  api.delete(`/api/committees/my-availability/exceptions/${id}/`);
-
-// ── Scheduling: Solver settings ──────────────────────────────────────────────
-export const fetchSolverSettings = (params = {}) =>
-  api.get('/api/committees/solver-settings/', { params });
-
-export const fetchSolverSetting = (id) =>
-  api.get(`/api/committees/solver-settings/${id}/`);
-
-export const createSolverSettings = (data) =>
-  api.post('/api/committees/solver-settings/', data);
-
-export const updateSolverSettings = (id, data) =>
-  api.patch(`/api/committees/solver-settings/${id}/`, data);
-
-export const deleteSolverSettings = (id) =>
-  api.delete(`/api/committees/solver-settings/${id}/`);
-
-// ── Scheduling: Preview / Apply / Reject ─────────────────────────────────────
-export const schedulePreview = (data) =>
-  api.post('/api/committees/schedule/preview/', data);
-
-export const scheduleApply = (runId) =>
-  api.post(`/api/committees/schedule/${runId}/apply/`);
-
-export const scheduleReject = (runId) =>
-  api.post(`/api/committees/schedule/${runId}/reject/`);
-
-// ── Scheduling: Runs history ─────────────────────────────────────────────────
-export const fetchSchedulingRuns = (params = {}) =>
-  api.get('/api/committees/schedule/runs/', { params });
-
-export const fetchSchedulingRun = (id) =>
-  api.get(`/api/committees/schedule/runs/${id}/`);
-
-// ── Wizard: Unified semester setup + scheduling ──────────────────────────────
-export const semesterSetup = (data) =>
-  api.post('/api/committees/semester-setup/', data);
-
-export const scheduleAll = (data) =>
-  api.post('/api/committees/schedule-all/', data);
-
-export const scheduleApplyAll = (semester) =>
-  api.post('/api/committees/schedule-apply-all/', { semester });
-
-export const scheduleRejectAll = (semester) =>
-  api.post('/api/committees/schedule-reject-all/', { semester });
-
-// ── OTP Authentication (2FA for Students) ────────────────────────────────────
-export const studentLoginRequest = (university_id, password) =>
-  api.post('/api/auth/student-login-request/', { university_id, password });
-
-export const studentLoginVerify = (session_token, code) =>
-  api.post('/api/auth/student-login-verify/', { session_token, code });
+export default api;
