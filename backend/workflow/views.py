@@ -15,7 +15,7 @@ from accounts.throttles import WorkflowSubmitThrottle
 from django.db.models import Count
 from .models import WorkflowTemplate, WorkflowStage, ProjectWorkflow, WorkflowStageInstance, WorkflowStageField, WorkflowFieldResponse
 ACTIVE_PROJECT_OPERATIONAL_STATUSES = ['active', 'partial_team', 'solo']
-
+from datetime import date, datetime, timedelta
 
 def _project_is_operationally_active(project_board):
     if project_board.proposal:
@@ -406,7 +406,10 @@ def update_workflow_template(request, template_id):
                     elif new_stage.trigger_type == 'after_days' and new_stage.trigger_days:
                         due_date = pw.started_at.date() + timedelta(days=new_stage.trigger_days)
                     elif new_stage.trigger_type == 'date' and new_stage.trigger_date:
-                        due_date = new_stage.trigger_date
+                        td = new_stage.trigger_date
+                        due_date = td if isinstance(td, date) else (
+                            td.date() if isinstance(td, datetime) else datetime.strptime(str(td), '%Y-%m-%d').date()
+                        )
 
                     # تحديد حالة المرحلة: scheduled إذا لم يحن وقت التفعيل بعد
                     initial_status = 'pending'
