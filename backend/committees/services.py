@@ -249,7 +249,7 @@ def _collect_projects(department: str, project_type: str | None) -> list[Collect
     )
     for app in idea_apps:
         ptype = getattr(app, 'project_type', None) or getattr(app.idea, 'project_type', None)
-        if project_type and ptype and ptype != project_type:
+        if project_type and ptype != project_type:
             continue
         legacy_students = []
         if app.student_id:
@@ -306,7 +306,7 @@ def _collect_projects(department: str, project_type: str | None) -> list[Collect
     )
     for prop in proposals:
         ptype = getattr(prop, 'project_type', None)
-        if project_type and ptype and ptype != project_type:
+        if project_type and ptype != project_type:
             continue
         sup_name = ''
         if prop.supervisor_id:
@@ -380,7 +380,7 @@ def _distribution_exclusion_summary(department: str, project_type: str | None) -
     }
 
     def add_project(project, ptype):
-        if project_type and ptype and ptype != project_type:
+        if project_type and ptype != project_type:
             return
         participations = list(get_project_participations(project))
         if not participations:
@@ -429,6 +429,7 @@ class DistributionPlan:
     template_id: int | None       # None when triggered without a specific template
     department: str
     project_type: str
+    semester: str | None
     projects_count: int
     by_type: list[TypeDistribution] = field(default_factory=list)
 
@@ -447,6 +448,7 @@ def build_distribution_plan(template: CommitteeTemplate,
         template_id   = template.id,
         department    = template.department,
         project_type  = template.project_type,
+        semester      = template.semester,
         projects_count= len(projects),
     )
 
@@ -483,6 +485,7 @@ def build_distribution_plan(template: CommitteeTemplate,
 
 def build_distribution_plan_for_combo(department: str,
                                        project_type: str,
+                                       semester: str | None = None,
                                        projects: list[CollectedProject] | None = None,
                                        ) -> DistributionPlan:
     """Same as build_distribution_plan but without a template (driven by dept+ptype)."""
@@ -493,6 +496,7 @@ def build_distribution_plan_for_combo(department: str,
         template_id   = None,
         department    = department,
         project_type  = project_type,
+        semester      = semester,
         projects_count= len(projects),
     )
 
@@ -572,84 +576,79 @@ def distribute_projects_to_committees(template_ids: list[int] | None = None,
                                        dry_run: bool = False,
                                        scheduling_mode: str = 'multi',
                                        ) -> dict:
+    """Distribute projects without deleting unrelated committees.
+
+    The redistribution scope is derived from the selected templates as
+    (department, project_type). Project and committee semester values are not
+    used to restrict redistribution; all current projects in the combo are
+    included. Committees in other departments or project types remain untouched.
     """
-    Top-level distribution entrypoint — REVISED.
+    selected_templates = CommitteeTemplate.objects.all()
+    if template_ids:
+        selected_templates = selected_templates.filter(id__in=template_ids)
+    if semester:
+        selected_templates = selected_templates.filter(semester=semester)
 
-    Handles BOTH scheduling modes:
-      - For MULTI-mode templates: round-robin distribute projects across
-        committees of each of the 4 committee types (existing behavior).
-      - For SINGLE-mode templates: call distribute_single_mode_projects
-        which creates 4 Committees per project (one per committee_type)
-        sharing the same scheduling_group UUID.
+    # Materialize once: the same target set is used to derive safe scopes and
+    # to avoid queryset changes while committees are deleted/recreated.
+    selected_templates = list(
+        selected_templates.select_related('chair').prefetch_related('members')
+    )
+    target_scopes = {
+        (tmpl.department, tmpl.project_type)
+        for tmpl in selected_templates
+    }
 
-    If `template_ids` is given, only those templates' (dept, ptype) combos
-    are processed. Otherwise, ALL templates are processed.
-    If `semester` is given, projects are NOT filtered by semester (the source
-    models don't have a semester field) but committees ARE filtered by semester.
-    """
-    # ── CLEAN SLATE: wipe ALL committees before re-distributing ──
-    # This ensures a fresh start every time — no stale committees from
-    # prior runs (single or multi mode) can linger and cause duplicates.
-    if not dry_run:
-        deleted_count = Committee.objects.count()
-        Committee.objects.all().delete()
-    else:
-        deleted_count = 0
-
-    # ── scheduling_mode is now a parameter (chosen by dean at distribution) ──
+    deleted_count = 0
     single_results = []
+    plans: list[DistributionPlan] = []
+    total_distributed = 0
+    total_undistributed = 0
+    exclusion_totals = {
+        'excluded_students_total': 0,
+        'excluded_failed_students': 0,
+        'excluded_withdrawn_students': 0,
+        'excluded_projects_zero_active': 0,
+    }
 
     if scheduling_mode == 'single':
-        # SINGLE MODE: every template creates 4 committees per project
-        # Process each (dept × ptype) ONLY ONCE — use the first semester found.
-        # Projects don't have a semester field, so processing per-semester
-        # would create duplicate committees for the same project.
-        single_templates_qs = CommitteeTemplate.objects.all()
-        if template_ids:
-            single_templates_qs = single_templates_qs.filter(id__in=template_ids)
-        if semester:
-            single_templates_qs = single_templates_qs.filter(semester=semester)
+        # The single-mode worker already deletes only its exact
+        # (department, project_type, semester) scope.
+        selected_template_ids_by_scope = {}
+        for tmpl in selected_templates:
+            scope = (tmpl.department, tmpl.project_type)
+            selected_template_ids_by_scope.setdefault(scope, []).append(tmpl.id)
 
-        single_combos_processed = set()  # (dept, ptype) only — NOT semester
-        for tmpl in single_templates_qs:
-            combo_key = (tmpl.department, tmpl.project_type)  # no semester!
-            if combo_key in single_combos_processed:
-                continue
-            single_combos_processed.add(combo_key)
+        for dept, ptype in sorted(target_scopes):
             result = distribute_single_mode_projects(
-                department=tmpl.department,
-                project_type=tmpl.project_type,
-                semester=tmpl.semester,  # use this template's semester
+                department=dept,
+                project_type=ptype,
+                semester=None,
+                template_ids=selected_template_ids_by_scope.get((dept, ptype)),
                 dry_run=dry_run,
             )
             single_results.append(result)
-
-        # In single mode, no multi-mode processing — empty plans
-        plans: list[DistributionPlan] = []
-        total_distributed = 0
-        total_undistributed = 0
-        exclusion_totals = {
-            'excluded_students_total': 0,
-            'excluded_failed_students': 0,
-            'excluded_withdrawn_students': 0,
-            'excluded_projects_zero_active': 0,
-        }
-        combos = set()  # empty — skip the multi-mode loop below
+            deleted_count += result.get('previous_committees_deleted', 0)
 
     else:
-        # MULTI MODE: round-robin across committees of each type
-        multi_qs = CommitteeTemplate.objects.all()
-        if template_ids:
-            multi_qs = multi_qs.filter(id__in=template_ids)
-        if semester:
-            multi_qs = multi_qs.filter(semester=semester)
+        # MULTI MODE: rebuild only the selected scopes. When template_ids select
+        # one template from a scope, all templates in that same scope are
+        # respawned so valid sibling committees are not accidentally lost.
+        for dept, ptype in sorted(target_scopes):
+            scope_templates = [
+                tmpl for tmpl in selected_templates
+                if tmpl.department == dept and tmpl.project_type == ptype
+            ]
 
-        # ── Ensure each template has its Committee spawned ──
-        # The spawn function may skip templates with legacy scheduling_mode='single',
-        # so we force-create committees for every template in MULTI mode here.
-        if not dry_run:
-            for tmpl in multi_qs:
-                if not tmpl.committees.exists():
+            if not dry_run:
+                scoped_committees = Committee.objects.filter(
+                    department=dept,
+                    project_type=ptype,
+                )
+                deleted_count += scoped_committees.count()
+                scoped_committees.delete()
+
+                for tmpl in scope_templates:
                     members_qs = list(tmpl.members.all())
                     c = Committee.objects.create(
                         template=tmpl,
@@ -665,53 +664,45 @@ def distribute_projects_to_committees(template_ids: list[int] | None = None,
                     if members_qs:
                         c.members.set(members_qs)
 
-        combos = set(multi_qs.values_list('department', 'project_type'))
+            summary = _distribution_exclusion_summary(dept, ptype)
+            for key, value in summary.items():
+                exclusion_totals[key] += value
 
-    plans: list[DistributionPlan] = []
-    total_distributed   = 0
-    total_undistributed = 0
-    exclusion_totals = {
-        'excluded_students_total': 0,
-        'excluded_failed_students': 0,
-        'excluded_withdrawn_students': 0,
-        'excluded_projects_zero_active': 0,
-    }
+            projects = _collect_projects(dept, ptype)
+            plan = build_distribution_plan_for_combo(
+                dept,
+                ptype,
+                semester=None,
+                projects=projects,
+            )
 
-    for dept, ptype in combos:
-        summary = _distribution_exclusion_summary(dept, ptype)
-        for key, value in summary.items():
-            exclusion_totals[key] += value
+            if not dry_run:
+                apply_distribution_plan(plan)
 
-        projects = _collect_projects(dept, ptype)
-        if not projects:
-            plan = build_distribution_plan_for_combo(dept, ptype, projects=[])
-        else:
-            plan = build_distribution_plan_for_combo(dept, ptype, projects=projects)
+            for td in plan.by_type:
+                total_distributed += len(td.assignments)
+                total_undistributed += len(td.undistributed)
+            plans.append(plan)
 
-        if not dry_run:
-            apply_distribution_plan(plan)
-
-        for td in plan.by_type:
-            total_distributed   += len(td.assignments)
-            total_undistributed += len(td.undistributed)
-
-        plans.append(plan)
-
-    # ── Step 3: Aggregate single-mode stats into the response ──
-    single_committees_created = sum(r.get('committees_created', 0) for r in single_results)
-    single_projects_distributed = sum(r.get('projects_count', 0) for r in single_results)
+    single_committees_created = sum(
+        r.get('committees_created', 0) for r in single_results
+    )
+    single_projects_distributed = sum(
+        r.get('projects_count', 0) for r in single_results
+    )
 
     return {
-        'processed_templates'   : len(plans),
+        'processed_templates': len(selected_templates),
+        'processed_scopes': len(target_scopes),
         'previous_committees_deleted': deleted_count,
-        'distributed_projects'  : total_distributed + single_projects_distributed,
+        'distributed_projects': total_distributed + single_projects_distributed,
         'undistributed_projects': total_undistributed,
-        'exclusions'            : exclusion_totals,
-        'plans'                 : [_plan_to_dict(p) for p in plans],
-        'single_mode_results'   : single_results,
+        'exclusions': exclusion_totals,
+        'plans': [_plan_to_dict(p) for p in plans],
+        'single_mode_results': single_results,
         'single_mode_committees_created': single_committees_created,
-        'dry_run'               : dry_run,
-        'executed_at'           : timezone.now().isoformat(),
+        'dry_run': dry_run,
+        'executed_at': timezone.now().isoformat(),
     }
 
 
@@ -749,6 +740,7 @@ def _plan_to_dict(plan: DistributionPlan) -> dict:
         'template_id'     : plan.template_id,
         'department'      : plan.department,
         'project_type'    : plan.project_type,
+        'semester'        : plan.semester,
         'projects_count'  : plan.projects_count,
         'by_type'         : [_type_dist_to_dict(td) for td in plan.by_type],
     }
@@ -1289,7 +1281,8 @@ def distribute_single_mode_projects(
     *,
     department: str,
     project_type: str,
-    semester: str,
+    semester: str | None = None,
+    template_ids: list[int] | None = None,
     dry_run: bool = False,
 ) -> dict:
     """Distribute projects to single-mode templates for a (dept × ptype × semester).
@@ -1301,15 +1294,22 @@ def distribute_single_mode_projects(
     """
     # Collect ALL templates for this combo (scheduling_mode is decided at
     # distribute time, NOT stored on the template anymore)
+    templates_qs = CommitteeTemplate.objects.filter(
+        department=department,
+        project_type=project_type,
+    )
+    if semester:
+        templates_qs = templates_qs.filter(semester=semester)
+    if template_ids:
+        templates_qs = templates_qs.filter(id__in=template_ids)
+
+    # Stable order makes repeated distributions predictable while still
+    # balancing projects round-robin across every selected formation.
     templates = list(
-        CommitteeTemplate.objects
-        .filter(
-            department=department,
-            project_type=project_type,
-            semester=semester,
-        )
+        templates_qs
         .select_related('chair')
         .prefetch_related('members')
+        .order_by('id')
     )
     if not templates:
         return {
@@ -1344,27 +1344,24 @@ def distribute_single_mode_projects(
         previous_committees = Committee.objects.filter(
             department=department,
             project_type=project_type,
-            semester=semester,
         )
         deleted_count = previous_committees.count()
         previous_committees.delete()
     else:
         deleted_count = 0
 
-    # In SINGLE mode, use ONLY the FIRST template for ALL projects.
-    # The dean creates ONE template per (dept × ptype × semester) in single mode.
-    # If multiple templates exist (e.g., from prior multi-mode usage), we use
-    # only the first one to ensure each project gets exactly 4 committees
-    # (one per committee_type) with the SAME doctors.
-    primary_template = templates[0]
-
+    # SINGLE mode keeps the same doctors for the four sessions of one
+    # project, but different projects are balanced across all selected
+    # formations using round-robin.
     assignments = []
     committees_created = 0
     global_seq = 0  # running counter across all committees
     from projects.models import IdeaApplication, StudentIdeaProposal
 
     for idx, project in enumerate(projects):
-        template = primary_template  # always use the first template
+        # Project 0 -> template 0, project 1 -> template 1, then wrap around.
+        # All four committees created for this project use this same template.
+        template = templates[idx % len(templates)]
         group_uuid = _uuid.uuid4()
 
         # Create 4 committees (one per committee_type)
@@ -1376,7 +1373,7 @@ def distribute_single_mode_projects(
                 committee_type=ctype,
                 department=department,
                 project_type=project_type,
-                semester=semester,
+                semester=template.semester,
                 chair=template.chair,
                 status='draft',
                 scheduling_group=group_uuid,
@@ -1402,12 +1399,17 @@ def distribute_single_mode_projects(
             'scheduling_group': str(group_uuid),
         })
 
+    template_loads = {template.id: 0 for template in templates}
+    for assignment in assignments:
+        template_loads[assignment['template_id']] += 1
+
     return {
         'department': department,
         'project_type': project_type,
         'semester': semester,
         'mode': 'single',
         'templates_count': len(templates),
+        'template_loads': template_loads,
         'projects_count': len(projects),
         'committees_created': committees_created,
         'previous_committees_deleted': deleted_count,

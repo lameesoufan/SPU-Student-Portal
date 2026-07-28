@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Users, FileSpreadsheet, AlertTriangle, FolderKanban,
   Plus, FileText, RefreshCw, CheckCircle2, Clock,
-  ChevronLeft, Gavel, UserCheck, Inbox, BarChart3,
+  ChevronLeft, ChevronRight, Folder, Gavel, UserCheck, Inbox, BarChart3,
 } from 'lucide-react';
 import {
   fetchCommitteesDashboard, distributeProjects,
 } from '../../api';
 import {
   COMMITTEE_TYPE_COLORS, DEPARTMENT_COLORS, WORKLOAD_COLORS,
-  WARNING_COLORS, getCommitteeTypeLabel, getProjectTypeLabel, getDepartmentLabel,
+  WARNING_COLORS, DEPARTMENTS, COMMITTEE_TYPES, getCommitteeTypeLabel, getProjectTypeLabel, getDepartmentLabel,
 } from './constants';
 import './CommitteesDashboard.css';
 
@@ -57,6 +57,48 @@ export default function CommitteesDashboard({ onNavigate, user }) {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showModeDialog, setShowModeDialog] = useState(false);
   const [selectedMode, setSelectedMode] = useState('multi');  // 'single' | 'multi'
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
+  const [selectedCommitteeType, setSelectedCommitteeType] = useState(null);
+
+  const groupedCompositions = useMemo(() => {
+    const compositions = data?.compositions || [];
+
+    return DEPARTMENTS.map((department) => {
+      const departmentItems = compositions.filter(
+        (composition) => composition.department === department.value,
+      );
+
+      return {
+        department: department.value,
+        label: department.label_ar,
+        items: departmentItems,
+        committeeTypes: COMMITTEE_TYPES.map((committeeType) => ({
+          committeeType: committeeType.value,
+          label: committeeType.label_ar,
+          items: departmentItems
+            .filter((composition) => composition.committee_type === committeeType.value)
+            .sort((a, b) =>
+              String(a.project_type_ar || a.project_type || '').localeCompare(
+                String(b.project_type_ar || b.project_type || ''),
+                'ar',
+              ) || String(a.name || '').localeCompare(String(b.name || ''), 'ar')
+            ),
+        })),
+      };
+    });
+  }, [data]);
+
+  const selectedDepartmentGroup = useMemo(
+    () => groupedCompositions.find((group) => group.department === selectedDepartment) || null,
+    [groupedCompositions, selectedDepartment],
+  );
+
+  const selectedTypeGroup = useMemo(
+    () => selectedDepartmentGroup?.committeeTypes.find(
+      (group) => group.committeeType === selectedCommitteeType,
+    ) || null,
+    [selectedDepartmentGroup, selectedCommitteeType],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -225,90 +267,203 @@ export default function CommitteesDashboard({ onNavigate, user }) {
                 <p>Start by creating your first composition to define committee type, department, project type, and faculty members.</p>
               </div>
             ) : (
-              comps.map((c) => {
-                const cTypeColor = COMMITTEE_TYPE_COLORS[c.committee_type] || {};
-                const deptColor  = DEPARTMENT_COLORS[c.department] || {};
-                /* ── render chair (unified object shape) ──────────────── */
-                const chairName = renderChairName(c.chair);
-                return (
-                  <div
-                    key={c.id}
-                    className={`cmd-comp-card ${c.is_approved ? 'is-approved' : 'is-draft'}`}
-                    onClick={() => onNavigate && onNavigate('committees-list', { templateId: c.id })}
+              <div className="cmd-folder-browser" dir="rtl">
+                <div className="cmd-folder-breadcrumbs">
+                  <button
+                    type="button"
+                    className={`cmd-folder-crumb ${!selectedDepartment ? 'is-current' : ''}`}
+                    onClick={() => {
+                      setSelectedDepartment(null);
+                      setSelectedCommitteeType(null);
+                    }}
                   >
-                    <div className="cmd-comp-main">
-                      <div className="cmd-comp-title-row">
-                        <h3 className="cmd-comp-title">{c.name}</h3>
-                        {c.is_approved ? (
-                          <span className="cmd-badge" style={{
-                            background: 'rgba(16, 185, 129, 0.12)',
-                            color: '#34d399',
-                            borderColor: 'rgba(16, 185, 129, 0.25)',
-                          }}>
-                            <CheckCircle2 size={11} /> Approved
-                          </span>
-                        ) : (
-                          <span className="cmd-badge" style={{
-                            background: 'rgba(245, 158, 11, 0.12)',
-                            color: '#fbbf24',
-                            borderColor: 'rgba(245, 158, 11, 0.25)',
-                          }}>
-                            <Clock size={11} /> Draft
-                          </span>
-                        )}
-                      </div>
-                      <div className="cmd-comp-badges">
-                        <span className="cmd-badge" style={{
-                          background: cTypeColor.bg,
-                          color: cTypeColor.text,
-                          borderColor: cTypeColor.border,
-                        }}>
-                          <Gavel size={11} /> {c.committee_type_ar}
-                        </span>
-                        <span className="cmd-badge" style={{
-                          background: deptColor.bg,
-                          color: deptColor.text,
-                          borderColor: deptColor.border,
-                        }}>
-                          {c.department_ar}
-                        </span>
-                        <span className="cmd-badge" style={{
-                          background: 'rgba(99, 102, 241, 0.12)',
-                          color: '#818cf8',
-                          borderColor: 'rgba(99, 102, 241, 0.25)',
-                        }}>
-                          {c.project_type_ar}
-                        </span>
-                      </div>
-                      <div className="cmd-comp-meta">
-                        <span className="cmd-comp-meta-item">
-                          <UserCheck size={13} /> Chair: <strong>{chairName}</strong>
-                        </span>
-                        <span className="cmd-comp-meta-item">
-                          <Users size={13} /> Members: <strong>{c.members_count ?? 0}</strong>
-                        </span>
-                        <span className="cmd-comp-meta-item">
-                          <FolderKanban size={13} /> Committees: <strong>{c.committees_count ?? c.committees_total ?? 0}</strong>
-                        </span>
-                        <span className="cmd-comp-meta-item">
-                          <CheckCircle2 size={13} /> Projects: <strong>{c.total_projects_assigned ?? 0}</strong>
-                        </span>
-                      </div>
-                    </div>
-                    <div className="cmd-comp-actions">
+                    الاختصاصات
+                  </button>
+                  {selectedDepartmentGroup && (
+                    <>
+                      <ChevronLeft size={14} />
                       <button
-                        className="cmd-btn cmd-btn-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onNavigate && onNavigate('committees-list', { templateId: c.id });
-                        }}
+                        type="button"
+                        className={`cmd-folder-crumb ${!selectedCommitteeType ? 'is-current' : ''}`}
+                        onClick={() => setSelectedCommitteeType(null)}
                       >
-                        View Committees <ChevronLeft size={12} />
+                        {selectedDepartmentGroup.label}
                       </button>
-                    </div>
+                    </>
+                  )}
+                  {selectedTypeGroup && (
+                    <>
+                      <ChevronLeft size={14} />
+                      <span className="cmd-folder-crumb is-current">{selectedTypeGroup.label}</span>
+                    </>
+                  )}
+                </div>
+
+                {!selectedDepartment ? (
+                  <div className="cmd-folder-grid cmd-department-folders">
+                    {groupedCompositions.map((group) => {
+                      const deptColor = DEPARTMENT_COLORS[group.department] || {};
+                      return (
+                        <button
+                          type="button"
+                          key={group.department}
+                          className="cmd-folder-card"
+                          style={{
+                            '--folder-bg': deptColor.bg || 'var(--bg-tertiary)',
+                            '--folder-border': deptColor.border || 'var(--border)',
+                            '--folder-color': deptColor.text || 'var(--primary)',
+                          }}
+                          onClick={() => {
+                            setSelectedDepartment(group.department);
+                            setSelectedCommitteeType(null);
+                          }}
+                        >
+                          <Folder size={48} className="cmd-folder-icon" />
+                          <strong>{group.label}</strong>
+                          <span>{group.items.length} تشكيلات</span>
+                          <ChevronLeft size={17} className="cmd-folder-open-icon" />
+                        </button>
+                      );
+                    })}
                   </div>
-                );
-              })
+                ) : !selectedCommitteeType ? (
+                  <>
+                    <button
+                      type="button"
+                      className="cmd-folder-back"
+                      onClick={() => setSelectedDepartment(null)}
+                    >
+                      <ChevronRight size={15} /> العودة إلى الاختصاصات
+                    </button>
+                    <div className="cmd-folder-grid cmd-type-folders">
+                      {selectedDepartmentGroup.committeeTypes.map((typeGroup) => {
+                        const typeColor = COMMITTEE_TYPE_COLORS[typeGroup.committeeType] || {};
+                        return (
+                          <button
+                            type="button"
+                            key={typeGroup.committeeType}
+                            className="cmd-folder-card"
+                            style={{
+                              '--folder-bg': typeColor.bg || 'var(--bg-tertiary)',
+                              '--folder-border': typeColor.border || 'var(--border)',
+                              '--folder-color': typeColor.text || 'var(--primary)',
+                            }}
+                            onClick={() => setSelectedCommitteeType(typeGroup.committeeType)}
+                          >
+                            <Folder size={48} className="cmd-folder-icon" />
+                            <strong>{typeGroup.label}</strong>
+                            <span>{typeGroup.items.length} تشكيلات</span>
+                            <ChevronLeft size={17} className="cmd-folder-open-icon" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="cmd-folder-back"
+                      onClick={() => setSelectedCommitteeType(null)}
+                    >
+                      <ChevronRight size={15} /> العودة إلى أنواع اللجان
+                    </button>
+                    {selectedTypeGroup.items.length === 0 ? (
+                      <div className="cmd-empty cmd-folder-empty">
+                        <div className="cmd-empty-icon"><Inbox size={28} /></div>
+                        <h3>لا توجد تشكيلات</h3>
+                        <p>لا توجد تشكيلات من نوع {selectedTypeGroup.label} ضمن اختصاص {selectedDepartmentGroup.label}.</p>
+                      </div>
+                    ) : (
+                      <div className="cmd-committee-type-list">
+                        {selectedTypeGroup.items.map((c) => {
+                          const cTypeColor = COMMITTEE_TYPE_COLORS[c.committee_type] || {};
+                          const deptColor = DEPARTMENT_COLORS[c.department] || {};
+                          const chairName = renderChairName(c.chair);
+                          return (
+                            <div
+                              key={c.id}
+                              className={`cmd-comp-card ${c.is_approved ? 'is-approved' : 'is-draft'}`}
+                              onClick={() => onNavigate && onNavigate('committees-list', { templateId: c.id })}
+                            >
+                              <div className="cmd-comp-main">
+                                <div className="cmd-comp-title-row">
+                                  <h3 className="cmd-comp-title">{c.name}</h3>
+                                  {c.is_approved ? (
+                                    <span className="cmd-badge" style={{
+                                      background: 'rgba(16, 185, 129, 0.12)',
+                                      color: '#34d399',
+                                      borderColor: 'rgba(16, 185, 129, 0.25)',
+                                    }}>
+                                      <CheckCircle2 size={11} /> Approved
+                                    </span>
+                                  ) : (
+                                    <span className="cmd-badge" style={{
+                                      background: 'rgba(245, 158, 11, 0.12)',
+                                      color: '#fbbf24',
+                                      borderColor: 'rgba(245, 158, 11, 0.25)',
+                                    }}>
+                                      <Clock size={11} /> Draft
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="cmd-comp-badges">
+                                  <span className="cmd-badge" style={{
+                                    background: cTypeColor.bg,
+                                    color: cTypeColor.text,
+                                    borderColor: cTypeColor.border,
+                                  }}>
+                                    <Gavel size={11} /> {c.committee_type_ar}
+                                  </span>
+                                  <span className="cmd-badge" style={{
+                                    background: deptColor.bg,
+                                    color: deptColor.text,
+                                    borderColor: deptColor.border,
+                                  }}>
+                                    {c.department_ar}
+                                  </span>
+                                  <span className="cmd-badge" style={{
+                                    background: 'rgba(99, 102, 241, 0.12)',
+                                    color: '#818cf8',
+                                    borderColor: 'rgba(99, 102, 241, 0.25)',
+                                  }}>
+                                    {c.project_type_ar}
+                                  </span>
+                                </div>
+                                <div className="cmd-comp-meta">
+                                  <span className="cmd-comp-meta-item">
+                                    <UserCheck size={13} /> Chair: <strong>{chairName}</strong>
+                                  </span>
+                                  <span className="cmd-comp-meta-item">
+                                    <Users size={13} /> Members: <strong>{c.members_count ?? 0}</strong>
+                                  </span>
+                                  <span className="cmd-comp-meta-item">
+                                    <FolderKanban size={13} /> Committees: <strong>{c.committees_count ?? c.committees_total ?? 0}</strong>
+                                  </span>
+                                  <span className="cmd-comp-meta-item">
+                                    <CheckCircle2 size={13} /> Projects: <strong>{c.total_projects_assigned ?? 0}</strong>
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="cmd-comp-actions">
+                                <button
+                                  className="cmd-btn cmd-btn-sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onNavigate && onNavigate('committees-list', { templateId: c.id });
+                                  }}
+                                >
+                                  View Committees <ChevronLeft size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>

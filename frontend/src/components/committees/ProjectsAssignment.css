@@ -1017,3 +1017,125 @@
 .pa-select-committee-btn:active:not(:disabled) {
   transform: translateY(0);
 }
+
+
+/* Fixed full-width distribution table */
+.pa-page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.pa-table-container {
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.pa-table {
+  width: 100%;
+  min-width: 0 !important;
+  table-layout: fixed;
+  font-size: 11px;
+}
+
+.pa-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.pa-table th,
+.pa-table td {
+  padding: 9px 6px;
+  min-width: 0;
+  max-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.pa-table th {
+  font-size: 10px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.pa-table td {
+  text-align: center;
+}
+
+.pa-project-cell,
+.pa-students-cell,
+.pa-supervisors-cell,
+.pa-members-cell {
+  max-width: none;
+  width: 100%;
+}
+
+.pa-student-badge,
+.pa-supervisor-badge,
+.pa-member-badge,
+.pa-badge,
+.pa-committee-name {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px 5px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  justify-content: center;
+}
+
+.pa-project-title,
+.pa-project-source,
+.pa-date-cell,
+.pa-location-cell {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  justify-content: center;
+}
+
+.pa-swap-btn {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 4px;
+  justify-content: center;
+}
+
+.pa-inline-input {
+  min-width: 0;
+  padding: 5px 3px;
+  font-size: 10px;
+}
+
+/* Column allocation: totals 100% in normal view. */
+.pa-col-index { width: 2.5%; }
+.pa-col-students { width: 10%; }
+.pa-col-project { width: 13%; }
+.pa-col-supervisors { width: 9%; }
+.pa-col-committee { width: 8%; }
+.pa-col-type { width: 6%; }
+.pa-col-department { width: 6%; }
+.pa-col-members { width: 13%; }
+.pa-col-date { width: 7%; }
+.pa-col-time { width: 6%; }
+.pa-col-location { width: 6%; }
+.pa-col-actions { width: 7.5%; }
+.pa-col-select { width: 3%; }
+
+@media (max-width: 1200px) {
+  .pa-table-container { overflow-x: visible; }
+  .pa-table { min-width: 0 !important; font-size: 10px; }
+  .pa-table th, .pa-table td { padding: 7px 4px; }
+}
+
+@media (max-width: 900px) {
+  .pa-page { padding: 12px; }
+  .pa-table { font-size: 9px; }
+  .pa-table th { font-size: 9px; }
+  .pa-student-badge, .pa-supervisor-badge, .pa-member-badge, .pa-badge { padding: 3px; }
+}

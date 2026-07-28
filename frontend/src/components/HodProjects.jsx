@@ -36,6 +36,7 @@ export default function HodProjects({ onBack, user }) {
   // Department folder expansion + per-folder search
   const [expandedDepts, setExpandedDepts] = useState({});
   const [deptSearch, setDeptSearch]       = useState({});
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     Promise.all([fetchHodBoards(), fetchHodStats()])
@@ -373,10 +374,17 @@ export default function HodProjects({ onBack, user }) {
         </div>
       )}
 
+      {!isDean && (
+        <div className="relative mb-5">
+          <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input type="text" value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="ابحث عن مشروع..." className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 pr-10 pl-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"/>
+        </div>
+      )}
+
       {/* ── HOD VIEW: Flat projects grid (unchanged) ── */}
       {!isDean && !loading && boards.length > 0 && (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4 mt-5">
-          {boards.map((board) => {
+          {boards.filter((board)=>{const q=search.trim().toLowerCase();if(!q)return true;return (board.title||'').toLowerCase().includes(q)||(getProjectTypeLabel(board.project_type)||'').toLowerCase().includes(q)||(board.members||[]).some(m=>((m.name||m.username||'').toLowerCase().includes(q)));}).map((board) => {
             const done  = (board.tasks || []).filter((t) => t.status === 'done').length;
             const total = (board.tasks || []).length;
             const pct   = total > 0 ? Math.round((done / total) * 100) : 0;

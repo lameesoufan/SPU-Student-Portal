@@ -703,8 +703,8 @@ class SolverSettings(models.Model):
         help_text='Buffer (in minutes) added after each committee in the same room',
     )
 
-    # Hard ceiling per doctor for THIS committee type in THIS semester
-    max_committees_per_doctor = models.PositiveIntegerField(default=5)
+
+  
 
     # Solver timeout (CP-SAT)
     solver_timeout_seconds = models.PositiveIntegerField(

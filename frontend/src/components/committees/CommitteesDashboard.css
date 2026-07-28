@@ -318,6 +318,63 @@
   gap: 12px;
 }
 
+/* ── Compositions grouped by specialization / department ─────────────────── */
+.cmd-specialization-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cmd-specialization-group + .cmd-specialization-group {
+  margin-top: 8px;
+}
+
+.cmd-specialization-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.cmd-specialization-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cmd-specialization-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.cmd-specialization-count {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cmd-specialization-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid var(--border);
+}
+
 /* ── Composition Card (template row) ─────────────────────────────────────── */
 .cmd-comp-card {
   position: relative;
@@ -557,4 +614,195 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Nested grouping: specialization -> committee type -> compositions */
+.cmd-committee-type-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cmd-committee-type-group + .cmd-committee-type-group {
+  margin-top: 14px;
+}
+
+.cmd-committee-type-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cmd-committee-type-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.cmd-committee-type-count {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid currentColor;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cmd-committee-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .cmd-committee-type-list {
+    padding-inline-start: 6px;
+  }
+
+  .cmd-committee-type-header {
+    align-items: flex-start;
+  }
+}
+
+/* ── Folder browser: specialization → committee type → compositions ─────── */
+.cmd-folder-browser {
+  min-height: 270px;
+}
+
+.cmd-folder-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.cmd-folder-crumb {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  padding: 3px 5px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+button.cmd-folder-crumb:hover {
+  color: var(--primary);
+  background: var(--bg-tertiary);
+}
+
+.cmd-folder-crumb.is-current {
+  color: var(--text-primary);
+  font-weight: 700;
+  cursor: default;
+}
+
+.cmd-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cmd-department-folders .cmd-folder-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  max-width: calc(50% - 6px);
+  width: 100%;
+  justify-self: center;
+}
+
+.cmd-folder-card {
+  position: relative;
+  min-height: 132px;
+  border: 1px solid var(--folder-border);
+  border-radius: 14px;
+  background: linear-gradient(145deg, var(--folder-bg), var(--bg-secondary));
+  color: var(--text-primary);
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  text-align: center;
+}
+
+.cmd-folder-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+  border-color: var(--folder-color);
+}
+
+.cmd-folder-icon {
+  color: var(--folder-color);
+  fill: var(--folder-bg);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
+}
+
+.cmd-folder-card strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.cmd-folder-card > span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.cmd-folder-open-icon {
+  position: absolute;
+  inset-inline-end: 12px;
+  bottom: 12px;
+  color: var(--folder-color);
+  opacity: 0.75;
+}
+
+.cmd-folder-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cmd-folder-back:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.cmd-folder-empty {
+  min-height: 210px;
+}
+
+@media (max-width: 680px) {
+  .cmd-folder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cmd-department-folders .cmd-folder-card:last-child:nth-child(odd) {
+    grid-column: auto;
+    max-width: none;
+  }
 }

@@ -379,7 +379,6 @@ class SchedulePreviewView(APIView):
                 daily_end=_parse_time(inline_params['daily_end'] or '17:00'),
                 buffer_between_committees_minutes=int(inline_params['buffer_between_committees_minutes'] or 10),
                 workdays=inline_params['workdays'] or [5, 6],  # default Sat+Sun
-                max_committees_per_doctor=99,  # no limit (per dean decision)
                 solver_timeout_seconds=int(timeout_override or 30),
                 is_active=True,
             )

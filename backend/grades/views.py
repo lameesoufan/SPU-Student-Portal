@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import io
 import os
+from pathlib import Path
+from datetime import datetime
 
 from django.http import HttpResponse, FileResponse
 from django.utils import timezone
@@ -629,18 +631,38 @@ class HodGradesSummaryView(APIView):
 
 
 class GradesExportView(APIView):
-    """العميد يصدّر Excel بكل العلامات."""
+    """العميد يصدّر كل العلامات، ورئيس القسم يصدّر علامات قسمه فقط."""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        if not _is_dean(request.user):
-            return Response({'detail': 'مسموح للعميد فقط.'}, status=status.HTTP_403_FORBIDDEN)
+        user = request.user
+        if not _is_hod(user):
+            return Response(
+                {'detail': 'مسموح للعميد أو رئيس القسم فقط.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         semester = request.query_params.get('semester')
-        department = request.query_params.get('department')
         project_type = request.query_params.get('project_type')
         committee_type = request.query_params.get('committee_type')
-        content  = _build_excel(semester, department, project_type, committee_type)
+        export_date = request.query_params.get('export_date')
+
+        if _is_dean(user):
+            # العميد يستطيع اختيار أي قسم أو تصدير جميع الأقسام.
+            department = request.query_params.get('department')
+        else:
+            # لا نثق بفلتر القسم القادم من الواجهة؛ رئيس القسم مقيد بقسم حسابه.
+            department = getattr(user, 'department', None)
+            if not department:
+                return Response(
+                    {'detail': 'حساب رئيس القسم غير مرتبط بقسم.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            content = _build_excel(semester, department, project_type, committee_type, export_date)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         resp = HttpResponse(
             content,
@@ -882,102 +904,180 @@ def _get_project_info(source, pid):
     return title, students, department, project_type
 
 
-def _build_excel(semester, department=None, project_type_filter=None, committee_type_filter=None):
-    """بناء ملف Excel بكل علامات المشاريع."""
+def _build_excel(semester, department=None, project_type_filter=None, committee_type_filter=None, export_date=None):
+    """إنشاء وثيقة علامات رسمية جاهزة للطباعة وفق الفلاتر المختارة."""
     try:
         import openpyxl
+        from openpyxl.drawing.image import Image as XLImage
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
     except ImportError:
         raise ImportError('openpyxl مطلوب لتصدير Excel')
 
-    from committees.models import DEPARTMENT_AR, COMMITTEE_TYPE_AR
+    from committees.models import DEPARTMENT_AR, COMMITTEE_TYPE_AR, PROJECT_TYPE_AR
+
+    # التوافق مع القيمة القديمة القادمة من بعض نسخ الواجهة.
+    if project_type_filter == 'semester':
+        project_type_filter = 'seasonal'
+
+    if not committee_type_filter:
+        raise ValueError('يجب اختيار نوع اللجنة قبل التصدير.')
+    if project_type_filter not in ('seasonal', 'graduation_1', 'graduation_2'):
+        raise ValueError('يجب اختيار نوع مشروع واحد قبل التصدير.')
+    if not export_date:
+        raise ValueError('يجب تحديد تاريخ الوثيقة قبل التصدير.')
+
+    try:
+        parsed_date = datetime.strptime(export_date, '%Y-%m-%d')
+        date_text = parsed_date.strftime('%Y / %m / %d')
+    except ValueError:
+        raise ValueError('صيغة التاريخ غير صحيحة.')
+
     summary = _build_summary(semester, None, department, project_type_filter, committee_type_filter)
-    rows    = summary['projects']
+    rows = summary['projects']
+
+    department_name = DEPARTMENT_AR.get(department, department) if department else 'جميع الأقسام'
+    committee_name = COMMITTEE_TYPE_AR.get(committee_type_filter, committee_type_filter)
+    project_type_name = PROJECT_TYPE_AR.get(project_type_filter, project_type_filter)
+    max_score = COMMITTEE_MAX_SCORES.get(committee_type_filter, '')
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = 'علامات المشاريع'
+    ws.title = 'وثيقة العلامات'
     ws.sheet_view.rightToLeft = True
+    ws.sheet_view.showGridLines = False
 
-    # ألوان
-    header_fill = PatternFill('solid', fgColor='4F46E5')
-    alt_fill    = PatternFill('solid', fgColor='F0F0FF')
-    thin_border = Border(
-        left=Side(style='thin'), right=Side(style='thin'),
-        top=Side(style='thin'), bottom=Side(style='thin'),
-    )
+    # إعداد الصفحة للطباعة على A4.
+    ws.page_setup.orientation = 'portrait'
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_options.horizontalCentered = True
+    ws.page_margins.left = 0.25
+    ws.page_margins.right = 0.25
+    ws.page_margins.top = 0.35
+    ws.page_margins.bottom = 0.45
 
-    # ── وضع فلتر نوع اللجنة: أعمدة مختلفة ──
-    if committee_type_filter:
-        # عرض بسيط: 4 أعمدة فقط (اسم الطالب، الرقم الجامعي، عنوان المشروع، العلامة)
-        committee_label = COMMITTEE_TYPE_AR.get(committee_type_filter, committee_type_filter)
-        max_score = COMMITTEE_MAX_SCORES.get(committee_type_filter, "N/A")
-        headers = [
-            'اسم الطالب', 'الرقم الجامعي', 'عنوان المشروع',
-            f'{committee_label} /{max_score}',
-        ]
-        col_widths = [30, 18, 40, 20]
-    else:
-        # العرض الكامل: كل العلامات
-        headers = [
-            'رقم المشروع', 'عنوان المشروع', 'القسم', 'الطالب', 'الرقم الجامعي',
-            'سيمينار 1 (10)', 'سيمينار 2 (10)', 'لجنة فنية (20)',
-            'مناقشة نهائية (30)', 'تقرير (30)', 'المجموع (100)',
-        ]
-        col_widths = [12, 32, 16, 22, 14, 14, 14, 16, 18, 12, 14]
+    dark_blue = '0B2A63'
+    gray_fill = PatternFill('solid', fgColor='D9D9D9')
+    white_fill = PatternFill('solid', fgColor='FFFFFF')
+    thin = Side(style='thin', color='000000')
+    medium = Side(style='medium', color='000000')
+    table_border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-    # الهيدر
-    for col_idx, (h, w) in enumerate(zip(headers, col_widths), start=1):
-        cell = ws.cell(row=1, column=col_idx, value=h)
-        cell.font      = Font(bold=True, color='FFFFFF', size=11)
-        cell.fill      = header_fill
+    # الأعمدة: اسم الطالب، الرقم الجامعي، عنوان المشروع، العلامة.
+    widths = [28, 18, 42, 18]
+    for idx, width in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+
+    # شعار الجامعة.
+    logo_path = Path(__file__).resolve().parent / 'assets' / 'spu_logo.png'
+    if logo_path.exists():
+        logo = XLImage(str(logo_path))
+        logo.width = 112
+        logo.height = 72
+        ws.add_image(logo, 'A1')
+
+    # رأس الوثيقة.
+    ws.merge_cells('B1:D1')
+    ws['B1'] = 'كلية هندسة الذكاء الاصطناعي'
+    ws['B1'].font = Font(name='Arial', size=16, bold=True, color=dark_blue)
+    ws['B1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.merge_cells('B2:D2')
+    ws['B2'] = 'Faculty of Artificial Intelligence Engineering'
+    ws['B2'].font = Font(name='Times New Roman', size=14, bold=True, color=dark_blue)
+    ws['B2'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 32
+    ws.row_dimensions[2].height = 25
+
+    ws.merge_cells('A3:B3')
+    ws['A3'] = 'رمز الوثيقة: M-09-AI-F6'
+    ws.merge_cells('C3:D3')
+    ws['C3'] = 'رقم الإصدار: 00'
+    ws.merge_cells('A4:B4')
+    ws['A4'] = f'تاريخ الإصدار: {date_text}'
+    ws.merge_cells('C4:D4')
+    ws['C4'] = f'وثيقة علامات عضو لجنة {committee_name}'
+    for row in (3, 4):
+        for cell in ws[row]:
+            cell.font = Font(name='Arial', size=10)
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = Border(top=thin if row == 3 else Side(style=None), bottom=thin)
+
+    ws.merge_cells('A6:D6')
+    ws['A6'] = f'وثيقة علامات عضو لجنة {committee_name}'
+    ws['A6'].font = Font(name='Arial', size=17, bold=True)
+    ws['A6'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[6].height = 30
+
+    ws.merge_cells('A7:D7')
+    ws['A7'] = f'قسم {department_name}'
+    ws['A7'].font = Font(name='Arial', size=14, bold=True)
+    ws['A7'].alignment = Alignment(horizontal='center', vertical='center')
+
+    # مربعات نوع المشروع، ويظهر رمز صح بجانب الخيار المحدد فقط.
+    labels = [
+        ('seasonal', 'فصلي'),
+        ('graduation_1', 'تخرج 1'),
+        ('graduation_2', 'تخرج 2'),
+    ]
+    checks = ' / '.join(f"{label} {'☑' if key == project_type_filter else '☐'}" for key, label in labels)
+    ws.merge_cells('A8:D8')
+    ws['A8'] = f'نوع المشروع:  {checks}'
+    ws['A8'].font = Font(name='Arial', size=13, bold=True)
+    ws['A8'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[8].height = 28
+
+    ws.merge_cells('A9:D9')
+    ws['A9'] = f'التاريخ: {date_text}'
+    ws['A9'].font = Font(name='Arial', size=11)
+    ws['A9'].alignment = Alignment(horizontal='right', vertical='center')
+
+    header_row = 11
+    headers = ['اسم الطالب', 'الرقم الجامعي', 'عنوان المشروع', f'العلامة ({max_score} درجات)']
+    for col, text in enumerate(headers, 1):
+        cell = ws.cell(header_row, col, text)
+        cell.font = Font(name='Arial', size=12, bold=True)
+        cell.fill = gray_fill
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        cell.border    = thin_border
-        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = w
+        cell.border = Border(left=medium, right=medium, top=medium, bottom=medium)
+    ws.row_dimensions[header_row].height = 42
 
-    ws.row_dimensions[1].height = 30
-
-    # البيانات
-    for row_idx, proj in enumerate(rows, start=2):
-        fill = alt_fill if row_idx % 2 == 0 else PatternFill()
-        dept_ar  = DEPARTMENT_AR.get(proj['department'], proj['department'])
-
-        # ── وضع فلتر نوع اللجنة: 4 أعمدة فقط ──
-        if committee_type_filter:
-            values = [
-                proj['student_name'],
-                proj['student_uid'],
-                proj['title'],
-                proj['score'] if proj.get('score') is not None else '—',
-            ]
-        else:
-            # العرض الكامل: كل العلامات
-            values = [
-                f"{proj['project_source'][:3]}-{proj['project_id']}",
-                proj['title'],
-                dept_ar,
-                proj['student_name'],
-                proj['student_uid'],
-                proj['seminar_1']        if proj['seminar_1']        is not None else '—',
-                proj['seminar_2']        if proj['seminar_2']        is not None else '—',
-                proj['technical']        if proj['technical']        is not None else '—',
-                proj['final_discussion'] if proj['final_discussion'] is not None else '—',
-                proj['report']           if proj['report']           is not None else '—',
-                proj['total'],
-            ]
-
-        for col_idx, val in enumerate(values, start=1):
-            cell = ws.cell(row=row_idx, column=col_idx, value=val)
-            cell.fill      = fill
+    first_data_row = header_row + 1
+    minimum_rows = 10
+    total_rows = max(minimum_rows, len(rows))
+    for offset in range(total_rows):
+        row_idx = first_data_row + offset
+        proj = rows[offset] if offset < len(rows) else None
+        values = [
+            proj['student_name'] if proj else '',
+            proj['student_uid'] if proj else '',
+            proj['title'] if proj else '',
+            (proj.get('score') if proj and proj.get('score') is not None else '') if proj else '',
+        ]
+        for col, value in enumerate(values, 1):
+            cell = ws.cell(row_idx, col, value)
+            cell.font = Font(name='Arial', size=10, bold=(col == 4 and value != ''))
+            cell.fill = white_fill
             cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-            cell.border    = thin_border
-            # تمييز عمود العلامة (العمود الرابع في حالة الفلترة)
-            if committee_type_filter and col_idx == 4:
-                cell.font = Font(bold=True)
-            # تمييز عمود المجموع في العرض الكامل
-            elif not committee_type_filter and col_idx == 11:
-                cell.font = Font(bold=True)
-        ws.row_dimensions[row_idx].height = 20
+            cell.border = table_border
+        ws.row_dimensions[row_idx].height = 27
+
+    signature_row = first_data_row + total_rows + 3
+    ws.merge_cells(start_row=signature_row, start_column=1, end_row=signature_row, end_column=2)
+    ws.cell(signature_row, 1, 'اسم المدرس وتوقيعه: ................................................')
+    ws.cell(signature_row, 1).font = Font(name='Arial', size=12, bold=True)
+    ws.cell(signature_row, 1).alignment = Alignment(horizontal='right', vertical='center')
+
+    ws.merge_cells(start_row=signature_row, start_column=3, end_row=signature_row, end_column=4)
+    ws.cell(signature_row, 3, f'القسم: {department_name}')
+    ws.cell(signature_row, 3).font = Font(name='Arial', size=11)
+    ws.cell(signature_row, 3).alignment = Alignment(horizontal='left', vertical='center')
+    ws.row_dimensions[signature_row].height = 30
+
+    ws.print_title_rows = f'1:{header_row}'
+    ws.print_area = f'A1:D{signature_row + 1}'
 
     buf = io.BytesIO()
     wb.save(buf)

@@ -4,7 +4,7 @@ import {
   Calendar, MapPin, User, RefreshCw, AlertTriangle, Repeat, X,
   Save, Edit3, Check, Clock,
 } from 'lucide-react';
-import { fetchProjectsAssignment, exportProjectsAssignment, fetchAvailableCommitteesForSwap, swapProject, updateProjectSchedules } from '../../api';
+import { fetchProjectsAssignment, exportProjectsAssignment, fetchAvailableCommitteesForSwap, swapProject, updateProjectSchedules, fetchRooms } from '../../api';
 import './ProjectsAssignment.css';
 
 /**
@@ -27,7 +27,8 @@ export default function ProjectsAssignment({ onBack }) {
   const [selectedRows, setSelectedRows] = useState(new Set());
   const [editMode, setEditMode] = useState(false);
   const [bulkEditModal, setBulkEditModal] = useState(false);
-  const [bulkValues, setBulkValues] = useState({ date: '', time: '', location: '' });
+  const [bulkValues, setBulkValues] = useState({ date: '', start_time: '', room_id: '' });
+  const [rooms, setRooms] = useState([]);
   const [saving, setSaving] = useState(false);
 
   // Individual edits
@@ -35,6 +36,9 @@ export default function ProjectsAssignment({ onBack }) {
 
   useEffect(() => {
     loadData();
+    fetchRooms({ is_active: true })
+      .then((res) => setRooms(Array.isArray(res.data) ? res.data : (res.data?.results || [])))
+      .catch(() => setRooms([]));
   }, []);
 
   const loadData = async () => {
@@ -149,13 +153,13 @@ export default function ProjectsAssignment({ onBack }) {
       newEdited[index] = {
         ...newEdited[index],
         ...(bulkValues.date && { date: bulkValues.date }),
-        ...(bulkValues.time && { time: bulkValues.time }),
-        ...(bulkValues.location && { location: bulkValues.location }),
+        ...(bulkValues.start_time && { start_time: bulkValues.start_time }),
+        ...(bulkValues.room_id && { room_id: Number(bulkValues.room_id) }),
       };
     });
     setEditedProjects(newEdited);
     setBulkEditModal(false);
-    setBulkValues({ date: '', time: '', location: '' });
+    setBulkValues({ date: '', start_time: '', room_id: '' });
   };
 
   const saveChanges = async () => {
@@ -168,7 +172,7 @@ export default function ProjectsAssignment({ onBack }) {
     try {
       // Prepare updates array
       const updates = Object.entries(editedProjects).map(([index, values]) => {
-        const project = filteredProjects[parseInt(index)];
+        const project = sortedProjects[parseInt(index)];
         
         // Clean up discussion_duration - convert to integer or null
         const cleanedValues = { ...values };
@@ -507,43 +511,48 @@ export default function ProjectsAssignment({ onBack }) {
                         <input
                           type="date"
                           className="pa-inline-input"
-                          value={getDisplayValue(index, project, 'date')}
+                          value={editedProjects[index]?.date ?? project.scheduled_date ?? project.date ?? ''}
                           onChange={(e) => handleEditChange(index, 'date', e.target.value)}
                         />
                       ) : (
-                        (project.scheduled_date || getDisplayValue(index, project, 'date')) ? (
+                        project.scheduled_date ? (
                           <div className="pa-date-cell">
                             <Calendar size={13} />
-                            <span>{project.scheduled_date || getDisplayValue(index, project, 'date')}</span>
+                            <span>{project.scheduled_date}</span>
                           </div>
                         ) : '—'
                       )}
                     </td>
                     <td style={{ backgroundColor: '#f0f9ff', fontWeight: 500, color: '#0369a1' }}>
-                      {project.scheduled_start || project.scheduled_start_time || '—'}
+                      {editMode ? (
+                        <input
+                          type="time"
+                          className="pa-inline-input"
+                          value={editedProjects[index]?.start_time ?? project.scheduled_start ?? project.scheduled_start_time ?? ''}
+                          onChange={(e) => handleEditChange(index, 'start_time', e.target.value)}
+                        />
+                      ) : (project.scheduled_start || project.scheduled_start_time || '—')}
                     </td>
                     <td style={{ backgroundColor: '#f0f9ff', fontWeight: 500, color: '#0369a1' }}>
                       {project.scheduled_end || project.scheduled_end_time || '—'}
                     </td>
                     <td>
                       {editMode ? (
-                        <input
-                          type="text"
+                        <select
                           className="pa-inline-input"
-                          placeholder="Enter location..."
-                          value={getDisplayValue(index, project, 'location')}
-                          onChange={(e) => handleEditChange(index, 'location', e.target.value)}
-                        />
+                          value={editedProjects[index]?.room_id ?? project.room_id ?? ''}
+                          onChange={(e) => handleEditChange(index, 'room_id', e.target.value ? Number(e.target.value) : '')}
+                        >
+                          <option value="">Select room</option>
+                          {rooms.map((room) => (
+                            <option key={room.id} value={room.id}>{room.name}</option>
+                          ))}
+                        </select>
                       ) : (
                         project.room_name ? (
                           <div className="pa-location-cell" style={{ color: '#0369a1', fontWeight: 600 }}>
                             <MapPin size={13} />
                             <span>🚪 {project.room_name}</span>
-                          </div>
-                        ) : getDisplayValue(index, project, 'location') ? (
-                          <div className="pa-location-cell">
-                            <MapPin size={13} />
-                            <span>{getDisplayValue(index, project, 'location')}</span>
                           </div>
                         ) : '—'
                       )}
@@ -686,8 +695,8 @@ export default function ProjectsAssignment({ onBack }) {
                 <input
                   type="time"
                   className="pa-form-input"
-                  value={bulkValues.time}
-                  onChange={(e) => setBulkValues(prev => ({ ...prev, time: e.target.value }))}
+                  value={bulkValues.start_time}
+                  onChange={(e) => setBulkValues(prev => ({ ...prev, start_time: e.target.value }))}
                 />
                 <small>Leave empty to keep existing values</small>
               </div>
@@ -697,13 +706,16 @@ export default function ProjectsAssignment({ onBack }) {
                   <MapPin size={16} />
                   Location
                 </label>
-                <input
-                  type="text"
+                <select
                   className="pa-form-input"
-                  placeholder="Enter location (e.g. Room 301, Building A)"
-                  value={bulkValues.location}
-                  onChange={(e) => setBulkValues(prev => ({ ...prev, location: e.target.value }))}
-                />
+                  value={bulkValues.room_id}
+                  onChange={(e) => setBulkValues(prev => ({ ...prev, room_id: e.target.value }))}
+                >
+                  <option value="">Keep existing room</option>
+                  {rooms.map((room) => (
+                    <option key={room.id} value={room.id}>{room.name}</option>
+                  ))}
+                </select>
                 <small>Leave empty to keep existing values</small>
               </div>
 
@@ -714,7 +726,7 @@ export default function ProjectsAssignment({ onBack }) {
                 <button 
                   className="pa-btn pa-btn-primary" 
                   onClick={applyBulkEdit}
-                  disabled={!bulkValues.date && !bulkValues.time && !bulkValues.location}
+                  disabled={!bulkValues.date && !bulkValues.start_time && !bulkValues.room_id}
                 >
                   <Check size={16} />
                   Apply to {selectedRows.size} Project{selectedRows.size > 1 ? 's' : ''}

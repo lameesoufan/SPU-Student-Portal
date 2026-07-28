@@ -18,8 +18,11 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from grades.views import GradesExportView
 
 urlpatterns = [
+    # مسار مباشر قبل جميع include لضمان عدم اعتراض /api/grades/export/.
+    path('api/grades/export/', GradesExportView.as_view(), name='grades-export-direct'),
     path('api/gitlab/', include('gitlab_integration.urls')),
     path('admin/', admin.site.urls),
     path('', include('accounts.urls')),

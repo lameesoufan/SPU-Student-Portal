@@ -56,7 +56,6 @@ class SemesterSetupView(APIView):
             "daily_start": "09:00",
             "daily_end": "17:00",
             "buffer_minutes": 10,
-            "max_committees_per_doctor": 5,
             "solver_timeout_seconds": 30,
             "room_ids": [1, 2, 3],              # قاعات مختارة (يجب أن تكون موجودة)
             "run_distribution": true            # هل نشغّل Distribute بعد الإعداد؟
@@ -76,7 +75,6 @@ class SemesterSetupView(APIView):
         daily_start    = request.data.get('daily_start', '09:00')
         daily_end      = request.data.get('daily_end', '17:00')
         buffer_minutes = int(request.data.get('buffer_minutes', 10))
-        max_per_doctor = int(request.data.get('max_committees_per_doctor', 5))
         timeout        = int(request.data.get('solver_timeout_seconds', 30))
         room_ids       = request.data.get('room_ids', [])
         run_distribution = request.data.get('run_distribution', True)
@@ -129,7 +127,6 @@ class SemesterSetupView(APIView):
                 'daily_start': daily_start,
                 'daily_end': daily_end,
                 'buffer_between_committees_minutes': buffer_minutes,
-                'max_committees_per_doctor': max_per_doctor,
                 'solver_timeout_seconds': timeout,
                 'is_active': True,
             }

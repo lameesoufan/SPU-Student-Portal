@@ -453,7 +453,6 @@ class SolverSettingsSerializer(serializers.ModelSerializer):
                   'date_range_start', 'date_range_end', 'workdays',
                   'daily_start', 'daily_end',
                   'buffer_between_committees_minutes',
-                  'max_committees_per_doctor',
                   'solver_timeout_seconds',
                   'is_active', 'created_by',
                   'created_at', 'updated_at']

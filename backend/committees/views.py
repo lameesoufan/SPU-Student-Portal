@@ -32,11 +32,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.http import HttpResponse
-from django.db.models import Q
+from django.db import transaction
+from django.db.models import prefetch_related_objects, Q
 from django.utils import timezone
+from datetime import datetime, timedelta
 
 from .models import (
-    CommitteeTemplate, Committee,
+    CommitteeTemplate, Committee, Room,
     COMMITTEE_TYPE_AR, DEPARTMENT_AR, PROJECT_TYPE_AR,
 )
 from .serializers import (
@@ -433,6 +435,7 @@ class ProjectsAssignmentView(APIView):
                 'end_time': committee.end_time.strftime('%H:%M') if committee.end_time else None,
                 'discussion_duration': committee.discussion_duration,
                 'location': committee.location,
+                'room_id': committee.room_id,
                 'room_name': committee.room.name if committee.room_id else None,
                 # Send date and time separately for easier frontend display
                 'scheduled_date': committee.scheduled_start.strftime('%Y-%m-%d') if committee.scheduled_start else (committee.date.strftime('%Y-%m-%d') if committee.date else None),
@@ -629,96 +632,108 @@ class DoctorScheduleView(APIView):
 # ── Update Project Schedules ──────────────────────────────────────────────────
 
 class UpdateProjectSchedulesView(APIView):
-    """
-    Update date, time, and location for multiple projects in committees.
-    POST /api/committees/update-schedules/
-    
-    Payload:
-        {
-          "updates": [
-            {
-              "committee_id": 1,
-              "project_source": "IdeaApplication" | "StudentIdeaProposal",
-              "project_id": 123,
-              "date": "2025-01-15",  # optional
-              "time": "10:30",       # optional
-              "start_time": "09:00", # optional - ساعة البدء
-              "end_time": "12:00",   # optional - ساعة النهاية
-              "location": "Room 301" # optional
-            },
-            ...
-          ]
-        }
+    """Manual update of committee date, start time and room.
+
+    The schedule belongs to the committee, so editing any project row updates the
+    complete committee. The end time is recalculated from discussion duration and
+    project count. Room and doctor overlaps are rejected.
     """
     permission_classes = [IsDean]
 
+    @transaction.atomic
     def post(self, request):
         updates = request.data.get('updates', [])
-        
         if not updates:
-            return Response({'detail': 'No updates provided.'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
-        
-        updated_count = 0
-        errors = []
-        
-        for update in updates:
-            committee_id = update.get('committee_id')
-            project_source = update.get('project_source')
-            project_id = update.get('project_id')
-            
-            if not (committee_id and project_source and project_id):
-                errors.append({
-                    'update': update,
-                    'error': 'Missing required fields: committee_id, project_source, project_id'
-                })
-                continue
-            
+            return Response({'detail': 'No updates provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # A table can contain several projects for one committee. Collapse them so
+        # the same committee is updated once, with the last supplied value winning.
+        merged = {}
+        for item in updates:
+            cid = item.get('committee_id')
+            if not cid:
+                return Response({'detail': 'committee_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            merged.setdefault(int(cid), {}).update(item)
+
+        # Lock only rows from the committees table.  `room` is nullable, so combining
+        # select_for_update() with select_related('room') makes PostgreSQL generate a
+        # LEFT OUTER JOIN and PostgreSQL refuses to lock the nullable side of that join.
+        # The room object is not needed here; room_id is already available on Committee.
+        locked_committees = list(
+            Committee.objects.select_for_update().filter(id__in=merged.keys())
+        )
+        prefetch_related_objects(locked_committees, 'members')
+        committees = {c.id: c for c in locked_committees}
+        missing = sorted(set(merged) - set(committees))
+        if missing:
+            return Response({'detail': f'Committees not found: {missing}'}, status=status.HTTP_404_NOT_FOUND)
+
+        prepared = []
+        for cid, item in merged.items():
+            committee = committees[cid]
+            date_text = item.get('date') or (committee.scheduled_start.date().isoformat() if committee.scheduled_start else (committee.date.isoformat() if committee.date else None))
+            time_text = item.get('start_time') or item.get('time') or (committee.scheduled_start.strftime('%H:%M') if committee.scheduled_start else (committee.start_time.strftime('%H:%M') if committee.start_time else None))
+            room_id = item.get('room_id', committee.room_id)
+
+            if not date_text or not time_text or not room_id:
+                return Response({'detail': f'Committee {cid}: date, start time and room are required.'}, status=status.HTTP_400_BAD_REQUEST)
             try:
-                committee = Committee.objects.get(id=committee_id)
-            except Committee.DoesNotExist:
-                errors.append({
-                    'update': update,
-                    'error': f'Committee {committee_id} not found'
-                })
-                continue
-            
-            # Update committee schedule fields if provided
-            schedule_updated = False
-            if 'date' in update and update['date']:
-                committee.date = update['date']
-                schedule_updated = True
-            if 'time' in update and update['time']:
-                committee.time = update['time']
-                schedule_updated = True
-            if 'start_time' in update and update['start_time']:
-                committee.start_time = update['start_time']
-                schedule_updated = True
-            if 'end_time' in update and update['end_time']:
-                committee.end_time = update['end_time']
-                schedule_updated = True
-            if 'discussion_duration' in update:
-                # Handle both empty string and None
-                val = update['discussion_duration']
-                if val == '' or val is None:
-                    committee.discussion_duration = None
-                else:
-                    try:
-                        committee.discussion_duration = int(val)
-                    except (ValueError, TypeError):
-                        committee.discussion_duration = None
-                schedule_updated = True
-            if 'location' in update and update['location']:
-                committee.location = update['location']
-                schedule_updated = True
-            
-            if schedule_updated:
-                committee.save()
-                updated_count += 1
-        
+                date_value = datetime.strptime(date_text, '%Y-%m-%d').date()
+                time_value = datetime.strptime(time_text, '%H:%M').time()
+            except ValueError:
+                return Response({'detail': f'Committee {cid}: invalid date or time format.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                room = Room.objects.get(pk=room_id, is_active=True)
+            except Room.DoesNotExist:
+                return Response({'detail': f'Committee {cid}: selected room is invalid or inactive.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            start_dt = timezone.make_aware(datetime.combine(date_value, time_value), timezone.get_current_timezone())
+            duration = committee.discussion_duration or 15
+            project_count = max(1, committee.applications.count() + committee.proposals.count())
+            end_dt = start_dt + timedelta(minutes=duration * project_count)
+            doctor_ids = set(committee.members.values_list('id', flat=True))
+            if committee.chair_id:
+                doctor_ids.add(committee.chair_id)
+            prepared.append((committee, room, start_dt, end_dt, doctor_ids))
+
+        # Validate both against saved schedules and other changes in this request.
+        for committee, room, start_dt, end_dt, doctor_ids in prepared:
+            conflicts = Committee.objects.exclude(pk=committee.pk).filter(
+                scheduled_start__lt=end_dt,
+                scheduled_end__gt=start_dt,
+            ).filter(Q(room=room) | Q(chair_id__in=doctor_ids) | Q(members__id__in=doctor_ids)).distinct()
+            changing_ids = {c.id for c, *_ in prepared}
+            conflicts = conflicts.exclude(id__in=changing_ids)
+            if conflicts.exists():
+                other = conflicts.first()
+                return Response({'detail': f'Conflict with committee {other.id} in room or committee members.'}, status=status.HTTP_409_CONFLICT)
+
+        for i, (committee, room, start_dt, end_dt, doctor_ids) in enumerate(prepared):
+            for other, other_room, other_start, other_end, other_doctors in prepared[i + 1:]:
+                overlaps = start_dt < other_end and end_dt > other_start
+                if overlaps and (room.id == other_room.id or doctor_ids.intersection(other_doctors)):
+                    return Response({'detail': f'Conflict between committees {committee.id} and {other.id}.'}, status=status.HTTP_409_CONFLICT)
+
+        for committee, room, start_dt, end_dt, _ in prepared:
+            committee.room = room
+            committee.scheduled_start = start_dt
+            committee.scheduled_end = end_dt
+            # Keep legacy fields synchronized for old screens/exports.
+            committee.date = start_dt.date()
+            committee.time = start_dt.time()
+            committee.start_time = start_dt.time()
+            committee.end_time = end_dt.time()
+            committee.location = room.name
+            committee.manually_scheduled = True
+            committee.save(update_fields=[
+                'room', 'scheduled_start', 'scheduled_end', 'date', 'time',
+                'start_time', 'end_time', 'location', 'manually_scheduled', 'updated_at'
+            ])
+
         return Response({
             'success': True,
-            'updated_count': updated_count,
-            'total_updates': len(updates),
-            'errors': errors if errors else None,
+            'updated_count': len(prepared),
+            'message': 'Date, start time and room were updated successfully.',
         })
+
