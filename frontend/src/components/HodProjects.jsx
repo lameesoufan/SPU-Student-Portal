@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchHodBoards, fetchHodStats } from '../api';
 import KanbanBoard, { COLUMNS } from './KanbanBoard';
+import GitLabPanel from './GitLabPanel';
 import { getProjectTypeLabel, getDepartmentLabel } from '../lib/constants';
 import {
   FolderKanban, BarChart3, FileText, Lightbulb, TrendingUp,
@@ -33,6 +34,7 @@ export default function HodProjects({ onBack, user }) {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
   const [selected, setSelected] = useState(null);
+  const [viewMode, setViewMode] = useState('board');
   // Department folder expansion + per-folder search
   const [expandedDepts, setExpandedDepts] = useState({});
   const [deptSearch, setDeptSearch]       = useState({});
@@ -49,6 +51,13 @@ export default function HodProjects({ onBack, user }) {
   }, []);
 
   const selectedBoard = boards.find((b) => b.id === selected);
+
+  const updateSelectedBoard = (update) => {
+    setBoards((current) => current.map((board) => {
+      if (board.id !== selected) return board;
+      return typeof update === 'function' ? update(board) : update;
+    }));
+  };
 
   /* ── Group boards by department (Dean only) ── */
   const isDean = user?.role === 'dean';
@@ -86,14 +95,18 @@ export default function HodProjects({ onBack, user }) {
         <div className="flex items-center gap-3 mb-5 pb-4 border-b border-gray-200 dark:border-gray-700">
           <button
             className="inline-flex items-center gap-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3.5 py-2 text-[13px] font-medium text-gray-500 dark:text-gray-400 cursor-pointer transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
-            onClick={() => setSelected(null)}
+            onClick={() => { setSelected(null); setViewMode('board'); }}
           >
             <ArrowLeft size={16} />
             كل المشاريع
           </button>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+            selectedBoard.can_edit
+              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+              : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+          }`}>
             <Eye size={12} />
-            عرض فقط
+            {selectedBoard.can_edit ? 'إدارة المشروع' : 'عرض فقط'}
           </span>
           {selectedBoard.github_repo && selectedBoard.github_repo.startsWith('http') && (
             <a
@@ -107,11 +120,42 @@ export default function HodProjects({ onBack, user }) {
             </a>
           )}
         </div>
-        <KanbanBoard
-          board={selectedBoard}
-          setBoard={() => {}}
-          canEdit={false}
-        />
+        <div className="flex gap-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-1.5 shadow-sm mb-5">
+          <button
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-semibold transition-all border-[1.5px] ${
+              viewMode === 'board'
+                ? 'bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-500/25'
+                : 'bg-transparent text-gray-500 dark:text-gray-400 border-transparent hover:bg-violet-500/10 hover:text-violet-600'
+            }`}
+            onClick={() => setViewMode('board')}
+          >
+            لوحة المهام
+          </button>
+          <button
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-semibold transition-all border-[1.5px] ${
+              viewMode === 'gitlab'
+                ? 'bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-500/25'
+                : 'bg-transparent text-gray-500 dark:text-gray-400 border-transparent hover:bg-violet-500/10 hover:text-violet-600'
+            }`}
+            onClick={() => setViewMode('gitlab')}
+          >
+            <GitBranch size={14} className="inline ml-1.5 -mt-px" />
+            GitLab
+          </button>
+        </div>
+
+        {viewMode === 'board' ? (
+          <KanbanBoard
+            board={selectedBoard}
+            setBoard={updateSelectedBoard}
+            canEdit={Boolean(selectedBoard.can_edit)}
+          />
+        ) : (
+          <GitLabPanel
+            boardId={selectedBoard.id}
+            canManage={Boolean(selectedBoard.can_edit)}
+          />
+        )}
       </div>
     );
   }

@@ -152,7 +152,7 @@ def _get_board_for_member(user, board_id):
     if user.role == 'student' and _is_board_member(board, user):
         return board
 
-    if user.role == 'doctor':
+    if user.role in ['doctor', 'hod']:
         if board.proposal and board.proposal.supervisor_id == user.id:
             return board
         if board.proposal and board.proposal.co_supervisors.filter(pk=user.pk).exists():
@@ -201,8 +201,8 @@ def update_board(request, board_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def supervisor_boards(request):
-    if request.user.role != 'doctor':
-        return Response({'error': 'Doctors only.'}, status=403)
+    if request.user.role not in ['doctor', 'hod']:
+        return Response({'error': 'Doctors or HoD only.'}, status=403)
 
     from projects.models import StudentIdeaProposal, IdeaApplication
     boards = []
@@ -230,7 +230,7 @@ def supervisor_boards(request):
         boards.append(board)
 
     boards = _board_detail_queryset().filter(pk__in=[board.pk for board in boards])
-    return Response(ProjectBoardSerializer(boards, many=True).data)
+    return Response(ProjectBoardSerializer(boards, many=True, context={'request': request}).data)
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ def delete_comment(request, board_id, task_id, comment_id):
     except TaskComment.DoesNotExist:
         return Response({'error': 'Comment not found.'}, status=404)
 
-    if comment.author_id != request.user.id and request.user.role != 'doctor':
+    if comment.author_id != request.user.id and request.user.role not in ['doctor', 'hod']:
         return Response({'error': 'Not allowed.'}, status=403)
 
     comment.delete()
@@ -472,7 +472,7 @@ def hod_boards(request):
         boards.append(board)
 
     boards = _board_detail_queryset().filter(pk__in=[board.pk for board in boards])
-    return Response(ProjectBoardSerializer(boards, many=True).data)
+    return Response(ProjectBoardSerializer(boards, many=True, context={'request': request}).data)
 
 
 @api_view(['GET'])

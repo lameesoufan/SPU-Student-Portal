@@ -102,10 +102,11 @@ class ProjectBoardSerializer(serializers.ModelSerializer):
     participants = serializers.SerializerMethodField()
     project_type = serializers.SerializerMethodField()
     department   = serializers.SerializerMethodField()
+    can_edit      = serializers.SerializerMethodField()
 
     class Meta:
         model  = ProjectBoard
-        fields = ['id', 'title', 'created_at', 'tasks', 'members', 'participants', 'project_type', 'github_repo', 'department']
+        fields = ['id', 'title', 'created_at', 'tasks', 'members', 'participants', 'project_type', 'github_repo', 'department', 'can_edit']
 
     def get_members(self, obj):
         return [
@@ -130,3 +131,22 @@ class ProjectBoardSerializer(serializers.ModelSerializer):
         if obj.application and obj.application.idea and obj.application.idea.department:
             return obj.application.idea.department
         return None
+
+    def get_can_edit(self, obj):
+        """HoD can edit only projects they personally supervise; Dean remains read-only."""
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return False
+        if user.role == 'student':
+            return any(member.id == user.id for member in obj.members)
+        if user.role in ('doctor', 'hod'):
+            if obj.proposal:
+                return (
+                    obj.proposal.supervisor_id == user.id
+                    or obj.proposal.co_supervisors.filter(pk=user.pk).exists()
+                )
+            if obj.application and obj.application.idea:
+                return obj.application.idea.doctor_id == user.id
+        return False
+
