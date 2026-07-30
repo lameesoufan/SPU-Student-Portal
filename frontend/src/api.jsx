@@ -676,3 +676,8 @@ export const studentLoginRequest = (university_id, password) =>
 
 export const studentLoginVerify = (session_token, code) =>
   api.post('/api/auth/student-login-verify/', { session_token, code });
+export const requestEmailChange = (new_email, current_password) =>
+  api.post('/api/change-email/request/', { new_email, current_password });
+
+export const confirmEmailChange = (session_token, code) =>
+  api.post('/api/change-email/confirm/', { session_token, code });

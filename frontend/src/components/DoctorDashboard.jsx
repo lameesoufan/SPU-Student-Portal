@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ChangeEmail from './ChangeEmail';
 import {
   LayoutGrid,
   Search,
@@ -144,6 +145,7 @@ usePolling(async () => {
     if (page === 'applyworkflow') return <div className="std-page-wrapper"><ApplyWorkflow onBack={goBack} /></div>;
     if (page === 'reviewworkflow') return <div className="std-page-wrapper"><WorkflowReview onBack={goBack} /></div>;
     if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword user={user} onBack={goBack} /></div>;
+    if (page === 'change-email') return <div className="std-page-wrapper"><ChangeEmail user={user} onBack={goBack} /></div>;
     if (page === 'committee-schedule') return <div className="std-page-wrapper"><DoctorCommitteeSchedule onBack={goBack} /></div>;
     if (page === 'grade-entry') return <div className="std-page-wrapper"><GradeEntry onBack={goBack} /></div>;
     if (page === 'my-availability') return <div className="std-page-wrapper"><MyAvailabilityPage user={user} onBack={goBack} /></div>;

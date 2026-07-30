@@ -19,7 +19,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from datetime import timedelta
 import secrets
-from .models import User, DEPARTMENTS, StudentReference, PasswordResetCode
+from .models import User, DEPARTMENTS, StudentReference, PasswordResetCode, EmailChangeCode
 from .permissions import IsDeanOrAdmin
 from .selectors import get_doctors
 from .throttles import (
@@ -172,6 +172,98 @@ def change_password(request):
     if not result['ok']:
         return Response({'error': result['error']}, status=400)
     return Response({'message': 'Password changed successfully.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def request_email_change(request):
+    """Send a verification code to the requested new email address."""
+    new_email = str(request.data.get('new_email', '')).strip().lower()
+    current_password = str(request.data.get('current_password', ''))
+
+    if not new_email:
+        return Response({'error': 'أدخل البريد الإلكتروني الجديد.'}, status=400)
+    if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', new_email):
+        return Response({'error': 'صيغة البريد الإلكتروني غير صحيحة.'}, status=400)
+    if request.user.email and request.user.email.lower() == new_email:
+        return Response({'error': 'هذا البريد مرتبط بحسابك بالفعل.'}, status=400)
+    if User.objects.filter(email__iexact=new_email).exclude(pk=request.user.pk).exists():
+        return Response({'error': 'البريد الإلكتروني مستخدم في حساب آخر.'}, status=400)
+    if not current_password or not request.user.check_password(current_password):
+        return Response({'error': 'كلمة المرور الحالية غير صحيحة.'}, status=400)
+
+    EmailChangeCode.objects.filter(user=request.user, is_used=False).update(is_used=True)
+    code = f'{secrets.randbelow(1000000):06d}'
+    session_token = secrets.token_urlsafe(48)
+    EmailChangeCode.objects.create(
+        user=request.user,
+        new_email=new_email,
+        code_hash=make_password(code),
+        session_token=session_token,
+        expires_at=timezone.now() + timedelta(minutes=10),
+    )
+    try:
+        send_mail(
+            'تأكيد تغيير البريد الإلكتروني - بوابة SPU',
+            f'رمز تأكيد تغيير البريد الإلكتروني هو: {code}\nصلاحية الرمز 10 دقائق. لا تشاركه مع أي شخص.',
+            settings.DEFAULT_FROM_EMAIL,
+            [new_email],
+            fail_silently=False,
+        )
+    except Exception:
+        logger.exception('Email change verification failed for user %s', request.user.pk)
+        EmailChangeCode.objects.filter(session_token=session_token).update(is_used=True)
+        return Response({'error': 'تعذر إرسال رمز التحقق حاليًا. تحقق من إعدادات البريد وحاول لاحقًا.'}, status=503)
+
+    return Response({
+        'message': 'تم إرسال رمز التحقق إلى البريد الإلكتروني الجديد.',
+        'session_token': session_token,
+        'email_hint': _mask_email(new_email),
+        'expires_in_seconds': 600,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def confirm_email_change(request):
+    """Verify the code and replace the authenticated user's email."""
+    session_token = str(request.data.get('session_token', '')).strip()
+    code = str(request.data.get('code', '')).strip()
+    if not session_token or not code:
+        return Response({'error': 'رمز التحقق مطلوب.'}, status=400)
+
+    try:
+        change = EmailChangeCode.objects.select_related('user').get(
+            session_token=session_token,
+            user=request.user,
+            is_used=False,
+        )
+    except EmailChangeCode.DoesNotExist:
+        return Response({'error': 'جلسة تغيير البريد غير صالحة أو منتهية.'}, status=400)
+
+    if change.is_expired():
+        change.is_used = True
+        change.save(update_fields=['is_used'])
+        return Response({'error': 'انتهت صلاحية الرمز. اطلب رمزًا جديدًا.'}, status=400)
+    if change.failed_attempts >= 5:
+        change.is_used = True
+        change.save(update_fields=['is_used'])
+        return Response({'error': 'تم تجاوز عدد المحاولات المسموح. اطلب رمزًا جديدًا.'}, status=429)
+    if not check_password(code, change.code_hash):
+        change.failed_attempts += 1
+        change.save(update_fields=['failed_attempts'])
+        return Response({'error': 'رمز التحقق غير صحيح.'}, status=400)
+    if User.objects.filter(email__iexact=change.new_email).exclude(pk=request.user.pk).exists():
+        change.is_used = True
+        change.save(update_fields=['is_used'])
+        return Response({'error': 'البريد الإلكتروني أصبح مستخدمًا في حساب آخر.'}, status=400)
+
+    request.user.email = change.new_email
+    request.user.save(update_fields=['email'])
+    change.is_used = True
+    change.save(update_fields=['is_used'])
+    EmailChangeCode.objects.filter(user=request.user, is_used=False).update(is_used=True)
+    return Response({'message': 'تم تغيير البريد الإلكتروني بنجاح.', 'email': request.user.email})
 
 
 @api_view(['GET'])

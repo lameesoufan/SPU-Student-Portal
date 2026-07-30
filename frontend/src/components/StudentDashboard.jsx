@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ChangeEmail from './ChangeEmail';
 import './DashboardLayout.css';
 import ProposeIdea from './ProposeIdea';
 import BrowseIdeas from './BrowseIdeas';
@@ -534,6 +535,10 @@ const handleSubNavClick = (parentId, childId) => {
     }
   };
 
+  const goBack = () => {
+    setPage('dashboard');
+  };
+
   /* ── Determine student status text ── */
   const getStatusInfo = () => {
     if (dashboardStats.hasProject) {
@@ -560,6 +565,7 @@ const breadcrumbs = getBreadcrumbs();
   /* ── Render sub-pages ── */
   const renderContent = () => {
     if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword user={user} onBack={goBack} /></div>;
+    if (page === 'change-email') return <div className="std-page-wrapper"><ChangeEmail user={user} onBack={goBack} /></div>;
     if (page === 'propose') {
       return (
         <div className="std-page-wrapper">
@@ -987,10 +993,17 @@ const breadcrumbs = getBreadcrumbs();
                   <div className="std-profile-dropdown-divider" />
                   <button
                     className="std-profile-dropdown-item"
-                    onClick={() => { setPage('dashboard'); setProfileOpen(false); }}
+                    onClick={() => { setPage('change-password'); setProfileOpen(false); }}
                   >
                     <Icon.Settings size={16} />
-                    الإعدادات
+                    تغيير كلمة المرور
+                  </button>
+                  <button
+                    className="std-profile-dropdown-item"
+                    onClick={() => { setPage('change-email'); setProfileOpen(false); }}
+                  >
+                    <Icon.Mail size={16} />
+                    تغيير البريد الإلكتروني
                   </button>
                   <button
                     className="std-profile-dropdown-item"

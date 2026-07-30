@@ -1,3 +1,4 @@
+import ChangeEmail from './ChangeEmail';
 import ChangePassword from './ChangePassword';
 import {
   LayoutGrid,
@@ -266,6 +267,7 @@ usePolling(async () => {
   /* ── Render sub-pages ── */
   const renderContent = () => {
     if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword user={user} onBack={goBack} /></div>;
+    if (page === 'change-email') return <div className="std-page-wrapper"><ChangeEmail user={user} onBack={goBack} /></div>;
       
     if (page === 'my-ideas') {                                        // ← أضف
       return (                                                        // ← أضف

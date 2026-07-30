@@ -6,6 +6,7 @@ from .views import (
     upload_reference,
     student_login_request, student_login_verify,
     request_password_reset, verify_password_reset_code, reset_password_with_code,
+    request_email_change, confirm_email_change,
 )
 from .serializers import CustomTokenObtainPairView
 from django.urls import path
@@ -16,6 +17,8 @@ urlpatterns = [
     path('api/logout/', cookie_logout),
     path('api/auth/me/', current_user, name='current_user'),
     path('api/change-password/',   change_password,                      name='change_password'),
+    path('api/change-email/request/', request_email_change, name='change_email_request'),
+    path('api/change-email/confirm/', confirm_email_change, name='change_email_confirm'),
     path('api/change-username/',   change_username,                      name='change_username'),
     path('api/username-suggestions/', username_suggestions,               name='username_suggestions'),
     path('api/import-users/',      import_users,                         name='import_users'),

@@ -7,7 +7,7 @@ import {
   Sun,
   Moon,
   Bell,
-  Settings,
+  Settings, Mail,
   HelpCircle,
   LogOut,
   ChevronDown,
@@ -361,6 +361,13 @@ export default function DashboardLayout({
                   >
                     <Settings size={16} className="text-[var(--text-muted)]" />
                     تغيير كلمة المرور
+                  </button>
+                  <button
+                    className="flex items-center gap-3 w-full py-3 px-4 border-none bg-transparent text-[var(--text)] text-[13px] cursor-pointer transition-[background] duration-150 text-right hover:bg-[var(--bg-hover)] font-medium"
+                    onClick={() => { if (onNavigate) onNavigate('change-email'); setProfileOpen(false); }}
+                  >
+                    <Mail size={16} className="text-[var(--text-muted)]" />
+                    تغيير البريد الإلكتروني
                   </button>
                   <button
                     className="flex items-center gap-3 w-full py-3 px-4 border-none bg-transparent text-[var(--text)] text-[13px] cursor-pointer transition-[background] duration-150 text-right hover:bg-[var(--bg-hover)] font-medium"
