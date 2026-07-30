@@ -25,7 +25,7 @@ export default function RoomsManagement({ onBack }) {
       const res = await fetchRooms();
       setRooms(res.data?.results || res.data || []);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to load rooms');
+      setError(err.response?.data?.detail || 'تعذر تحميل القاعات');
     } finally {
       setLoading(false);
     }

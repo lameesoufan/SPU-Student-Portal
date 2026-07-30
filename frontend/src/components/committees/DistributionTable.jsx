@@ -70,7 +70,7 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
       const res = await fetchCommittees();
       setCommittees(res.data?.results || res.data || []);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to load committees list.');
+      setError(err.response?.data?.detail || 'تعذر تحميل قائمة اللجان.');
     } finally {
       setLoading(false);
     }
@@ -120,15 +120,15 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
     try {
       await deleteCommittee(c.id);
       setCommittees((prev) => prev.filter((x) => x.id !== c.id));
-      setToast({ type: 'success', msg: 'Committee deleted.' });
+      setToast({ type: 'success', msg: 'تم حذف اللجنة.' });
     } catch (err) {
-      setToast({ type: 'error', msg: err.response?.data?.detail || 'Delete failed.' });
+      setToast({ type: 'error', msg: err.response?.data?.detail || 'فشل الحذف.' });
     } finally { setBusy(false); }
   };
 
   const handleDistribute = async () => {
     if (busy) return;
-    if (!confirm('Execute project distribution algorithm across all committees?')) return;
+    if (!confirm('هل تريد تشغيل خوارزمية توزيع المشاريع على جميع اللجان؟')) return;
     setBusy(true);
     try {
       const res = await distributeProjects({ dry_run: false });
@@ -142,7 +142,7 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
       setToast({ type: 'success', msg: [msg, exclusionMsg].filter(Boolean).join(' ') });
       await load();
     } catch (err) {
-      setToast({ type: 'error', msg: 'Distribution failed.' });
+      setToast({ type: 'error', msg: 'فشل التوزيع.' });
     } finally { setBusy(false); }
   };
 
@@ -159,9 +159,9 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      setToast({ type: 'success', msg: `${format.toUpperCase()} exported.` });
+      setToast({ type: 'success', msg: `${format.toUpperCase()} تم تصديره بنجاح.` });
     } catch {
-      setToast({ type: 'error', msg: 'Export failed.' });
+      setToast({ type: 'error', msg: 'فشل التصدير.' });
     } finally { setBusy(false); }
   };
 
@@ -182,7 +182,7 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
 
   /* ── Render ──────────────────────────────────────────────────────────── */
   return (
-    <div className="cdt-page">
+    <div className="cdt-page" dir="rtl">
       {/* Header */}
       <div className="cdt-header">
         <div className="cdt-header-left">
@@ -190,21 +190,21 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
             <FolderKanban size={22} />
           </div>
           <div>
-            <h1 className="cdt-header-title">Committees List</h1>
+            <h1 className="cdt-header-title">قائمة اللجان</h1>
             <p className="cdt-header-sub">
-              Browse all committees created from compositions, search and filter, and open any committee for details.
+              استعرض جميع اللجان المنشأة من التشكيلات، وابحث وصفِّ النتائج، وافتح أي لجنة لعرض تفاصيلها.
             </p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="cdt-back" onClick={onBack}>
-            <ArrowRight size={14} /> Committees Dashboard
+            <ArrowRight size={14} /> لوحة اللجان
           </button>
           <button
             className="cdt-btn cdt-btn-primary"
             onClick={() => onNavigate && onNavigate('committees-template-form')}
           >
-            <Plus size={14} /> New Composition
+            <Plus size={14} /> تشكيلة جديدة
           </button>
         </div>
       </div>
@@ -215,35 +215,35 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
           <div className="cdt-stat-icon is-purple"><FolderKanban size={18} /></div>
           <div>
             <div className="cdt-stat-value">{stats.total}</div>
-            <div className="cdt-stat-label">Total Committees</div>
+            <div className="cdt-stat-label">إجمالي اللجان</div>
           </div>
         </div>
         <div className="cdt-stat">
           <div className="cdt-stat-icon is-amber"><Inbox size={18} /></div>
           <div>
             <div className="cdt-stat-value">{stats.drafts}</div>
-            <div className="cdt-stat-label">Draft</div>
+            <div className="cdt-stat-label">مسودة</div>
           </div>
         </div>
         <div className="cdt-stat">
           <div className="cdt-stat-icon is-blue"><Calendar size={18} /></div>
           <div>
             <div className="cdt-stat-value">{stats.scheduled}</div>
-            <div className="cdt-stat-label">Scheduled</div>
+            <div className="cdt-stat-label">مجدولة</div>
           </div>
         </div>
         <div className="cdt-stat">
           <div className="cdt-stat-icon is-green"><CheckCircle2 size={18} /></div>
           <div>
             <div className="cdt-stat-value">{stats.completed}</div>
-            <div className="cdt-stat-label">Completed</div>
+            <div className="cdt-stat-label">منجزة</div>
           </div>
         </div>
         <div className="cdt-stat">
           <div className="cdt-stat-icon is-red"><FolderKanban size={18} /></div>
           <div>
             <div className="cdt-stat-value">{stats.projects}</div>
-            <div className="cdt-stat-label">Distributed Projects</div>
+            <div className="cdt-stat-label">المشاريع الموزعة</div>
           </div>
         </div>
       </div>
@@ -260,13 +260,13 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
             Distribute Projects
           </button>
           <button className="cdt-btn" onClick={() => handleExport('xlsx')} disabled={busy}>
-            <FileDown size={14} /> Excel
+            <FileDown size={14} /> إكسل
           </button>
           {/* PDF export button removed as per requirements */}
         </div>
         <div className="cdt-toolbar-right">
           <button className="cdt-btn" onClick={load} disabled={loading}>
-            <RefreshCw size={13} /> Refresh
+            <RefreshCw size={13} /> تحديث
           </button>
         </div>
       </div>
@@ -277,30 +277,30 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
           <Search size={15} className="cdt-search-icon" />
           <input
             type="search"
-            placeholder="Search by committee number, faculty, location..."
+            placeholder="ابحث برقم اللجنة أو عضو الهيئة التدريسية أو الموقع..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <select className="cdt-select" value={fType}   onChange={(e) => setFType(e.target.value)}>
-          <option value="">All Committee Types</option>
+          <option value="">جميع أنواع اللجان</option>
           {COMMITTEE_TYPES.map((c) => <option key={c.value} value={c.value}>{c.label_ar}</option>)}
         </select>
         <select className="cdt-select" value={fDept}   onChange={(e) => setFDept(e.target.value)}>
-          <option value="">All Departments</option>
+          <option value="">جميع الأقسام</option>
           {DEPARTMENTS.map((d) => <option key={d.value} value={d.value}>{d.label_ar}</option>)}
         </select>
         <select className="cdt-select" value={fProj}   onChange={(e) => setFProj(e.target.value)}>
-          <option value="">All Project Types</option>
+          <option value="">جميع أنواع المشاريع</option>
           {PROJECT_TYPES.map((p) => <option key={p.value} value={p.value}>{p.label_ar}</option>)}
         </select>
         <select className="cdt-select" value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
-          <option value="">All Statuses</option>
+          <option value="">جميع الحالات</option>
           {COMMITTEE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label_ar}</option>)}
         </select>
         {hasFilters && (
           <button className="cdt-btn" onClick={clearFilters}>
-            <X size={13} /> Clear Filters
+            <X size={13} /> مسح عوامل التصفية
           </button>
         )}
       </div>
@@ -315,7 +315,7 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
       {/* Loading */}
       {loading && (
         <div className="cdt-loading">
-          <div className="cdt-spinner" /> Loading committees…
+          <div className="cdt-spinner" /> جارٍ تحميل اللجان…
         </div>
       )}
 
@@ -326,10 +326,10 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
             <div className="cdt-table-wrap">
               <div className="cdt-empty">
                 <div className="cdt-empty-icon"><FolderKanban size={28} /></div>
-                <h3>{hasFilters ? 'No matching results' : 'No committees yet'}</h3>
+                <h3>{hasFilters ? 'لا توجد نتائج مطابقة' : 'لا توجد لجان بعد'}</h3>
                 <p>
                   {hasFilters
-                    ? 'Try adjusting or clearing filters.'
+                    ? 'جرّب تعديل عوامل التصفية أو مسحها.'
                     : 'Start by creating a new composition to generate committees automatically.'}
                 </p>
                 {!hasFilters && (
@@ -337,7 +337,7 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
                     className="cdt-btn cdt-btn-primary"
                     onClick={() => onNavigate && onNavigate('committees-template-form')}
                   >
-                    <Plus size={14} /> Create Composition
+                    <Plus size={14} /> إنشاء تشكيلة
                   </button>
                 )}
               </div>
@@ -348,13 +348,13 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
                 <table className="cdt-table">
                   <thead>
                     <tr>
-                      <th>Committee</th>
-                      <th>Status</th>
-                      <th>Schedule (manual)</th>
-                      <th>Scheduled (CP-SAT)</th>
-                      <th>Faculty</th>
-                      <th>Projects</th>
-                      <th style={{ textAlign: 'left' }}>Actions</th>
+                      <th>اللجنة</th>
+                      <th>الحالة</th>
+                      <th>الجدولة (يدوية)</th>
+                      <th>مجدولة (CP-SAT)</th>
+                      <th>الهيئة التدريسية</th>
+                      <th>المشاريع</th>
+                      <th style={{ textAlign: 'left' }}>الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -422,7 +422,7 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
                                 </span>
                               ) : (
                                 <span className="cdt-schedule-row is-empty">
-                                  <Calendar size={12} /> No date
+                                  <Calendar size={12} /> لا يوجد تاريخ
                                 </span>
                               )}
                               {c.time && (
@@ -436,7 +436,7 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
                                 </span>
                               ) : (
                                 <span className="cdt-schedule-row is-empty">
-                                  <MapPin size={12} /> No room
+                                  <MapPin size={12} /> لا توجد قاعة
                                 </span>
                               )}
                             </div>
@@ -447,10 +447,10 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
                             {c.scheduled_start ? (
                               <div className="cdt-schedule">
                                 <span className="cdt-schedule-row" style={{ color: '#0369a1', fontWeight: 600 }}>
-                                  <Calendar size={12} /> {new Date(c.scheduled_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                  <Calendar size={12} /> {new Date(c.scheduled_start).toLocaleDateString('ar-IQ', { day: '2-digit', month: 'short' })}
                                 </span>
                                 <span className="cdt-schedule-row" style={{ color: '#0369a1', fontWeight: 600 }}>
-                                  <Clock size={12} /> {new Date(c.scheduled_start).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} - {new Date(c.scheduled_end).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                  <Clock size={12} /> {new Date(c.scheduled_start).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })} - {new Date(c.scheduled_end).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                                 {c.room && (
                                   <span className="cdt-schedule-row">
@@ -503,14 +503,14 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
                             <div className="cdt-actions-cell">
                               <button
                                 className="cdt-action-btn is-primary"
-                                title="View Details"
+                                title="عرض التفاصيل"
                                 onClick={() => onNavigate && onNavigate('committee-detail', { id: c.id })}
                               >
                                 <Eye size={15} />
                               </button>
                               <button
                                 className="cdt-action-btn is-danger"
-                                title="Delete"
+                                title="حذف"
                                 onClick={() => handleDelete(c)}
                                 disabled={busy}
                               >

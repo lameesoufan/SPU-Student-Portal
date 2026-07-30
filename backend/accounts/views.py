@@ -14,9 +14,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from openpyxl import load_workbook
 from django.contrib.auth import authenticate
 from django.conf import settings
-from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
-from .models import User, DEPARTMENTS, StudentReference
+from django.contrib.auth.hashers import make_password, check_password
+from django.utils import timezone
+from datetime import timedelta
+import secrets
+from .models import User, DEPARTMENTS, StudentReference, PasswordResetCode
 from .permissions import IsDeanOrAdmin
 from .selectors import get_doctors
 from .throttles import (
@@ -64,32 +67,107 @@ def _clear_cookie(response, name):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@throttle_classes([PasswordResetThrottle])  # 3/hour
+@throttle_classes([PasswordResetThrottle])
 def request_password_reset(request):
-    email = request.data.get('email')
+    identifier = str(request.data.get('identifier', '')).strip()
+    generic = {'message': 'إذا كان اسم المستخدم صحيحًا فسيصل رمز التحقق إلى البريد الإلكتروني المرتبط بالحساب.'}
+    if not identifier:
+        return Response({'error': 'أدخل اسم المستخدم.'}, status=400)
+
+    # The user only enters their username. The destination email is always
+    # read from the account record in the database; it is never supplied by
+    # the unauthenticated client.
+    user = User.objects.filter(username__iexact=identifier).first()
+    if not user or not user.email:
+        return Response(generic)
+
+    PasswordResetCode.objects.filter(user=user, is_used=False).update(is_used=True)
+    code = f'{secrets.randbelow(1000000):06d}'
+    session_token = secrets.token_urlsafe(48)
+    PasswordResetCode.objects.create(
+        user=user, code_hash=make_password(code), session_token=session_token,
+        expires_at=timezone.now() + timedelta(minutes=10),
+    )
     try:
-        user = User.objects.get(email=email)
-        token = default_token_generator.make_token(user)
         send_mail(
-            'Password Reset',
-            f'Reset link: /reset/{user.pk}/{token}/',
-            'noreply@spu.edu',
-            [email],
+            'رمز إعادة تعيين كلمة المرور - بوابة SPU',
+            f'رمز التحقق الخاص بك هو: {code}\nصلاحية الرمز 10 دقائق. لا تشاركه مع أي شخص.',
+            settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False,
         )
-    except User.DoesNotExist:
-        pass  # لا تكشف وجود email
-    return Response({'message': 'If email exists, reset link was sent.'})
+    except Exception:
+        logger.exception('Password reset email failed for user %s', user.pk)
+        return Response({'error': 'تعذر إرسال البريد الإلكتروني حاليًا. تحقق من إعدادات البريد وحاول لاحقًا.'}, status=503)
+
+    return Response({**generic, 'session_token': session_token, 'email_hint': _mask_email(user.email), 'expires_in_seconds': 600})
+
+
+def _mask_email(email):
+    local, _, domain = (email or '').partition('@')
+    if not domain:
+        return ''
+    visible = local[:2] if len(local) > 2 else local[:1]
+    return f'{visible}{"*" * max(2, len(local)-len(visible))}@{domain}'
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetThrottle])
+def verify_password_reset_code(request):
+    session_token = str(request.data.get('session_token', '')).strip()
+    code = str(request.data.get('code', '')).strip()
+    try:
+        reset = PasswordResetCode.objects.select_related('user').get(session_token=session_token, is_used=False)
+    except PasswordResetCode.DoesNotExist:
+        return Response({'error': 'جلسة الاستعادة غير صالحة أو منتهية.'}, status=400)
+    if reset.is_expired():
+        reset.is_used = True; reset.save(update_fields=['is_used'])
+        return Response({'error': 'انتهت صلاحية الرمز. اطلب رمزًا جديدًا.'}, status=400)
+    if reset.failed_attempts >= 5:
+        reset.is_used = True; reset.save(update_fields=['is_used'])
+        return Response({'error': 'تم تجاوز عدد المحاولات المسموح. اطلب رمزًا جديدًا.'}, status=429)
+    if not check_password(code, reset.code_hash):
+        reset.failed_attempts += 1; reset.save(update_fields=['failed_attempts'])
+        return Response({'error': 'رمز التحقق غير صحيح.'}, status=400)
+    return Response({'message': 'تم التحقق من الرمز بنجاح.', 'verified': True})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetThrottle])
+def reset_password_with_code(request):
+    session_token = str(request.data.get('session_token', '')).strip()
+    code = str(request.data.get('code', '')).strip()
+    new_password = str(request.data.get('new_password', ''))
+    confirm_password = str(request.data.get('confirm_password', ''))
+    if new_password != confirm_password:
+        return Response({'error': 'كلمتا المرور غير متطابقتين.'}, status=400)
+    try:
+        reset = PasswordResetCode.objects.select_related('user').get(session_token=session_token, is_used=False)
+    except PasswordResetCode.DoesNotExist:
+        return Response({'error': 'جلسة الاستعادة غير صالحة أو منتهية.'}, status=400)
+    if reset.is_expired() or not check_password(code, reset.code_hash):
+        return Response({'error': 'رمز التحقق غير صحيح أو منتهي الصلاحية.'}, status=400)
+    result = change_user_password(user=reset.user, new_password=new_password)
+    if not result['ok']:
+        return Response({'error': result['error']}, status=400)
+    reset.is_used = True; reset.save(update_fields=['is_used'])
+    PasswordResetCode.objects.filter(user=reset.user, is_used=False).update(is_used=True)
+    return Response({'message': 'تم تغيير كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.'})
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def change_password(request):
+    current_password = request.data.get('current_password', '')
     new_password     = request.data.get('new_password', '')
     confirm_password = request.data.get('confirm_password', '')
     if not new_password or not confirm_password:
-        return Response({'error': 'Both fields are required.'}, status=400)
+        return Response({'error': 'كلمة المرور الجديدة وتأكيدها مطلوبان.'}, status=400)
+    if not request.user.must_change_password:
+        if not current_password or not request.user.check_password(current_password):
+            return Response({'error': 'كلمة المرور الحالية غير صحيحة.'}, status=400)
     if new_password != confirm_password:
-        return Response({'error': 'Passwords do not match.'}, status=400)
+        return Response({'error': 'كلمتا المرور غير متطابقتين.'}, status=400)
     result = change_user_password(user=request.user, new_password=new_password)
     if not result['ok']:
         return Response({'error': result['error']}, status=400)

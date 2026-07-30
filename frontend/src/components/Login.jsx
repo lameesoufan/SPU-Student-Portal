@@ -14,7 +14,7 @@ const PARTICLES = [
   { size: 140, bg: 'radial-gradient(circle, var(--primary-lighter), transparent 70%)', top: '5%', right: '5%', delay: '10s' },
 ];
 
-export default function Login({ onLogin, onRegister }) {
+export default function Login({ onLogin, onRegister, onForgotPassword }) {
   const { theme } = useTheme();
   const [form, setForm] = useState({ username: '', password: '' });
   const [errors, setErrors] = useState({ username: '', password: '' });
@@ -455,6 +455,7 @@ export default function Login({ onLogin, onRegister }) {
                     </button>
                   </div>
                   {errors.password && <span className="block text-[#ef4444] text-xs mt-1 px-1">{errors.password}</span>}
+                  {onForgotPassword && <button type="button" onClick={onForgotPassword} className="mt-1 self-start bg-transparent border-none p-0 text-sm font-bold text-[var(--primary)] hover:underline">هل نسيت كلمة المرور؟</button>}
                 </div>
 
                 <button

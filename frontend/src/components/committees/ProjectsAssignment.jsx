@@ -48,7 +48,7 @@ export default function ProjectsAssignment({ onBack }) {
       const res = await fetchProjectsAssignment();
       setData(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to load data');
+      setError(err.response?.data?.detail || 'تعذر تحميل البيانات');
     } finally {
       setLoading(false);
     }
@@ -68,7 +68,7 @@ export default function ProjectsAssignment({ onBack }) {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setError('Export failed. Try again.');
+      setError('فشل التصدير. حاول مرة أخرى.');
     } finally {
       setExporting(false);
     }
@@ -87,7 +87,7 @@ export default function ProjectsAssignment({ onBack }) {
         availableCommittees: res.data.available_committees || [],
       });
     } catch (err) {
-      setError('Failed to load available committees');
+      setError('تعذر تحميل اللجان المتاحة');
     }
   };
 
@@ -103,7 +103,7 @@ export default function ProjectsAssignment({ onBack }) {
       setSwapModal(null);
       await loadData(); // Reload data
     } catch (err) {
-      setError('Failed to transfer project. Try again.');
+      setError('فشل نقل المشروع. حاول مرة أخرى.');
     } finally {
       setSwapping(false);
     }
@@ -141,7 +141,7 @@ export default function ProjectsAssignment({ onBack }) {
 
   const handleBulkEdit = () => {
     if (selectedRows.size === 0) {
-      setError('Please select at least one project');
+      setError('يرجى تحديد مشروع واحد على الأقل');
       return;
     }
     setBulkEditModal(true);
@@ -164,7 +164,7 @@ export default function ProjectsAssignment({ onBack }) {
 
   const saveChanges = async () => {
     if (Object.keys(editedProjects).length === 0) {
-      setError('No changes to save');
+      setError('لا توجد تغييرات للحفظ');
       return;
     }
     
@@ -198,7 +198,7 @@ export default function ProjectsAssignment({ onBack }) {
       setError(''); // Clear any previous errors
       await loadData();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save changes. Please try again.');
+      setError(err.response?.data?.detail || 'فشل حفظ التغييرات. يرجى المحاولة مرة أخرى.');
     } finally {
       setSaving(false);
     }
@@ -243,16 +243,16 @@ export default function ProjectsAssignment({ onBack }) {
     return (
       <div className="pa-loading">
         <div className="pa-spinner" />
-        <p>Loading project distribution...</p>
+        <p>جارٍ تحميل توزيع المشاريع...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="pa-page">
+      <div className="pa-page" dir="rtl">
         <button className="pa-back-btn" onClick={onBack}>
-          <ArrowRight size={16} /> Back
+          <ArrowRight size={16} /> رجوع
         </button>
         <div className="pa-error">
           <AlertTriangle size={20} />
@@ -263,17 +263,17 @@ export default function ProjectsAssignment({ onBack }) {
   }
 
   return (
-    <div className="pa-page">
+    <div className="pa-page" dir="rtl">
       {/* Header */}
       <div className="pa-header">
         <div className="pa-header-left">
           <button className="pa-back-btn" onClick={onBack}>
-            <ArrowRight size={16} /> Back
+            <ArrowRight size={16} /> رجوع
           </button>
           <div>
-            <h1 className="pa-title">Projects Distribution Table</h1>
+            <h1 className="pa-title">جدول توزيع المشاريع</h1>
             <p className="pa-subtitle">
-              Comprehensive view of all distributed projects with committee and student details
+              عرض شامل لجميع المشاريع الموزعة مع تفاصيل اللجان والطلاب
             </p>
           </div>
         </div>
@@ -286,7 +286,7 @@ export default function ProjectsAssignment({ onBack }) {
                 disabled={saving || Object.keys(editedProjects).length === 0}
               >
                 <Save size={16} />
-                {saving ? 'Saving...' : `Save Changes (${Object.keys(editedProjects).length})`}
+                {saving ? 'جارٍ الحفظ...' : `Save Changes (${Object.keys(editedProjects).length})`}
               </button>
               <button 
                 className="pa-btn pa-btn-secondary" 
@@ -298,7 +298,7 @@ export default function ProjectsAssignment({ onBack }) {
                 disabled={saving}
               >
                 <X size={16} />
-                Cancel
+                إلغاء
               </button>
             </>
           ) : (
@@ -307,7 +307,7 @@ export default function ProjectsAssignment({ onBack }) {
               onClick={() => setEditMode(true)}
             >
               <Edit3 size={16} />
-              Edit Schedule
+              تعديل الجدول
             </button>
           )}
           <button 
@@ -316,7 +316,7 @@ export default function ProjectsAssignment({ onBack }) {
             disabled={exporting}
           >
             <Download size={16} />
-            {exporting ? 'Exporting...' : 'Export Excel'}
+            {exporting ? 'جارٍ التصدير...' : 'تصدير Excel'}
           </button>
           <div className="pa-stat-badge">
             <FileText size={16} />
@@ -331,7 +331,7 @@ export default function ProjectsAssignment({ onBack }) {
           <Search size={18} />
           <input
             type="text"
-            placeholder="Search by student, project, or supervisor..."
+            placeholder="ابحث باسم الطالب أو المشروع أو المشرف..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -348,25 +348,25 @@ export default function ProjectsAssignment({ onBack }) {
             className={`pa-tab ${filterType === 'seminar_1' ? 'active' : ''}`}
             onClick={() => setFilterType('seminar_1')}
           >
-            Seminar 1
+            سيمينار 1
           </button>
           <button
             className={`pa-tab ${filterType === 'seminar_2' ? 'active' : ''}`}
             onClick={() => setFilterType('seminar_2')}
           >
-            Seminar 2
+            سيمينار 2
           </button>
           <button
             className={`pa-tab ${filterType === 'technical' ? 'active' : ''}`}
             onClick={() => setFilterType('technical')}
           >
-            Technical Committee
+            اللجنة الفنية
           </button>
           <button
             className={`pa-tab ${filterType === 'final_discussion' ? 'active' : ''}`}
             onClick={() => setFilterType('final_discussion')}
           >
-            Final Discussion
+            المناقشة النهائية
           </button>
         </div>
 
@@ -383,10 +383,10 @@ export default function ProjectsAssignment({ onBack }) {
           </span>
           <button className="pa-btn pa-btn-primary" onClick={handleBulkEdit}>
             <Edit3 size={14} />
-            Edit Selected
+            تعديل المحدد
           </button>
           <button className="pa-btn pa-btn-secondary" onClick={() => setSelectedRows(new Set())}>
-            Clear Selection
+            إلغاء التحديد
           </button>
         </div>
       )}
@@ -395,8 +395,8 @@ export default function ProjectsAssignment({ onBack }) {
       {sortedProjects.length === 0 ? (
         <div className="pa-empty">
           <FileText size={48} />
-          <h3>No projects</h3>
-          <p>No projects have been distributed yet or no search results</p>
+          <h3>لا توجد مشاريع</h3>
+          <p>لم يتم توزيع مشاريع بعد أو لا توجد نتائج بحث</p>
         </div>
       ) : (
         <div className="pa-table-container">
@@ -413,18 +413,18 @@ export default function ProjectsAssignment({ onBack }) {
                   </th>
                 )}
                 <th>#</th>
-                <th>Students</th>
-                <th>Project</th>
-                <th>Supervisors</th>
-                <th>Committee</th>
-                <th>Committee Type</th>
-                <th>Department</th>
-                <th>Committee Members</th>
-                <th>Date</th>
+                <th>الطلاب</th>
+                <th>المشروع</th>
+                <th>المشرفون</th>
+                <th>اللجنة</th>
+                <th>نوع اللجنة</th>
+                <th>القسم</th>
+                <th>أعضاء اللجنة</th>
+                <th>التاريخ</th>
                 <th>وقت بداية المناقشة</th>
                 <th>وقت نهاية المناقشة</th>
-                <th>Location</th>
-                {!editMode && <th>Actions</th>}
+                <th>الموقع</th>
+                {!editMode && <th>الإجراءات</th>}
               </tr>
             </thead>
             <tbody>
@@ -543,7 +543,7 @@ export default function ProjectsAssignment({ onBack }) {
                           value={editedProjects[index]?.room_id ?? project.room_id ?? ''}
                           onChange={(e) => handleEditChange(index, 'room_id', e.target.value ? Number(e.target.value) : '')}
                         >
-                          <option value="">Select room</option>
+                          <option value="">اختر القاعة</option>
                           {rooms.map((room) => (
                             <option key={room.id} value={room.id}>{room.name}</option>
                           ))}
@@ -562,10 +562,10 @@ export default function ProjectsAssignment({ onBack }) {
                         <button
                           className="pa-swap-btn"
                           onClick={() => handleSwapClick(project)}
-                          title="Swap committee"
+                          title="تبديل اللجنة"
                         >
                           <Repeat size={14} />
-                          Swap
+                          تبديل
                         </button>
                       </td>
                     )}
@@ -583,7 +583,7 @@ export default function ProjectsAssignment({ onBack }) {
           <div className="pa-modal-backdrop" onClick={() => !swapping && setSwapModal(null)} />
           <div className="pa-swap-modal">
             <div className="pa-modal-header">
-              <h3>Swap Committee</h3>
+              <h3>تبديل اللجنة</h3>
               <button
                 className="pa-modal-close"
                 onClick={() => !swapping && setSwapModal(null)}
@@ -597,14 +597,14 @@ export default function ProjectsAssignment({ onBack }) {
               <div className="pa-project-info">
                 <h4>{swapModal.project.project_title}</h4>
                 <p className="pa-current-committee">
-                  Current committee: <strong>{swapModal.currentCommittee.name}</strong>
+                  اللجنة الحالية: <strong>{swapModal.currentCommittee.name}</strong>
                 </p>
               </div>
 
               <div className="pa-available-list">
-                <h4>Available committees:</h4>
+                <h4>اللجان المتاحة:</h4>
                 {swapModal.availableCommittees.length === 0 ? (
-                  <p className="pa-no-committees">No committees available for transfer</p>
+                  <p className="pa-no-committees">لا توجد لجان متاحة للنقل</p>
                 ) : (
                   swapModal.availableCommittees.map((committee) => (
                     <div key={committee.id} className="pa-committee-card">
@@ -618,12 +618,12 @@ export default function ProjectsAssignment({ onBack }) {
                       <div className="pa-committee-card-body">
                         <div className="pa-committee-info-row">
                           <User size={14} />
-                          <span>Chair: {committee.chair ? (committee.chair.full_name || committee.chair.username || `#${committee.chair.id}`) : '—'}</span>
+                          <span>الرئيس: {committee.chair ? (committee.chair.full_name || committee.chair.username || `#${committee.chair.id}`) : '—'}</span>
                         </div>
                         {committee.members.length > 0 && (
                           <div className="pa-committee-info-row">
                             <Users size={14} />
-                            <span>Members: {committee.members.map(m => m.full_name || m.username).join(', ')}</span>
+                            <span>الأعضاء: {committee.members.map(m => m.full_name || m.username).join(', ')}</span>
                           </div>
                         )}
                         {committee.date && (
@@ -645,7 +645,7 @@ export default function ProjectsAssignment({ onBack }) {
                         onClick={() => handleSwapConfirm(committee.id)}
                         disabled={swapping}
                       >
-                        {swapping ? 'Transferring...' : 'Transfer to this committee'}
+                        {swapping ? 'جارٍ النقل...' : 'نقل إلى هذه اللجنة'}
                       </button>
                     </div>
                   ))
@@ -662,7 +662,7 @@ export default function ProjectsAssignment({ onBack }) {
           <div className="pa-modal-backdrop" onClick={() => setBulkEditModal(false)} />
           <div className="pa-bulk-edit-modal">
             <div className="pa-modal-header">
-              <h3>Bulk Edit Schedule</h3>
+              <h3>تعديل الجدول جماعيًا</h3>
               <button className="pa-modal-close" onClick={() => setBulkEditModal(false)}>
                 <X size={20} />
               </button>
@@ -670,13 +670,13 @@ export default function ProjectsAssignment({ onBack }) {
             
             <div className="pa-modal-body">
               <p className="pa-modal-description">
-                Apply the following changes to <strong>{selectedRows.size}</strong> selected project{selectedRows.size > 1 ? 's' : ''}:
+                تطبيق التغييرات التالية على <strong>{selectedRows.size}</strong> selected project{selectedRows.size > 1 ? 's' : ''}:
               </p>
 
               <div className="pa-form-group">
                 <label>
                   <Calendar size={16} />
-                  Date
+                  التاريخ
                 </label>
                 <input
                   type="date"
@@ -684,13 +684,13 @@ export default function ProjectsAssignment({ onBack }) {
                   value={bulkValues.date}
                   onChange={(e) => setBulkValues(prev => ({ ...prev, date: e.target.value }))}
                 />
-                <small>Leave empty to keep existing values</small>
+                <small>اترك الحقل فارغًا للإبقاء على القيم الحالية</small>
               </div>
 
               <div className="pa-form-group">
                 <label>
                   <Clock size={16} />
-                  Time
+                  الوقت
                 </label>
                 <input
                   type="time"
@@ -698,30 +698,30 @@ export default function ProjectsAssignment({ onBack }) {
                   value={bulkValues.start_time}
                   onChange={(e) => setBulkValues(prev => ({ ...prev, start_time: e.target.value }))}
                 />
-                <small>Leave empty to keep existing values</small>
+                <small>اترك الحقل فارغًا للإبقاء على القيم الحالية</small>
               </div>
 
               <div className="pa-form-group">
                 <label>
                   <MapPin size={16} />
-                  Location
+                  الموقع
                 </label>
                 <select
                   className="pa-form-input"
                   value={bulkValues.room_id}
                   onChange={(e) => setBulkValues(prev => ({ ...prev, room_id: e.target.value }))}
                 >
-                  <option value="">Keep existing room</option>
+                  <option value="">الإبقاء على القاعة الحالية</option>
                   {rooms.map((room) => (
                     <option key={room.id} value={room.id}>{room.name}</option>
                   ))}
                 </select>
-                <small>Leave empty to keep existing values</small>
+                <small>اترك الحقل فارغًا للإبقاء على القيم الحالية</small>
               </div>
 
               <div className="pa-modal-footer">
                 <button className="pa-btn pa-btn-secondary" onClick={() => setBulkEditModal(false)}>
-                  Cancel
+                  إلغاء
                 </button>
                 <button 
                   className="pa-btn pa-btn-primary" 
@@ -739,8 +739,8 @@ export default function ProjectsAssignment({ onBack }) {
 
       {/* Footer Info */}
       <div className="pa-footer">
-        <p>Number of displayed projects: <strong>{sortedProjects.length}</strong></p>
-        <p>Last updated: {new Date().toLocaleString('en-US')}</p>
+        <p>عدد المشاريع المعروضة: <strong>{sortedProjects.length}</strong></p>
+        <p>آخر تحديث: {new Date().toLocaleString('ar-IQ')}</p>
       </div>
     </div>
   );

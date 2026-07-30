@@ -28,9 +28,9 @@ import './TemplateForm.css';
 /* ────────────────────────────────────────────────────────────────────────── */
 
 const STEPS = [
-  { id: 1, label: 'Committee Type',   icon: Gavel },
-  { id: 2, label: 'Faculty',          icon: Users },
-  { id: 3, label: 'Review',           icon: CheckCircle2 },
+  { id: 1, label: 'نوع اللجنة',   icon: Gavel },
+  { id: 2, label: 'الهيئة التدريسية',          icon: Users },
+  { id: 3, label: 'المراجعة',           icon: CheckCircle2 },
 ];
 
 export default function TemplateForm({ onBack, editId, onSaved }) {
@@ -85,7 +85,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
         });
       })
       .catch((err) => {
-        if (active) setError(err.response?.data?.detail || 'Failed to load composition.');
+        if (active) setError(err.response?.data?.detail || 'تعذر تحميل التشكيلة.');
       });
     return () => { active = false; };
   }, [editId]);
@@ -177,10 +177,10 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
       let result;
       if (editId) {
         result = await updateCommitteeTemplate(editId, payload);
-        setSuccess('Composition updated successfully.');
+        setSuccess('تم تحديث التشكيلة بنجاح.');
       } else {
         result = await createCommitteeTemplate(payload);
-        setSuccess('Composition created and committee generated successfully.');
+        setSuccess('تم إنشاء التشكيلة وتوليد اللجنة بنجاح.');
       }
       setTimeout(() => {
         if (onSaved) onSaved(result.data);
@@ -191,7 +191,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
       const msg = typeof data === 'object'
         ? Object.entries(data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' · ')
         : String(data);
-      setError(msg || 'Save failed. Check data and try again.');
+      setError(msg || 'فشل الحفظ. تحقق من البيانات وحاول مرة أخرى.');
     } finally {
       setSubmitting(false);
     }
@@ -199,7 +199,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
 
   /* ── Render ──────────────────────────────────────────────────────────── */
   return (
-    <div className="ctf-page">
+    <div className="ctf-page" dir="rtl">
       {/* Header */}
       <div className="ctf-header">
         <div className="ctf-header-left">
@@ -208,7 +208,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
           </div>
           <div>
             <h1 className="ctf-header-title">
-              {editId ? 'Edit Composition' : 'New Committee Composition'}
+              {editId ? 'تعديل التشكيلة' : 'تشكيلة لجنة جديدة'}
             </h1>
             <p className="ctf-header-sub">
               Select committee type, department, project type, then choose faculty. One committee will be generated per composition — create multiple compositions when more capacity is needed.
@@ -216,7 +216,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
           </div>
         </div>
         <button className="ctf-back" onClick={onBack}>
-          <ArrowRight size={14} /> Back
+          <ArrowRight size={14} /> رجوع
         </button>
       </div>
 
@@ -260,14 +260,14 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
         <div className="ctf-section">
           <div className="ctf-section-header">
             <span className="ctf-section-num">1</span>
-            <h2 className="ctf-section-title">Composition Classification</h2>
+            <h2 className="ctf-section-title">تصنيف التشكيلة</h2>
           </div>
           <div className="ctf-section-body">
 
             {/* Committee Type */}
             <div className="ctf-field">
               <label className="ctf-label">
-                Committee Type <span className="ctf-label-required">*</span>
+                نوع اللجنة <span className="ctf-label-required">*</span>
               </label>
               <div className="ctf-options">
                 {COMMITTEE_TYPES.map((ct) => {
@@ -298,7 +298,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
             {/* Department */}
             <div className="ctf-field">
               <label className="ctf-label">
-                Department <span className="ctf-label-required">*</span>
+                القسم <span className="ctf-label-required">*</span>
               </label>
               <div className="ctf-options">
                 {DEPARTMENTS.map((d) => {
@@ -330,7 +330,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
             <div className="ctf-grid-2">
               <div className="ctf-field">
                 <label className="ctf-label">
-                  Project Type <span className="ctf-label-required">*</span>
+                  نوع المشروع <span className="ctf-label-required">*</span>
                 </label>
                 <div className="ctf-options">
                   {PROJECT_TYPES.map((pt) => {
@@ -356,23 +356,23 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
 
               <div className="ctf-field">
                 <label className="ctf-label">
-                  Semester <span className="ctf-label-required">*</span>
+                  الفصل الدراسي <span className="ctf-label-required">*</span>
                 </label>
                 <input
                   type="text"
                   className="ctf-input"
                   value={form.semester}
                   onChange={(e) => setForm((f) => ({ ...f, semester: e.target.value }))}
-                  placeholder="Example: Fall 2025"
+                  placeholder="مثال: الفصل الأول 2025"
                 />
-                <span className="ctf-hint">Used to filter projects and committees later.</span>
+                <span className="ctf-hint">يُستخدم لاحقًا لتصفية المشاريع واللجان.</span>
               </div>
             </div>
 
             {/* Discussion duration — REQUIRED for solver */}
             <div className="ctf-field">
               <label className="ctf-label">
-                Discussion Duration per Project (minutes) <span className="ctf-label-required">*</span>
+                مدة المناقشة لكل مشروع (بالدقائق) <span className="ctf-label-required">*</span>
               </label>
               <input
                 type="number"
@@ -394,15 +394,15 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
             {/* Optional name */}
             <div className="ctf-field">
               <label className="ctf-label">
-                Custom Composition Name
-                <span className="ctf-section-optional" style={{ marginRight: 8 }}>Optional</span>
+                اسم مخصص للتشكيلة
+                <span className="ctf-section-optional" style={{ marginRight: 8 }}>اختياري</span>
               </label>
               <input
                 type="text"
                 className="ctf-input"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Leave blank to auto-generate from type, department, and project"
+                placeholder="اتركه فارغًا لتوليده تلقائيًا من النوع والقسم والمشروع"
               />
             </div>
 
@@ -423,47 +423,47 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
         <div className="ctf-section">
           <div className="ctf-section-header">
             <span className="ctf-section-num">2</span>
-            <h2 className="ctf-section-title">Faculty</h2>
-            <span className="ctf-section-optional">Chair + Members</span>
+            <h2 className="ctf-section-title">الهيئة التدريسية</h2>
+            <span className="ctf-section-optional">الرئيس والأعضاء</span>
           </div>
           <div className="ctf-section-body">
 
             {/* Selected doctors summary */}
             <div className="ctf-field">
-              <label className="ctf-label">Currently Selected</label>
+              <label className="ctf-label">المحددون حاليًا</label>
               <div className="ctf-selected-summary">
                 {!form.chair && form.members.length === 0 && (
                   <span className="ctf-selected-empty">
-                    No faculty selected yet — choose the chair and members from the list below.
+                    لم يتم اختيار أعضاء هيئة تدريس بعد — اختر الرئيس والأعضاء من القائمة أدناه.
                   </span>
                 )}
                 {form.chair && (
-                  <span className="ctf-chip is-chair" title="Committee Chair">
+                  <span className="ctf-chip is-chair" title="رئيس اللجنة">
                     <span className="ctf-chip-avatar">
                       {doctorName(form.chair).charAt(0)}
                     </span>
                     <span>{doctorName(form.chair)}</span>
-                    <span className="ctf-doctor-role is-chair" style={{ margin: '0 4px' }}>Chair</span>
+                    <span className="ctf-doctor-role is-chair" style={{ margin: '0 4px' }}>الرئيس</span>
                     <button
                       className="ctf-chip-remove"
                       onClick={() => removeDoctor(form.chair)}
-                      title="Remove"
+                      title="إزالة"
                     >
                       <X size={11} />
                     </button>
                   </span>
                 )}
                 {form.members.map((mid) => (
-                  <span key={mid} className="ctf-chip" title="Member">
+                  <span key={mid} className="ctf-chip" title="عضو">
                     <span className="ctf-chip-avatar">
                       {doctorName(mid).charAt(0)}
                     </span>
                     <span>{doctorName(mid)}</span>
-                    <span className="ctf-doctor-role is-member" style={{ margin: '0 4px' }}>Member</span>
+                    <span className="ctf-doctor-role is-member" style={{ margin: '0 4px' }}>عضو</span>
                     <button
                       className="ctf-chip-remove"
                       onClick={() => removeDoctor(mid)}
-                      title="Remove"
+                      title="إزالة"
                     >
                       <X size={11} />
                     </button>
@@ -474,12 +474,12 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
 
             {/* Search */}
             <div className="ctf-field">
-              <label className="ctf-label">Search for Faculty</label>
+              <label className="ctf-label">البحث عن عضو هيئة تدريس</label>
               <div className="ctf-doctor-search">
                 <input
                   type="search"
                   className="ctf-input"
-                  placeholder="Search by name or ID..."
+                  placeholder="ابحث بالاسم أو الرقم..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -490,9 +490,9 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
             {/* Doctor list */}
             <div className="ctf-field">
               <label className="ctf-label">
-                Faculty List
+                قائمة الهيئة التدريسية
                 <span className="ctf-section-optional" style={{ marginRight: 8 }}>
-                  Click "Set as Chair" to select committee chair, or check the box to add as member
+                  Click "تعيين رئيسًا" to select committee chair, or check the box to add as member
                 </span>
               </label>
 
@@ -503,7 +503,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
               ) : filteredDoctors.length === 0 ? (
                 <div className="ctf-alert ctf-alert-info">
                   <Info size={16} />
-                  <span>No faculty matching the search.</span>
+                  <span>لا يوجد أعضاء هيئة تدريس مطابقون للبحث.</span>
                 </div>
               ) : (
                 <div className="ctf-doctor-list">
@@ -548,7 +548,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
                           }}
                         >
                           <UserCheck size={11} />
-                          {isChair ? 'Chair' : 'Set as Chair'}
+                          {isChair ? 'الرئيس' : 'تعيين رئيسًا'}
                         </button>
                       </div>
                     );
@@ -565,27 +565,27 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
         <div className="ctf-section">
           <div className="ctf-section-header">
             <span className="ctf-section-num">3</span>
-            <h2 className="ctf-section-title">Review & Save</h2>
+            <h2 className="ctf-section-title">مراجعة وحفظ</h2>
           </div>
           <div className="ctf-section-body">
 
             <div className="ctf-review-grid">
-              <ReviewItem icon={<Gavel size={16} />} label="Committee Type">
+              <ReviewItem icon={<Gavel size={16} />} label="نوع اللجنة">
                 {COMMITTEE_TYPES.find(c => c.value === form.committee_type)?.label_ar || '—'}
               </ReviewItem>
-              <ReviewItem icon={<Building2 size={16} />} label="Department">
+              <ReviewItem icon={<Building2 size={16} />} label="القسم">
                 {DEPARTMENTS.find(d => d.value === form.department)?.label_ar || '—'}
               </ReviewItem>
-              <ReviewItem icon={<BookOpen size={16} />} label="Project Type">
+              <ReviewItem icon={<BookOpen size={16} />} label="نوع المشروع">
                 {PROJECT_TYPES.find(p => p.value === form.project_type)?.label_ar || '—'}
               </ReviewItem>
-              <ReviewItem icon={<Calendar size={16} />} label="Semester">
+              <ReviewItem icon={<Calendar size={16} />} label="الفصل الدراسي">
                 {form.semester || '—'}
               </ReviewItem>
-              <ReviewItem icon={<UserCheck size={16} />} label="Committee Chair">
+              <ReviewItem icon={<UserCheck size={16} />} label="رئيس اللجنة">
                 {doctorName(form.chair)}
               </ReviewItem>
-              <ReviewItem icon={<Users size={16} />} label="Members Count">
+              <ReviewItem icon={<Users size={16} />} label="عدد الأعضاء">
                 {form.members.length} faculty
               </ReviewItem>
             </div>
@@ -593,7 +593,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
             {/* Members list */}
             {form.members.length > 0 && (
               <div className="ctf-field">
-                <label className="ctf-label">Selected Members</label>
+                <label className="ctf-label">الأعضاء المحددون</label>
                 <div className="ctf-selected-summary">
                   {form.members.map((mid) => (
                     <span key={mid} className="ctf-chip">
@@ -620,13 +620,13 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
       <div className="ctf-actions">
         <div className="ctf-actions-left">
           <button className="ctf-btn ctf-btn-ghost" onClick={onBack} disabled={submitting}>
-            <X size={14} /> Cancel
+            <X size={14} /> إلغاء
           </button>
         </div>
         <div className="ctf-actions-right">
           {step > 1 && (
             <button className="ctf-btn" onClick={prevStep} disabled={submitting}>
-              <ChevronRight size={14} /> Previous
+              <ChevronRight size={14} /> السابق
             </button>
           )}
           {step < 3 ? (
@@ -635,7 +635,7 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
               onClick={nextStep}
               disabled={!stepValid}
             >
-              Next <ChevronLeft size={14} />
+              التالي <ChevronLeft size={14} />
             </button>
           ) : (
             <button
@@ -644,8 +644,8 @@ export default function TemplateForm({ onBack, editId, onSaved }) {
               disabled={!canSubmit || submitting}
             >
               {submitting
-                ? (<><div className="ctf-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Saving…</>)
-                : (<><Save size={14} /> {editId ? 'Update Composition' : 'Save Composition'}</>)}
+                ? (<><div className="ctf-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> جارٍ الحفظ…</>)
+                : (<><Save size={14} /> {editId ? 'تحديث التشكيلة' : 'حفظ التشكيلة'}</>)}
             </button>
           )}
         </div>

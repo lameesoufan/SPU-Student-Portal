@@ -92,8 +92,12 @@ export const fetchCurrentUser = () => api.get('/api/auth/me/');
 export const logoutUser = () =>
   api.post('/api/logout/');
 
-export const changePassword = (new_password, confirm_password) =>
-  api.post('/api/change-password/', { new_password, confirm_password });
+export const changePassword = (new_password, confirm_password, current_password = '') =>
+  api.post('/api/change-password/', { current_password, new_password, confirm_password });
+export const requestPasswordReset = (identifier) => api.post('/api/auth/password-reset/request/', { identifier });
+export const verifyPasswordResetCode = (session_token, code) => api.post('/api/auth/password-reset/verify/', { session_token, code });
+export const confirmPasswordReset = (session_token, code, new_password, confirm_password) =>
+  api.post('/api/auth/password-reset/confirm/', { session_token, code, new_password, confirm_password });
 export const changeUsername = (new_username) =>
   api.post('/api/change-username/', { new_username });
 

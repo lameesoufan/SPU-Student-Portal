@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchWorkflowTemplates, applyWorkflowToProject, fetchAvailableProjects } from '../api';
+import { fetchWorkflowTemplates, applyWorkflowBulk, fetchAvailableProjects } from '../api';
 
 const TRIGGER_DOT_COLORS = {
   project_start: 'bg-emerald-400',
@@ -56,7 +56,7 @@ export default function ApplyWorkflow({ onBack }) {
   const [templates, setTemplates] = useState([]);
   const [projects, setProjects] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [selectedProject, setSelectedProject] = useState('');
+  const [selectedProjects, setSelectedProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -82,15 +82,30 @@ export default function ApplyWorkflow({ onBack }) {
     }
   };
 
-  const handleApply = async () => {
-    if (!selectedTemplate || !selectedProject) {
-      setError('Please select both a workflow template and a target project.');
-      return;
-    }
+  const availableProjects = projects.filter((project) => !project.has_own_workflow);
+  const allAvailableSelected =
+    availableProjects.length > 0 &&
+    availableProjects.every((project) => selectedProjects.includes(project.id));
 
-    const project = projects.find(p => p.id === Number(selectedProject));
-    if (project?.has_workflow) {
-      setError('Selected project already has a workflow assigned. Choose another project.');
+  const toggleProject = (projectId) => {
+    setSelectedProjects((current) =>
+      current.includes(projectId)
+        ? current.filter((id) => id !== projectId)
+        : [...current, projectId]
+    );
+    setError('');
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedProjects(
+      allAvailableSelected ? [] : availableProjects.map((project) => project.id)
+    );
+    setError('');
+  };
+
+  const handleApply = async () => {
+    if (!selectedTemplate || selectedProjects.length === 0) {
+      setError('يرجى اختيار قالب سير العمل ومشروع واحد على الأقل.');
       return;
     }
 
@@ -99,16 +114,21 @@ export default function ApplyWorkflow({ onBack }) {
     setSuccess(false);
 
     try {
-      await applyWorkflowToProject({
+      const response = await applyWorkflowBulk({
         template_id: Number(selectedTemplate),
-        project_board_id: Number(selectedProject)
+        project_ids: selectedProjects,
+        replace_existing: false,
       });
-      setSuccess(true);
-      setSelectedTemplate('');
-      setSelectedProject('');
-      setTimeout(() => setSuccess(false), 3000);
+
+      const applied = response.data?.applied_count || 0;
+      const skipped = response.data?.skipped_count || 0;
+      const errors = response.data?.error_count || 0;
+      setSuccess(`تم إسناد سير العمل إلى ${applied} مشروع${skipped ? `، وتم تجاوز ${skipped}` : ''}${errors ? `، وتعذر إسناد ${errors}` : ''}.`);
+      setSelectedProjects([]);
+      await loadData();
+      setTimeout(() => setSuccess(false), 5000);
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to apply workflow. Please try again.';
+      const msg = err.response?.data?.error || 'تعذر إسناد سير العمل. حاول مرة أخرى.';
       setError(msg);
     } finally {
       setApplying(false);
@@ -128,8 +148,10 @@ export default function ApplyWorkflow({ onBack }) {
   }
 
   const selectedTemplateData = templates.find(t => t.id === Number(selectedTemplate));
-  const selectedProjectData = projects.find(p => p.id === Number(selectedProject));
-  const canApply = selectedTemplate && selectedProject && !selectedProjectData?.has_workflow && !applying;
+  const selectedProjectData = selectedProjects.length === 1
+    ? projects.find((project) => project.id === selectedProjects[0])
+    : null;
+  const canApply = selectedTemplate && selectedProjects.length > 0 && !applying;
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -257,33 +279,90 @@ export default function ApplyWorkflow({ onBack }) {
                 Target Project
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-8">
-                Projects with existing workflows are disabled
+                يمكنك إضافة سير عمل حتى لو أضاف مشرف آخر سيراً لهذا المشروع
               </p>
             </div>
 
             <div className="p-4 space-y-3">
-              <div>
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  Select Project
-                </label>
-                <select
-                  className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 transition-all duration-200"
-                  value={selectedProject}
-                  onChange={e => { setSelectedProject(e.target.value); setError(''); }}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                    اختيار المشاريع
+                  </label>
+                  <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">
+                    تم اختيار {selectedProjects.length}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  disabled={availableProjects.length === 0}
+                  className={`w-full flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+                    allAvailableSelected
+                      ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-900/20 dark:text-violet-300'
+                      : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-violet-300 hover:bg-violet-50/60 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-200'
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
                 >
-                  <option value="">Choose a project...</option>
-                  {projects.map(p => (
-                    <option key={p.id} value={p.id} disabled={p.has_workflow}>
-                      {p.title}{p.has_workflow ? ' — already assigned' : ''}
-                    </option>
-                  ))}
-                </select>
+                  <span className="flex items-center gap-2">
+                    <span className={`flex h-5 w-5 items-center justify-center rounded border ${
+                      allAvailableSelected
+                        ? 'border-violet-600 bg-violet-600 text-white'
+                        : 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800'
+                    }`}>
+                      {allAvailableSelected && '✓'}
+                    </span>
+                    {allAvailableSelected ? 'إلغاء اختيار الكل' : 'اختيار كل المشاريع'}
+                  </span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs text-gray-500 shadow-sm dark:bg-gray-800 dark:text-gray-400">
+                    {availableProjects.length} متاح
+                  </span>
+                </button>
+
+                <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-gray-200 p-2 dark:border-gray-700">
+                  {projects.map((project) => {
+                    const disabled = project.has_own_workflow;
+                    const checked = selectedProjects.includes(project.id);
+                    return (
+                      <label
+                        key={project.id}
+                        className={`flex items-start gap-3 rounded-lg border p-3 transition-colors ${
+                          disabled
+                            ? 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-60 dark:border-gray-800 dark:bg-gray-900/30'
+                            : checked
+                              ? 'cursor-pointer border-violet-300 bg-violet-50/70 dark:border-violet-700 dark:bg-violet-900/20'
+                              : 'cursor-pointer border-transparent hover:border-gray-200 hover:bg-gray-50 dark:hover:border-gray-700 dark:hover:bg-gray-900/30'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={() => toggleProject(project.id)}
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-gray-900 dark:text-white">
+                            {project.title}
+                          </span>
+                          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                            {disabled
+                              ? 'سبق أن أسندت سير عمل لهذا المشروع'
+                              : project.has_workflow
+                                ? `يوجد ${project.workflow_count || 1} سير عمل من جهة أخرى ويمكنك إضافة مسارك`
+                                : 'متاح لإسناد سير العمل'}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Project Preview */}
               {selectedProjectData ? (
                 <div className={`p-3 rounded-xl border ${
-                  selectedProjectData.has_workflow
+                  selectedProjectData.has_own_workflow
                     ? 'border-amber-200 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-900/10'
                     : 'border-emerald-200 dark:border-emerald-700 bg-emerald-50/30 dark:bg-emerald-900/10'
                 } space-y-3`}>
@@ -292,11 +371,11 @@ export default function ApplyWorkflow({ onBack }) {
                       {selectedProjectData.title}
                     </span>
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
-                      selectedProjectData.has_workflow
+                      selectedProjectData.has_own_workflow
                         ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
                         : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
                     }`}>
-                      {selectedProjectData.has_workflow ? 'Assigned' : 'Available'}
+                      {selectedProjectData.has_own_workflow ? 'أضفته مسبقاً' : 'متاح للإسناد'}
                     </span>
                   </div>
 
@@ -311,16 +390,21 @@ export default function ApplyWorkflow({ onBack }) {
                   </div>
 
                   {/* Warning if already assigned */}
-                  {selectedProjectData.has_workflow && (
+                  {selectedProjectData.has_own_workflow ? (
                     <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                      <span className="text-amber-500 flex-shrink-0 mt-0.5">
-                        {Icons.AlertCircle}
-                      </span>
+                      <span className="text-amber-500 flex-shrink-0 mt-0.5">{Icons.AlertCircle}</span>
                       <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
-                        This project already has a workflow. Select another project to apply a template.
+                        لقد أسندت أنت سير عمل فعالاً لهذا المشروع مسبقاً.
                       </p>
                     </div>
-                  )}
+                  ) : selectedProjectData.has_workflow ? (
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                      <span className="text-blue-500 flex-shrink-0 mt-0.5">{Icons.AlertCircle}</span>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                        يوجد حالياً {selectedProjectData.workflow_count || 1} سير عمل من مشرف أو جهة أخرى، ويمكنك إضافة سير عمل مستقل باسمك.
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="py-8 text-center rounded-xl bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-200 dark:border-gray-700">
@@ -339,7 +423,7 @@ export default function ApplyWorkflow({ onBack }) {
         </div>
 
         {/* Connection Visual — Template → Project */}
-        {selectedTemplateData && selectedProjectData && (
+        {selectedTemplateData && selectedProjects.length > 0 && (
           <div className="flex items-center justify-center gap-3 py-2">
             <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">Workflow</span>
             <div className="flex-1 h-px bg-violet-200 dark:bg-violet-700 max-w-[120px]" />
@@ -360,7 +444,7 @@ export default function ApplyWorkflow({ onBack }) {
         {success && (
           <div className="flex items-center gap-2.5 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
             {Icons.CheckCircle}
-            <span>Workflow applied successfully!</span>
+            <span>{success}</span>
           </div>
         )}
 
@@ -376,7 +460,7 @@ export default function ApplyWorkflow({ onBack }) {
             disabled={!canApply}
           >
             {Icons.Play}
-            {applying ? 'Applying workflow...' : 'Apply Workflow'}
+            {applying ? 'جارٍ الإسناد...' : `إسناد إلى ${selectedProjects.length || 0} مشروع`}
           </button>
         </div>
       </div>

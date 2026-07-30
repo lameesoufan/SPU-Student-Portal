@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ChangePassword from './ChangePassword';
 import {
   LayoutGrid,
   Search,
@@ -264,6 +265,7 @@ usePolling(async () => {
 
   /* ── Render sub-pages ── */
   const renderContent = () => {
+    if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword user={user} onBack={goBack} /></div>;
     if (page === 'committees') {
       return (
         <div className="std-page-wrapper">

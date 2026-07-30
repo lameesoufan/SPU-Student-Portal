@@ -5,6 +5,7 @@ from .views import (
     change_username, username_suggestions,
     upload_reference,
     student_login_request, student_login_verify,
+    request_password_reset, verify_password_reset_code, reset_password_with_code,
 )
 from .serializers import CustomTokenObtainPairView
 from django.urls import path
@@ -23,6 +24,9 @@ urlpatterns = [
     path('api/assign-hod/',        assign_hod_view,                      name='assign_hod'),
     path('api/register/',          student_self_register,                name='student_self_register'),
     path('api/upload-reference/',  upload_reference,                     name='upload_reference'),
+    path('api/auth/password-reset/request/', request_password_reset, name='password_reset_request'),
+    path('api/auth/password-reset/verify/', verify_password_reset_code, name='password_reset_verify'),
+    path('api/auth/password-reset/confirm/', reset_password_with_code, name='password_reset_confirm'),
     path('api/auth/student-login-request/', student_login_request,       name='student_login_request'),
     path('api/auth/student-login-verify/',  student_login_verify,        name='student_login_verify'),
 ]

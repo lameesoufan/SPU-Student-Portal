@@ -322,7 +322,7 @@ function Step1SemesterRooms({ form, setField, rooms, toggleRoom }) {
           <label style={labelStyle}>الفصل الدراسي *</label>
           <input type="text" value={form.semester}
             onChange={(e) => setField('semester', e.target.value)}
-            placeholder="Spring 2026" style={inputStyle} />
+            placeholder="الفصل الثاني 2026" style={inputStyle} />
         </div>
         <div>
           <label style={labelStyle}>عدد الأسابيع لكل نوع لجنة</label>
@@ -714,7 +714,7 @@ function UnifiedGantt({ assignments }) {
 
       {Object.entries(byDate).map(([date, roomsData]) => {
         const d = new Date(date);
-        const dateLabel = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+        const dateLabel = d.toLocaleDateString('ar-IQ', { weekday: 'long', day: 'numeric', month: 'short' });
         return (
           <div key={date} style={{ marginBottom: 16, border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
             <div style={{ background: '#f1f5f9', padding: '8px 14px', fontWeight: 700, fontSize: '0.88rem' }}>

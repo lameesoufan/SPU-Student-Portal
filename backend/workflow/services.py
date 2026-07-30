@@ -487,16 +487,17 @@ def apply_workflow_to_project(user, project_board_id, template_id):
 
     with transaction.atomic():
         if ProjectWorkflow.objects.select_for_update().filter(
-            project_board_id=project_board_id, is_active=True
+            project_board_id=project_board_id, assigned_by=user, is_active=True
         ).exists():
-            return {'ok': False, 'error': 'Project already has an active workflow', 'status': 400}
+            return {'ok': False, 'error': 'You already assigned an active workflow to this project', 'status': 400}
 
         try:
             project_workflow = ProjectWorkflow.objects.create(
-                project_board_id=project_board_id, template=template, is_active=True
+                project_board_id=project_board_id, template=template,
+                assigned_by=user, is_active=True
             )
         except IntegrityError:
-            return {'ok': False, 'error': 'Project already has an active workflow', 'status': 400}
+            return {'ok': False, 'error': 'You already assigned an active workflow to this project', 'status': 400}
 
         project_start_date = timezone.localdate()
         _create_stage_instances_for_workflow(project_workflow, template.stages.all(), project_start_date)
@@ -521,13 +522,19 @@ def get_project_workflow_data(user, project_board_id):
     if not user_can_access_project(user, project_board):
         return {'ok': False, 'error': 'Not allowed to view this workflow', 'status': 403}
 
-    try:
-        workflow = ProjectWorkflow.objects.prefetch_related(
-            'stage_instances__stage__fields', 'stage_instances__field_responses'
-        ).get(project_board_id=project_board_id, is_active=True)
-        return {'ok': True, 'workflow': workflow}
-    except ProjectWorkflow.DoesNotExist:
+    workflows = ProjectWorkflow.objects.filter(
+        project_board_id=project_board_id, is_active=True
+    ).select_related(
+        'template__created_by', 'assigned_by'
+    ).prefetch_related(
+        'template__stages__fields',
+        'stage_instances__stage__fields',
+        'stage_instances__field_responses'
+    ).order_by('-started_at')
+
+    if not workflows.exists():
         return {'ok': False, 'error': 'No active workflow found for this project', 'status': 404}
+    return {'ok': True, 'workflows': workflows}
 
 
 def get_pending_stages_for_student(user):
@@ -842,14 +849,14 @@ def list_available_projects(user):
     )
 
     project_list = list(projects[:500])
-    active_workflows = {
-        workflow.project_board_id: workflow
-        for workflow in ProjectWorkflow.objects.filter(
-            project_board_id__in=[project.id for project in project_list], is_active=True,
-        ).select_related('template__created_by')
-    }
+    all_active_workflows = list(ProjectWorkflow.objects.filter(
+        project_board_id__in=[project.id for project in project_list], is_active=True,
+    ).select_related('template__created_by', 'assigned_by'))
+    workflows_by_project = {}
+    for workflow in all_active_workflows:
+        workflows_by_project.setdefault(workflow.project_board_id, []).append(workflow)
 
-    workflow_ids = [w.id for w in active_workflows.values()]
+    workflow_ids = [w.id for w in all_active_workflows]
     stage_stats = {
         row[0]: (row[1], row[2])
         for row in WorkflowStageInstance.objects.filter(
@@ -877,14 +884,16 @@ def list_available_projects(user):
             continue
 
         team_members = project.participants_with_status
-        workflow = active_workflows.get(project.id)
-        has_workflow = workflow is not None
+        project_workflows = workflows_by_project.get(project.id, [])
+        own_workflow = next((w for w in project_workflows if w.assigned_by_id == user.id), None)
+        has_workflow = bool(project_workflows)
+        has_own_workflow = own_workflow is not None
 
         workflow_status = None
         completed_stages = 0
         total_stages = 0
-        if has_workflow:
-            total_stages, completed_stages = stage_stats.get(workflow.id, (0, 0))
+        if own_workflow:
+            total_stages, completed_stages = stage_stats.get(own_workflow.id, (0, 0))
             if completed_stages == 0:
                 workflow_status = 'NOT_STARTED'
             elif completed_stages < total_stages:
@@ -892,7 +901,7 @@ def list_available_projects(user):
             else:
                 workflow_status = 'COMPLETED'
 
-        workflow_created_by_user = bool(workflow and workflow.template.created_by == user)
+        workflow_created_by_user = bool(own_workflow)
         is_project_supervisor = user_is_project_supervisor(user, project)
         can_review = workflow_created_by_user or is_project_supervisor
 
@@ -909,6 +918,8 @@ def list_available_projects(user):
                 else project.application.operational_status if project.application_id else None
             ),
             'has_workflow': has_workflow,
+            'has_own_workflow': has_own_workflow,
+            'workflow_count': len(project_workflows),
             'workflow_status': workflow_status,
             'completed_stages': completed_stages,
             'total_stages': total_stages,
@@ -933,9 +944,16 @@ def apply_workflow_bulk(user, template_id, project_ids, replace_existing=True):
 
     from project_management.models import ProjectBoard
 
+    # Only the current user's workflow counts as an existing workflow here.
+    # A workflow assigned by another supervisor or by the HoD must remain active
+    # and must not prevent this user from assigning a separate workflow.
     existing_workflows = {
         pw.project_board_id: pw
-        for pw in ProjectWorkflow.objects.filter(project_board_id__in=project_ids, is_active=True)
+        for pw in ProjectWorkflow.objects.filter(
+            project_board_id__in=project_ids,
+            assigned_by=user,
+            is_active=True,
+        )
     }
 
     results = {'applied': [], 'replaced': [], 'skipped': [], 'errors': []}
@@ -958,7 +976,7 @@ def apply_workflow_bulk(user, template_id, project_ids, replace_existing=True):
         existing_wf = existing_workflows.get(pid)
 
         if existing_wf and not replace_existing:
-            results['skipped'].append({'project_board_id': pid, 'reason': 'Already has active workflow'})
+            results['skipped'].append({'project_board_id': pid, 'reason': 'You already assigned an active workflow'})
             continue
 
         with transaction.atomic():
@@ -973,7 +991,7 @@ def apply_workflow_bulk(user, template_id, project_ids, replace_existing=True):
 
             try:
                 project_workflow = ProjectWorkflow.objects.create(
-                    project_board_id=pid, template=template, is_active=True
+                    project_board_id=pid, template=template, assigned_by=user, is_active=True
                 )
             except IntegrityError:
                 results['skipped'].append({'project_board_id': pid, 'reason': 'Conflict creating workflow'})
@@ -1021,7 +1039,7 @@ def replace_workflow_for_project(user, project_board_id, new_template_id, keep_c
     with transaction.atomic():
         try:
             old_workflow = ProjectWorkflow.objects.select_for_update().get(
-                project_board_id=project_board_id, is_active=True
+                project_board_id=project_board_id, assigned_by=user, is_active=True
             )
         except ProjectWorkflow.DoesNotExist:
             return {'ok': False, 'error': 'No active workflow found for this project', 'status': 404}
@@ -1042,7 +1060,7 @@ def replace_workflow_for_project(user, project_board_id, new_template_id, keep_c
 
         try:
             new_workflow = ProjectWorkflow.objects.create(
-                project_board_id=project_board_id, template=new_template, is_active=True
+                project_board_id=project_board_id, template=new_template, assigned_by=user, is_active=True
             )
         except IntegrityError:
             return {'ok': False, 'error': 'Conflict creating new workflow', 'status': 400}
@@ -1070,8 +1088,8 @@ def get_projects_workflow_status(user):
     active_workflows = {
         workflow.project_board_id: workflow
         for workflow in ProjectWorkflow.objects.filter(
-            project_board_id__in=[p.id for p in project_list], is_active=True
-        ).select_related('template__created_by')
+            project_board_id__in=[p.id for p in project_list], assigned_by=user, is_active=True
+        ).select_related('template__created_by', 'assigned_by')
     }
 
     workflow_ids = [w.id for w in active_workflows.values()]

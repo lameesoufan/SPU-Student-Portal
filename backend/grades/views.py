@@ -737,12 +737,73 @@ class MyGradesView(APIView):
             grades_by_type = {g.committee_type: ProjectGradeSerializer(g).data for g in grades}
             total = sum(g.total_score for g in grades)
 
+            # جلب التشكيلات الحالية مباشرة من جداول اللجان في كل طلب.
+            # بهذه الطريقة أي تعديل يجريه العميد على رئيس اللجنة أو أعضائها
+            # أو موعدها يظهر تلقائياً للطالب دون تخزين نسخة قديمة في العلامات.
+            project_filter = (
+                {'applications__id': pid}
+                if source == 'IdeaApplication'
+                else {'proposals__id': pid}
+            )
+            committees_qs = (
+                Committee.objects
+                .filter(**project_filter)
+                .select_related('chair', 'room')
+                .prefetch_related('members')
+                .order_by('committee_type', '-updated_at', '-id')
+                .distinct()
+            )
+
+            committees_by_type = {}
+            for committee in committees_qs:
+                # يفترض النظام لجنة واحدة لكل نوع للمشروع. عند وجود بيانات قديمة
+                # مكررة نعرض أحدث لجنة عدّلها العميد.
+                if committee.committee_type in committees_by_type:
+                    continue
+
+                chair = None
+                if committee.chair_id:
+                    chair = {
+                        'id': committee.chair_id,
+                        'name': committee.chair.get_full_name() or committee.chair.username,
+                    }
+
+                members = [
+                    {
+                        'id': member.id,
+                        'name': member.get_full_name() or member.username,
+                    }
+                    for member in committee.members.all()
+                ]
+
+                committees_by_type[committee.committee_type] = {
+                    'id': committee.id,
+                    'committee_type': committee.committee_type,
+                    'committee_type_ar': COMMITTEE_TYPE_AR.get(
+                        committee.committee_type, committee.committee_type
+                    ),
+                    'chair': chair,
+                    'members': members,
+                    'date': committee.date.isoformat() if committee.date else None,
+                    'start_time': (
+                        committee.start_time.strftime('%H:%M')
+                        if committee.start_time else
+                        committee.time.strftime('%H:%M') if committee.time else None
+                    ),
+                    'end_time': committee.end_time.strftime('%H:%M') if committee.end_time else None,
+                    'location': committee.location or '',
+                    'room_name': committee.room.name if committee.room_id else None,
+                    'status': committee.status,
+                    'updated_at': committee.updated_at.isoformat(),
+                }
+
             result.append({
                 'project_source':  source,
                 'project_id':      pid,
                 'project_title':   title,
                 'role':            part.role,
                 'grades':          grades_by_type,
+                'committees':      committees_by_type,
                 'total_score':     total,
                 'max_total':       100,
                 'report_uploaded': report is not None,

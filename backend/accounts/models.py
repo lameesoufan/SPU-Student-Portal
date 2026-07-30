@@ -136,3 +136,22 @@ class OTPCode(models.Model):
             expires_at=expires_at,
             ip_address=ip_address,
         )
+
+
+class PasswordResetCode(models.Model):
+    """Short-lived email code used to reset a forgotten password."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_codes')
+    code_hash = models.CharField(max_length=128)
+    session_token = models.CharField(max_length=96, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['session_token']), models.Index(fields=['expires_at'])]
+
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() >= self.expires_at

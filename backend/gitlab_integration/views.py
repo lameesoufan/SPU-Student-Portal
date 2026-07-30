@@ -20,6 +20,137 @@ from . import services
 logger = logging.getLogger(__name__)
 
 
+
+
+def _relink_project_to_current_user_namespace(request, board, gitlab_project):
+    """Repair stale GitLab links and bind the board to the student's real repository.
+
+    Legacy records may point to ``root/<slug>-<board_id>``.  We first try the
+    expected path under the linked GitLab username, then fall back to listing
+    projects visible to that user's token and selecting the best namespace/path
+    match.  GitLab's response is always treated as the authoritative source.
+    """
+    try:
+        linked_user = GitLabUser.objects.get(user=request.user)
+    except GitLabUser.DoesNotExist:
+        return gitlab_project
+
+    username = (linked_user.gitlab_username or '').strip()
+    if not username:
+        return gitlab_project
+
+    current_path = (gitlab_project.gitlab_project_path or '').strip('/')
+    if current_path.startswith(f'{username}/'):
+        return gitlab_project
+
+    suffix = f'-{board.id}'
+    stored_slug = current_path.rsplit('/', 1)[-1] if current_path else ''
+    if stored_slug.endswith(suffix):
+        stored_slug = stored_slug[:-len(suffix)]
+
+    raw_name = getattr(board, 'title', '') or gitlab_project.project_name or stored_slug
+    board_slug = services._sanitize_project_path(raw_name)
+    if board_slug.endswith(suffix):
+        board_slug = board_slug[:-len(suffix)]
+
+    candidate_slugs = []
+    for slug in (stored_slug, board_slug, services._sanitize_project_path(gitlab_project.project_name or '')):
+        if slug.endswith(suffix):
+            slug = slug[:-len(suffix)]
+        if slug and slug not in candidate_slugs:
+            candidate_slugs.append(slug)
+
+    from urllib.parse import quote
+    project_data = None
+
+    # Fast path: resolve exact namespace/path candidates.
+    for slug in candidate_slugs:
+        candidate = f'{username}/{slug}'
+        try:
+            project_data = services.gitlab_api_get(
+                f"/api/v4/projects/{quote(candidate, safe='')}",
+                token=linked_user.access_token,
+            )
+            break
+        except services.GitLabAPIError:
+            continue
+
+    # Robust fallback: query all projects visible to the student's token.
+    # This handles renamed repositories and old records whose board title differs
+    # from the actual GitLab repository path.
+    if not project_data:
+        search_terms = [slug for slug in candidate_slugs if slug]
+        if not search_terms:
+            search_terms = ['']
+
+        visible_projects = []
+        seen_ids = set()
+        for term in search_terms:
+            try:
+                results = services.gitlab_api_get(
+                    '/api/v4/projects',
+                    token=linked_user.access_token,
+                    params={
+                        'membership': 'true',
+                        'simple': 'true',
+                        'per_page': 100,
+                        **({'search': term} if term else {}),
+                    },
+                )
+            except services.GitLabAPIError:
+                continue
+            if not isinstance(results, list):
+                continue
+            for item in results:
+                if item.get('id') not in seen_ids:
+                    visible_projects.append(item)
+                    seen_ids.add(item.get('id'))
+
+        username_lower = username.lower()
+        normalized_candidates = {slug.lower().replace('_', '-') for slug in candidate_slugs}
+
+        def score(item):
+            path_ns = (item.get('path_with_namespace') or '').strip('/')
+            namespace, _, path = path_ns.partition('/')
+            path_norm = path.lower().replace('_', '-')
+            value = 0
+            if namespace.lower() == username_lower:
+                value += 100
+            if path_norm in normalized_candidates:
+                value += 80
+            if any(path_norm.startswith(c) or c.startswith(path_norm) for c in normalized_candidates if c):
+                value += 40
+            # Prefer repositories owned by the linked user's namespace.
+            owner = ((item.get('namespace') or {}).get('full_path') or '').lower()
+            if owner == username_lower:
+                value += 30
+            return value
+
+        if visible_projects:
+            best = max(visible_projects, key=score)
+            if score(best) >= 100:
+                project_data = best
+
+    if not project_data:
+        logger.warning(
+            'Could not relink board %s from %s to GitLab namespace %s',
+            board.id, current_path, username,
+        )
+        return gitlab_project
+
+    gitlab_project.gitlab_project_id = project_data['id']
+    gitlab_project.project_name = project_data.get('name', gitlab_project.project_name)
+    gitlab_project.gitlab_project_path = project_data.get('path_with_namespace', gitlab_project.gitlab_project_path)
+    gitlab_project.web_url = services._fix_gitlab_url(project_data.get('web_url', gitlab_project.web_url))
+    gitlab_project.ssh_url = project_data.get('ssh_url_to_repo', gitlab_project.ssh_url)
+    gitlab_project.http_url = services._fix_gitlab_url(project_data.get('http_url_to_repo', gitlab_project.http_url))
+    gitlab_project.default_branch = project_data.get('default_branch', gitlab_project.default_branch)
+    gitlab_project.visibility = project_data.get('visibility', gitlab_project.visibility)
+    gitlab_project.is_orphaned = False
+    gitlab_project.save()
+    logger.info('Relinked board %s GitLab project to %s', board.id, gitlab_project.gitlab_project_path)
+    return gitlab_project
+
 def _handle_unexpected_error(view_name: str, err: Exception) -> Response:
     """Handle unexpected errors consistently across all views."""
     error_detail = str(err)
@@ -116,7 +247,7 @@ class GitLabConfigView(views.APIView):
     def get(self, request):
         return Response({
             'success': True,
-            'gitlab_url': settings.GITLAB_URL,
+            'gitlab_url': getattr(settings, 'GITLAB_EXTERNAL_URL', settings.GITLAB_URL),
         })
 
 
@@ -366,11 +497,44 @@ class BoardGitLabInfoView(views.APIView):
                 'data': None,
             })
 
+        # Repair legacy links that point to root/<project>-<board_id> even though
+        # the student's actual repository lives under their GitLab namespace.
+        gitlab_project = _relink_project_to_current_user_namespace(
+            request, board, gitlab_project
+        )
+
         serializer = GitLabProjectSerializer(gitlab_project)
+        data = dict(serializer.data)
+
+        # Keep the overview current even after a page refresh. Failure to fetch
+        # optional activity must not prevent the repository itself from loading.
+        try:
+            user_token = None
+            try:
+                user_token = GitLabUser.objects.get(user=request.user).access_token
+            except GitLabUser.DoesNotExist:
+                pass
+
+            try:
+                activity = services.get_repository_activity(gitlab_project, user_token=user_token)
+            except services.GitLabAPIError:
+                activity = services.get_repository_activity(gitlab_project, user_token=None)
+            data.update(activity)
+        except Exception as exc:
+            logger.warning("Could not load live GitLab activity for board %s: %s", board_id, exc)
+            data.update({
+                'branches_count': 1 if gitlab_project.default_branch else 0,
+                'branches': [],
+                'merge_requests_count': 0,
+                'open_merge_requests_count': 0,
+                'merge_requests': [],
+                'open_issues_count': 0,
+            })
+
         return Response({
             'success': True,
             'has_gitlab_project': True,
-            'data': serializer.data,
+            'data': data,
         })
 
     def post(self, request, board_id):
@@ -399,6 +563,10 @@ class BoardGitLabInfoView(views.APIView):
                 'success': False,
                 'message': 'هذا المشروع غير مرتبط بمستودع GitLab',
             }, status=status.HTTP_404_NOT_FOUND)
+
+        gitlab_project = _relink_project_to_current_user_namespace(
+            request, board, gitlab_project
+        )
 
         try:
             # Try to get the user's personal GitLab token
@@ -445,7 +613,7 @@ class BoardGitLabInfoView(views.APIView):
                     return url
                 try:
                     from urllib.parse import urlparse, urlunparse
-                    external = getattr(settings, 'GITLAB_URL', '').rstrip('/')
+                    external = getattr(settings, 'GITLAB_EXTERNAL_URL', settings.GITLAB_URL).rstrip('/')
                     if not external:
                         return url
                     parsed = urlparse(url)

@@ -15,12 +15,13 @@ import DeanDashboard from './components/DeanDashboard';
 import AssignHod from './components/AssignHod';
 import ChangePassword from './components/ChangePassword';
 import ChangeUsername from './components/ChangeUsername';
+import ForgotPassword from './components/ForgotPassword';
 
 
 function AppInner() {
   const [user, setUser]     = useState(null);
   const [page, setPage, goBack] = usePageHistory('dashboard');
-  const [screen, setScreen] = useState('login'); // 'login' | 'register'
+  const [screen, setScreen] = useState('login'); // login | register | forgot-password
   const [bootstrapped, setBootstrapped] = useState(false);
 
   // ── Restore session on app mount ──
@@ -68,9 +69,11 @@ function AppInner() {
   }
 
   if (!user) {
+    if (screen === 'forgot-password')
+      return <ForgotPassword onBack={() => setScreen('login')} />;
     if (screen === 'register')
       return <SelfRegister onRegistered={handleRegistered} onBack={() => setScreen('login')} />;
-    return <Login onLogin={handleLogin} onRegister={() => setScreen('register')} />;
+    return <Login onLogin={handleLogin} onRegister={() => setScreen('register')} onForgotPassword={() => setScreen('forgot-password')} />;
   }
 
   if (user.must_change_password)

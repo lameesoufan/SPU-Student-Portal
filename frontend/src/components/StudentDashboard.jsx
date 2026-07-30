@@ -5,6 +5,7 @@ import BrowseIdeas from './BrowseIdeas';
 import MyInvitations from './MyInvitations';
 import MyProject from './MyProject';
 import MyGrades from './MyGrades';
+import ChangePassword from './ChangePassword';
 import {
   fetchUnreadCount,
   fetchNotifications,
@@ -558,6 +559,7 @@ const getBreadcrumbs = () => {
 const breadcrumbs = getBreadcrumbs();
   /* ── Render sub-pages ── */
   const renderContent = () => {
+    if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword user={user} onBack={goBack} /></div>;
     if (page === 'propose') {
       return (
         <div className="std-page-wrapper">

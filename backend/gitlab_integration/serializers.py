@@ -95,7 +95,7 @@ class GitLabProjectSerializer(serializers.ModelSerializer):
         if not url:
             return url
         from django.conf import settings
-        external = getattr(settings, 'GITLAB_URL', '').rstrip('/')
+        external = getattr(settings, 'GITLAB_EXTERNAL_URL', settings.GITLAB_URL).rstrip('/')
         if not external:
             return url
         try:

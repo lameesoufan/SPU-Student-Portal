@@ -133,12 +133,22 @@ class WorkflowStageInstanceSerializer(serializers.ModelSerializer):
 
 
 class ProjectWorkflowSerializer(serializers.ModelSerializer):
+    assigned_by_name = serializers.SerializerMethodField()
+    assigned_by_role = serializers.CharField(source='assigned_by.role', read_only=True)
     template_details = WorkflowTemplateSerializer(source='template', read_only=True)
     stage_instances = WorkflowStageInstanceSerializer(many=True, read_only=True)
     
+    def get_assigned_by_name(self, obj):
+        user = obj.assigned_by or obj.template.created_by
+        if not user:
+            return ''
+        full_name = user.get_full_name().strip()
+        return full_name or user.username
+
     class Meta:
         model = ProjectWorkflow
         fields = [
     'id', 'project_board', 'template', 'template_details',
-    'stage_instances', 'started_at', 'completed_at', 'is_active'
+    'stage_instances', 'assigned_by', 'assigned_by_name', 'assigned_by_role',
+    'started_at', 'completed_at', 'is_active'
         ]  

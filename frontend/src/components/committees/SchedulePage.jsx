@@ -175,7 +175,7 @@ export default function SchedulePage({ onBack }) {
           {/* Semester */}
           <div>
             <label style={labelStyle}>الفصل الدراسي *</label>
-            <input type="text" placeholder="Spring 2026" value={semester}
+            <input type="text" placeholder="الفصل الثاني 2026" value={semester}
               onChange={(e) => setSemester(e.target.value)} style={inputStyle} />
           </div>
           {/* Discussion duration */}
@@ -327,7 +327,7 @@ export default function SchedulePage({ onBack }) {
             <thead>
               <tr>
                 <th style={thStyle}>#</th><th style={thStyle}>النوع</th><th style={thStyle}>الفصل</th>
-                <th style={thStyle}>الحالة</th><th style={thStyle}>Solver</th><th style={thStyle}>الزمن</th>
+                <th style={thStyle}>الحالة</th><th style={thStyle}>المحلّل</th><th style={thStyle}>الزمن</th>
                 <th style={thStyle}>بواسطة</th><th style={thStyle}>التاريخ</th><th style={thStyle}></th>
               </tr>
             </thead>
@@ -342,7 +342,7 @@ export default function SchedulePage({ onBack }) {
                     <td style={tdStyle}>{r.solver_status || '—'}</td>
                     <td style={tdStyle}>{r.solver_wall_time_sec?.toFixed(2) || 0}ث</td>
                     <td style={tdStyle}>{r.requested_by_name || '—'}</td>
-                    <td style={tdStyle}>{new Date(r.requested_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                    <td style={tdStyle}>{new Date(r.requested_at).toLocaleString('ar-IQ', { dateStyle: 'short', timeStyle: 'short' })}</td>
                     <td style={tdStyle}>
                       <button onClick={() => setExpandedRunId(expandedRunId === r.id ? null : r.id)} style={btnIconSm} title="عرض التفاصيل">
                         <ChevronDown size={14} style={{ transform: expandedRunId === r.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
@@ -412,7 +412,7 @@ function GanttChart({ plan }) {
       <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 12 }}>خريطة الجدولة (Gantt)</h4>
       {Object.entries(byDate).map(([date, roomsData]) => {
         const d = new Date(date);
-        const dateLabel = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+        const dateLabel = d.toLocaleDateString('ar-IQ', { weekday: 'long', day: 'numeric', month: 'short' });
         return (
           <div key={date} style={{ marginBottom: 20, border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
             <div style={{ background: '#f1f5f9', padding: '8px 14px', fontWeight: 700, fontSize: '0.88rem' }}>📅 {dateLabel}</div>

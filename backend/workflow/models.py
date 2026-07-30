@@ -124,6 +124,13 @@ class ProjectWorkflow(models.Model):
         related_name='workflows',              
     )
     template = models.ForeignKey(WorkflowTemplate, on_delete=models.CASCADE, related_name='project_workflows')
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='assigned_project_workflows',
+        null=True, blank=True,
+        help_text='The doctor or HOD who assigned this workflow to the project',
+    )
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -132,9 +139,9 @@ class ProjectWorkflow(models.Model):
         ordering = ['-started_at']
         constraints = [
             models.UniqueConstraint(
-                fields=['project_board'],
+                fields=['project_board', 'assigned_by'],
                 condition=Q(is_active=True),
-                name='unique_active_workflow_per_project_board',
+                name='unique_active_workflow_per_project_assigner',
             ),
         ]
         indexes = [

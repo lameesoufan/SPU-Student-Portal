@@ -109,7 +109,7 @@ export default function WorkflowReview({ onBack }) {
     setError('');
     try {
       const res = await fetchProjectWorkflow(projectId);
-      setWorkflow(res.data);
+      setWorkflow(Array.isArray(res.data) ? (res.data[0] || null) : res.data);
       setSelectedProject(projects.find(p => p.id === projectId));
       setActiveStageIdx(null);
     } catch {

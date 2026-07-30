@@ -20,7 +20,7 @@ const WEEKDAYS_OPTIONS = [
 ];
 
 const emptyForm = {
-  name: 'Default',
+  name: 'افتراضي',
   committee_type: 'seminar_1',
   semester: '',
   date_range_start: '',
@@ -263,7 +263,7 @@ function SettingsForm({ draft, setDraft, toggleWorkday }) {
         </select>
       </FormField>
       <FormField label="الفصل الدراسي">
-        <input type="text" placeholder="Spring 2026" value={draft.semester} onChange={(e) => setDraft({ ...draft, semester: e.target.value })} style={inputStyle} />
+        <input type="text" placeholder="الفصل الثاني 2026" value={draft.semester} onChange={(e) => setDraft({ ...draft, semester: e.target.value })} style={inputStyle} />
       </FormField>
       <FormField label="الحالة">
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}>

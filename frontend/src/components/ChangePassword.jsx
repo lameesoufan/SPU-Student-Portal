@@ -1,121 +1,41 @@
 import React, { useState } from 'react';
 import { changePassword } from '../api';
+import { Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react';
 
-export default function ChangePassword({ user, onSuccess }) {
-  const [form, setForm] = useState({ new_password: '', confirm_password: '' });
+export default function ChangePassword({ user, onSuccess, onBack }) {
+  const forced = Boolean(user?.must_change_password);
+  const [form, setForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
+  const [show, setShow] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (form.new_password !== form.confirm_password) {
-      setError('Passwords do not match.');
-      return;
-    }
-
+  const submit = async (e) => {
+    e.preventDefault(); setError(''); setSuccess('');
+    if (form.new_password !== form.confirm_password) { setError('كلمتا المرور غير متطابقتين.'); return; }
     setLoading(true);
     try {
-      await changePassword(form.new_password, form.confirm_password);
-      onSuccess();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to change password.');
-    } finally {
-      setLoading(false);
-    }
+      await changePassword(form.new_password, form.confirm_password, form.current_password);
+      setSuccess('تم تغيير كلمة المرور بنجاح.');
+      setForm({ current_password: '', new_password: '', confirm_password: '' });
+      if (onSuccess) setTimeout(onSuccess, 700);
+    } catch (err) { setError(err.response?.data?.error || 'تعذر تغيير كلمة المرور.'); }
+    finally { setLoading(false); }
   };
 
-  const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
-
-  const hintOk = 'text-emerald-600 before:content-["✓"] before:absolute before:left-0 before:text-emerald-600';
-  const hintFail = 'text-red-500 before:content-["✗"] before:absolute before:left-0 before:text-red-500';
-  const hintDefault = 'text-gray-500 dark:text-gray-400 before:content-["○"] before:absolute before:left-0 before:text-gray-400 dark:before:text-gray-500';
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-6">
-      <div className="card bg-white dark:bg-gray-800 rounded-2xl shadow-md w-full max-w-[440px] overflow-hidden border border-gray-200 dark:border-gray-700">
-        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-center py-10 px-8">
-          <div className="w-14 h-14 mx-auto mb-4 flex items-center justify-center bg-white/15 rounded-full" aria-hidden="true">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-          </div>
-          <h1 className="text-[22px] font-extrabold m-0 mb-1.5 tracking-tight">تغيير كلمة المرور</h1>
-          <p className="text-[13px] opacity-90 font-medium m-0">يجب تعيين كلمة مرور جديدة قبل المتابعة</p>
-        </div>
-
-        <div className="card-body p-8">
-          <div className="flex items-start gap-3 bg-sky-50 dark:bg-sky-900/20 border-l-4 border-l-violet-500 rounded-md p-4 text-[13px] text-sky-700 dark:text-sky-300 mb-6 leading-relaxed" role="note">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet-600 flex-shrink-0 mt-0.5" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="16" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12.01" y2="8" />
-            </svg>
-            <span>
-              Your current password is your university ID (<strong className="font-bold">{user.username}</strong>).
-              Please choose a new secure password.
-            </span>
-          </div>
-
-          {error && <div className="alert alert-error" role="alert">{error}</div>}
-
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="new_password">كلمة المرور الجديدة</label>
-              <input
-                id="new_password"
-                className="form-control"
-                type="password"
-                placeholder="8 أحرف على الأقل"
-                value={form.new_password}
-                onChange={set('new_password')}
-                required
-                autoComplete="new-password"
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="confirm_password">تأكيد كلمة المرور</label>
-              <input
-                id="confirm_password"
-                className="form-control"
-                type="password"
-                placeholder="أعد إدخال كلمة المرور الجديدة"
-                value={form.confirm_password}
-                onChange={set('confirm_password')}
-                required
-                autoComplete="new-password"
-              />
-            </div>
-
-            {/* Password strength hints */}
-            <ul className="list-none m-0 mb-6 p-0 flex flex-col gap-2" aria-label="Password requirements">
-              <li className={`text-[13px] font-medium pl-6 relative ${form.new_password.length >= 8 ? hintOk : hintDefault}`}>
-                8 أحرف على الأقل
-              </li>
-              <li className={`text-[13px] font-medium pl-6 relative ${/[a-zA-Z]/.test(form.new_password) ? hintOk : hintDefault}`}>
-                يحتوي على أحرف
-              </li>
-              <li className={`text-[13px] font-medium pl-6 relative ${form.new_password !== user.username || !form.new_password ? hintOk : hintFail}`}>
-                ليس نفس الرقم الجامعي
-              </li>
-            </ul>
-
-            <button className="btn btn-primary w-full py-3.5 text-[15px] shadow-[0_4px_12px_rgba(139,92,246,0.25)]" type="submit" disabled={loading}>
-              {loading ? (
-                <>
-                  <span className="spinner"></span>
-                  جاري الحفظ…
-                </>
-              ) : (
-                'تعيين كلمة مرور جديدة'
-              )}
-            </button>
-          </form>
-        </div>
-      </div>
+  const input = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100 dark:border-slate-700 dark:bg-slate-900';
+  return <div dir="rtl" className={forced ? 'min-h-screen flex items-center justify-center bg-slate-50 p-6 dark:bg-slate-950' : 'p-4 md:p-8'}>
+    <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
+      <div className="bg-gradient-to-l from-violet-700 to-indigo-600 p-8 text-white"><div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15"><KeyRound size={28}/></div><h1 className="text-2xl font-extrabold">تغيير كلمة المرور</h1><p className="mt-2 text-sm text-white/85">استخدم كلمة مرور قوية لا تستعملها في حساب آخر.</p></div>
+      <form onSubmit={submit} className="space-y-5 p-7 md:p-9">
+        {error && <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+        {success && <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700">{success}</div>}
+        {!forced && <div><label className="mb-2 block text-sm font-bold">كلمة المرور الحالية</label><input className={input} type={show?'text':'password'} value={form.current_password} onChange={e=>setForm({...form,current_password:e.target.value})} required autoComplete="current-password"/></div>}
+        <div><label className="mb-2 block text-sm font-bold">كلمة المرور الجديدة</label><div className="relative"><input className={`${input} pl-12`} type={show?'text':'password'} value={form.new_password} onChange={e=>setForm({...form,new_password:e.target.value})} minLength={8} required autoComplete="new-password"/><button type="button" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" onClick={()=>setShow(v=>!v)}>{show?<EyeOff size={19}/>:<Eye size={19}/>}</button></div></div>
+        <div><label className="mb-2 block text-sm font-bold">تأكيد كلمة المرور الجديدة</label><input className={input} type={show?'text':'password'} value={form.confirm_password} onChange={e=>setForm({...form,confirm_password:e.target.value})} minLength={8} required autoComplete="new-password"/></div>
+        <div className="flex gap-3 rounded-xl bg-violet-50 p-4 text-sm leading-6 text-violet-900 dark:bg-violet-950/30 dark:text-violet-200"><ShieldCheck className="mt-0.5 shrink-0" size={20}/><span>8 أحرف على الأقل، تحتوي على أحرف، ولا تكون مطابقة لاسم المستخدم.</span></div>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row"><button type="submit" disabled={loading} className="flex-1 rounded-xl bg-violet-600 px-5 py-3.5 font-bold text-white hover:bg-violet-700 disabled:opacity-60">{loading?'جاري الحفظ...':'حفظ كلمة المرور الجديدة'}</button>{onBack && !forced && <button type="button" onClick={onBack} className="rounded-xl border border-slate-200 px-5 py-3.5 font-bold dark:border-slate-700">إلغاء</button>}</div>
+      </form>
     </div>
-  );
+  </div>;
 }

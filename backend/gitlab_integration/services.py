@@ -314,7 +314,7 @@ def _fix_gitlab_url(url: str) -> str:
         return url
     try:
         from urllib.parse import urlparse, urlunparse
-        external = getattr(settings, 'GITLAB_URL', '').rstrip('/')
+        external = getattr(settings, 'GITLAB_EXTERNAL_URL', settings.GITLAB_URL).rstrip('/')
         if not external:
             return url
         parsed = urlparse(url)
@@ -886,114 +886,152 @@ def process_push_webhook(payload: dict) -> dict:
     }
 
 
+def get_repository_activity(gitlab_project, user_token: str = None) -> dict:
+    """Fetch live branch, merge-request and issue activity from GitLab."""
+    project_id = gitlab_project.gitlab_project_id
+
+    branches = _gitlab_api_get_all_pages(
+        f"/api/v4/projects/{project_id}/repository/branches",
+        params={'per_page': 100},
+        token=user_token,
+    )
+    merge_requests = _gitlab_api_get_all_pages(
+        f"/api/v4/projects/{project_id}/merge_requests",
+        params={'per_page': 100, 'state': 'all', 'order_by': 'updated_at', 'sort': 'desc'},
+        token=user_token,
+    )
+    opened_merge_requests = [mr for mr in merge_requests if mr.get('state') == 'opened']
+    opened_issues = _gitlab_api_get_all_pages(
+        f"/api/v4/projects/{project_id}/issues",
+        params={'per_page': 100, 'state': 'opened'},
+        token=user_token,
+    )
+
+    return {
+        'branches_count': len(branches),
+        'branches': [
+            {
+                'name': branch.get('name', ''),
+                'default': bool(branch.get('default')),
+                'protected': bool(branch.get('protected')),
+                'web_url': branch.get('web_url', ''),
+            }
+            for branch in branches
+        ],
+        'merge_requests_count': len(merge_requests),
+        'open_merge_requests_count': len(opened_merge_requests),
+        'merge_requests': [
+            {
+                'iid': mr.get('iid'),
+                'title': mr.get('title', ''),
+                'state': mr.get('state', ''),
+                'source_branch': mr.get('source_branch', ''),
+                'target_branch': mr.get('target_branch', ''),
+                'author': (mr.get('author') or {}).get('name') or (mr.get('author') or {}).get('username', ''),
+                'updated_at': mr.get('updated_at'),
+                'web_url': mr.get('web_url', ''),
+            }
+            for mr in merge_requests[:20]
+        ],
+        'open_issues_count': len(opened_issues),
+    }
+
+
 def sync_commits_from_gitlab(board, user_token: str = None) -> dict:
-    """
-    Sync commits from GitLab to the local database.
-    
-    If user_token is provided, it will be used for the API call.
-    If user_token is None, the admin token from settings will be used.
-    
-    Args:
-        board: ProjectBoard instance
-        user_token: Optional personal GitLab access token
-    
-    Returns:
-        dict with sync statistics
-    
-    Raises:
-        ValueError: If the board has no linked GitLab project
-        GitLabAPIError: If the GitLab API call fails
-    """
-    from .models import GitLabProject, GitLabCommit, GitLabCommitFile
+    """Sync commits from every GitLab branch and return live repository activity."""
+    from .models import GitLabProject, GitLabCommit
 
     try:
         gitlab_project = GitLabProject.objects.get(board=board)
     except GitLabProject.DoesNotExist:
         raise ValueError("هذا المشروع غير مرتبط بمستودع GitLab")
 
-    # Use the provided token (user's personal or None for admin fallback)
-    # When user_token is None, _gitlab_headers() will use the admin token from settings
     token = user_token
-    
-    logger.info(f"Syncing commits for project {gitlab_project.project_name} "
-                f"(GitLab ID: {gitlab_project.gitlab_project_id}) "
-                f"using {'user token' if token else 'admin token'}")
-    
+    project_id = gitlab_project.gitlab_project_id
+    logger.info(
+        "Syncing GitLab activity for %s (GitLab ID: %s) using %s",
+        gitlab_project.project_name,
+        project_id,
+        'user token' if token else 'admin token',
+    )
+
     try:
-        commits_data = _gitlab_api_get_all_pages(
-            f"/api/v4/projects/{gitlab_project.gitlab_project_id}/repository/commits",
-            params={'per_page': 100, 'with_stats': True},
-            token=token,
-        )
-    except GitLabAPIError as e:
-        if token and e.status_code == 401:
-            logger.warning(
-                "User GitLab token expired during commit sync. "
-                "Retrying with admin token."
-            )
-            commits_data = _gitlab_api_get_all_pages(
-                f"/api/v4/projects/{gitlab_project.gitlab_project_id}/repository/commits",
-                params={'per_page': 100, 'with_stats': True},
-                token=None,
-            )
+        activity = get_repository_activity(gitlab_project, user_token=token)
+    except GitLabAPIError as exc:
+        if token and exc.status_code in (401, 403):
+            logger.warning("User token could not read repository activity; retrying with admin token")
+            token = None
+            activity = get_repository_activity(gitlab_project, user_token=None)
         else:
             raise
 
+    branch_names = [branch['name'] for branch in activity['branches'] if branch.get('name')]
+    if not branch_names:
+        branch_names = [gitlab_project.default_branch or 'main']
+
+    commits_by_sha = {}
+    for branch_name in branch_names:
+        branch_commits = _gitlab_api_get_all_pages(
+            f"/api/v4/projects/{project_id}/repository/commits",
+            params={'per_page': 100, 'with_stats': True, 'ref_name': branch_name},
+            token=token,
+        )
+        for commit_data in branch_commits:
+            sha = commit_data.get('id')
+            if sha:
+                item = dict(commit_data)
+                item['_branch_name'] = branch_name
+                commits_by_sha.setdefault(sha, item)
+
     new_commits = 0
-
-    for commit_data in commits_data:
-        sha = commit_data.get('id')
-        if not sha:
+    for sha, commit_data in commits_by_sha.items():
+        existing = GitLabCommit.objects.filter(project=gitlab_project, sha=sha).first()
+        if existing:
+            if not existing.ref and commit_data.get('_branch_name'):
+                existing.ref = commit_data['_branch_name']
+                existing.save(update_fields=['ref'])
             continue
 
-        if GitLabCommit.objects.filter(project=gitlab_project, sha=sha).exists():
-            continue
-
-        authored_date = None
-        if commit_data.get('authored_date'):
+        def parse_date(value):
+            if not value:
+                return datetime.now()
             try:
-                authored_date = datetime.fromisoformat(
-                    commit_data['authored_date'].replace('Z', '+00:00')
-                )
+                return datetime.fromisoformat(value.replace('Z', '+00:00'))
             except (ValueError, TypeError):
-                authored_date = datetime.now()
+                return datetime.now()
 
-        committed_date = None
-        if commit_data.get('committed_date'):
-            try:
-                committed_date = datetime.fromisoformat(
-                    commit_data['committed_date'].replace('Z', '+00:00')
-                )
-            except (ValueError, TypeError):
-                committed_date = datetime.now()
-
-        stats = commit_data.get('stats', {})
-
-        commit = GitLabCommit.objects.create(
+        stats = commit_data.get('stats') or {}
+        GitLabCommit.objects.create(
             project=gitlab_project,
             sha=sha,
             message=commit_data.get('message', '').strip(),
             author_name=commit_data.get('author_name', ''),
             author_email=commit_data.get('author_email', ''),
             author_username=commit_data.get('author_username', ''),
-            ref='',
-            authored_date=authored_date,
-            committed_date=committed_date or authored_date,
+            ref=commit_data.get('_branch_name', ''),
+            authored_date=parse_date(commit_data.get('authored_date')),
+            committed_date=parse_date(commit_data.get('committed_date')),
             web_url=commit_data.get('web_url', ''),
-            added_lines=stats.get('additions', 0),
-            removed_lines=stats.get('deletions', 0),
-            total_lines=stats.get('total', 0),
+            added_lines=stats.get('additions', 0) or 0,
+            removed_lines=stats.get('deletions', 0) or 0,
+            total_lines=stats.get('total', 0) or 0,
         )
-
         new_commits += 1
 
-    logger.info(f"Synced commits for {gitlab_project.project_name}: "
-                f"fetched={len(commits_data)}, new={new_commits}")
+    logger.info(
+        "Synced GitLab activity for %s: branches=%s, merge_requests=%s, commits=%s, new=%s",
+        gitlab_project.project_name,
+        activity['branches_count'],
+        activity['merge_requests_count'],
+        len(commits_by_sha),
+        new_commits,
+    )
 
     return {
-        'total_fetched': len(commits_data),
+        'total_fetched': len(commits_by_sha),
         'new_commits': new_commits,
         'project_name': gitlab_project.project_name,
+        **activity,
     }
 
 

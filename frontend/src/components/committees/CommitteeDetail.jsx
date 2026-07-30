@@ -39,7 +39,7 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
       const res = await fetchCommittee(committeeId);
       setCommittee(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to load committee details.');
+      setError(err.response?.data?.detail || 'تعذر تحميل تفاصيل اللجنة.');
     } finally {
       setLoading(false);
     }
@@ -70,16 +70,16 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
   if (loading) {
     return (
       <div className="ccd-loading">
-        <div className="ccd-spinner" /> Loading committee details…
+        <div className="ccd-spinner" /> جارٍ تحميل تفاصيل اللجنة…
       </div>
     );
   }
 
   if (error && !committee) {
     return (
-      <div className="ccd-page">
+      <div className="ccd-page" dir="rtl">
         <button className="ccd-back" onClick={onBack}>
-          <ArrowRight size={14} /> Back to List
+          <ArrowRight size={14} /> العودة إلى القائمة
         </button>
         <div className="ccd-error">
           <AlertTriangle size={16} /> {error}
@@ -100,10 +100,10 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
   const seqLabel     = `#${String(committee.sequence_number || '').padStart(3, '0')}`;
 
   return (
-    <div className="ccd-page">
+    <div className="ccd-page" dir="rtl">
       {/* Back */}
       <button className="ccd-back" onClick={onBack}>
-        <ArrowRight size={14} /> Back to Committees List
+        <ArrowRight size={14} /> العودة إلى قائمة اللجان
       </button>
 
       {/* Banner */}
@@ -139,7 +139,7 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
                 </span>
                 {committee.is_scheduled && (
                   <span className="ccd-banner-badge">
-                    <Calendar size={11} /> Scheduled
+                    <Calendar size={11} /> مجدولة
                   </span>
                 )}
               </div>
@@ -155,28 +155,28 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
           <div className="ccd-stat-icon is-purple"><Users size={20} /></div>
           <div>
             <div className="ccd-stat-value">{allDoctors.length}</div>
-            <div className="ccd-stat-label">Faculty</div>
+            <div className="ccd-stat-label">الهيئة التدريسية</div>
           </div>
         </div>
         <div className="ccd-stat-card">
           <div className="ccd-stat-icon is-blue"><FolderKanban size={20} /></div>
           <div>
             <div className="ccd-stat-value">{projects.length}</div>
-            <div className="ccd-stat-label">Projects</div>
+            <div className="ccd-stat-label">المشاريع</div>
           </div>
         </div>
         <div className="ccd-stat-card">
           <div className="ccd-stat-icon is-amber"><Calendar size={20} /></div>
           <div>
             <div className="ccd-stat-value">{committee.date || '—'}</div>
-            <div className="ccd-stat-label">Date</div>
+            <div className="ccd-stat-label">التاريخ</div>
           </div>
         </div>
         <div className="ccd-stat-card">
           <div className="ccd-stat-icon is-green"><CheckCircle2 size={20} /></div>
           <div>
             <div className="ccd-stat-value">{getCommitteeStatusLabel(committee.status)}</div>
-            <div className="ccd-stat-label">Status</div>
+            <div className="ccd-stat-label">الحالة</div>
           </div>
         </div>
       </div>
@@ -190,7 +190,7 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
             <div className="ccd-section-header">
               <h2 className="ccd-section-title">
                 <span className="ccd-section-icon"><FolderKanban size={15} /></span>
-                Projects Assigned to Committee
+                المشاريع المسندة إلى اللجنة
                 <span className="ccd-section-count">{projects.length}</span>
               </h2>
             </div>
@@ -198,13 +198,13 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
               {projects.length === 0 ? (
                 <div className="ccd-empty">
                   <div className="ccd-empty-icon"><Inbox size={24} /></div>
-                  <h4>No projects yet</h4>
-                  <p>Run the distribution algorithm from the committees dashboard to assign projects to this committee.</p>
+                  <h4>لا توجد مشاريع بعد</h4>
+                  <p>شغّل خوارزمية التوزيع من لوحة اللجان لإسناد المشاريع إلى هذه اللجنة.</p>
                 </div>
               ) : (
                 projects.map((p, idx) => {
-                  const isApp   = p.source === 'IdeaApplication';
-                  const tagText = p.source || (isApp ? 'IdeaApplication' : 'StudentIdeaProposal');
+                  const isApp   = p.source === 'طلب فكرة';
+                  const tagText = p.source || (isApp ? 'طلب فكرة' : 'مقترح فكرة طالب');
                   const tagClass = isApp ? 'is-application' : 'is-proposal';
                   return (
                     <div key={`${p.source}-${p.id}-${idx}`} className="ccd-project-card">
@@ -236,12 +236,12 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
                       <div className="ccd-project-actions">
                         <button
                           className="ccd-btn ccd-btn-sm ccd-btn-danger"
-                          title="Remove from committee"
+                          title="إزالة من اللجنة"
                           disabled={busy}
                           onClick={async () => {
                             // Simple removal: use swap_project to send back to "no committee"
                             // For now, just show a toast (full swap UI is on the table view)
-                            setToast({ type: 'info', msg: 'Use "Swap" button from committees table to move projects.' });
+                            setToast({ type: 'info', msg: 'استخدم زر «تبديل» من جدول اللجان لنقل المشاريع.' });
                           }}
                         >
                           <X size={11} />
@@ -262,21 +262,21 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
             <div className="ccd-section-header">
               <h2 className="ccd-section-title">
                 <span className="ccd-section-icon"><Users size={15} /></span>
-                Team
+                الفريق
               </h2>
               <button
                 className="ccd-btn ccd-btn-sm"
-                onClick={() => setToast({ type: 'info', msg: 'To edit committee faculty, edit the original composition then regenerate.' })}
+                onClick={() => setToast({ type: 'info', msg: 'لتعديل أعضاء اللجنة، عدّل التشكيلة الأصلية ثم أعد توليدها.' })}
               >
-                <Edit3 size={11} /> Edit
+                <Edit3 size={11} /> تعديل
               </button>
             </div>
             <div className="ccd-section-body">
               {allDoctors.length === 0 ? (
                 <div className="ccd-empty">
                   <div className="ccd-empty-icon"><Users size={22} /></div>
-                  <h4>No faculty</h4>
-                  <p>Select a chair and members when creating the composition.</p>
+                  <h4>لا يوجد أعضاء هيئة تدريس</h4>
+                  <p>اختر رئيسًا وأعضاء عند إنشاء التشكيلة.</p>
                 </div>
               ) : (
                 allDoctors.map((d) => {
@@ -294,7 +294,7 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
                         <div className="ccd-doctor-dept">{d.department_ar || d.department || '—'}</div>
                       </div>
                       <span className={`ccd-doctor-role ${isChair ? 'is-chair' : 'is-member'}`}>
-                        {isChair ? 'Chair' : 'Member'}
+                        {isChair ? 'الرئيس' : 'عضو'}
                       </span>
                     </div>
                   );
@@ -319,14 +319,14 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
                     <Calendar size={14} className="ccd-schedule-row-icon" />
                     <span>التاريخ</span>
                     <span className="ccd-schedule-row-label">
-                      {new Date(committee.scheduled_start).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                      {new Date(committee.scheduled_start).toLocaleDateString('ar-IQ', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
                     </span>
                   </div>
                   <div className="ccd-schedule-row" style={{ color: '#0369a1', fontWeight: 600 }}>
                     <Clock size={14} className="ccd-schedule-row-icon" />
                     <span>الوقت</span>
                     <span className="ccd-schedule-row-label">
-                      {new Date(committee.scheduled_start).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} - {new Date(committee.scheduled_end).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(committee.scheduled_start).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })} - {new Date(committee.scheduled_end).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                   {committee.room_detail && (
@@ -358,7 +358,7 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
             <div className="ccd-section-header">
               <h2 className="ccd-section-title">
                 <span className="ccd-section-icon"><FileText size={15} /></span>
-                Export
+                تصدير
               </h2>
             </div>
             <div className="ccd-section-body">
@@ -369,8 +369,8 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
               >
                 <div className="ccd-file-btn-icon is-pdf"><FileText size={16} /></div>
                 <div className="ccd-file-btn-text">
-                  <span className="ccd-file-btn-title">Export PDF</span>
-                  <span className="ccd-file-btn-sub">Committees and projects list</span>
+                  <span className="ccd-file-btn-title">تصدير PDF</span>
+                  <span className="ccd-file-btn-sub">قائمة اللجان والمشاريع</span>
                 </div>
               </button>
               <button
@@ -380,8 +380,8 @@ export default function CommitteeDetail({ onBack, committeeId, onNavigate }) {
               >
                 <div className="ccd-file-btn-icon is-excel"><FileDown size={16} /></div>
                 <div className="ccd-file-btn-text">
-                  <span className="ccd-file-btn-title">Export Excel</span>
-                  <span className="ccd-file-btn-sub">Editable spreadsheet</span>
+                  <span className="ccd-file-btn-title">تصدير Excel</span>
+                  <span className="ccd-file-btn-sub">جدول بيانات قابل للتعديل</span>
                 </div>
               </button>
             </div>

@@ -2,31 +2,31 @@
 // Mirror of backend `committees/models.py` enums. Kept in sync manually.
 
 export const COMMITTEE_TYPES = [
-  { value: 'seminar_1',        label_en: 'Seminar 1',         label_ar: 'سيمينار 1' },
-  { value: 'seminar_2',        label_en: 'Seminar 2',         label_ar: 'سيمينار 2' },
-  { value: 'technical',        label_en: 'Technical',         label_ar: 'لجنة فنية' },
-  { value: 'final_discussion', label_en: 'Final Discussion',  label_ar: 'مناقشة نهائية' },
+  { value: 'seminar_1',        label_en: 'سيمينار 1',         label_ar: 'سيمينار 1' },
+  { value: 'seminar_2',        label_en: 'سيمينار 2',         label_ar: 'سيمينار 2' },
+  { value: 'technical',        label_en: 'فنية',         label_ar: 'لجنة فنية' },
+  { value: 'final_discussion', label_en: 'المناقشة النهائية',  label_ar: 'مناقشة نهائية' },
 ];
 
 export const PROJECT_TYPES = [
-  { value: 'seasonal',     label_en: 'Seasonal',     label_ar: 'فصلي' },
-  { value: 'graduation_1', label_en: 'Graduation 1', label_ar: 'تخرج 1' },
-  { value: 'graduation_2', label_en: 'Graduation 2', label_ar: 'تخرج 2' },
+  { value: 'seasonal',     label_en: 'فصلي',     label_ar: 'فصلي' },
+  { value: 'graduation_1', label_en: 'تخرج 1', label_ar: 'تخرج 1' },
+  { value: 'graduation_2', label_en: 'تخرج 2', label_ar: 'تخرج 2' },
 ];
 
 export const DEPARTMENTS = [
-  { value: 'software_engineering',    label_en: 'Software Engineering',    label_ar: 'برمجيات' },
-  { value: 'artificial_intelligence', label_en: 'Artificial Intelligence', label_ar: 'ذكاء اصطناعي' },
-  { value: 'information_security',    label_en: 'Information Security',    label_ar: 'أمن سيبراني' },
-  { value: 'communications',          label_en: 'Communications',          label_ar: 'اتصالات' },
-  { value: 'control_robotics',        label_en: 'Control & Robotics',      label_ar: 'تحكم وروبوتات' },
+  { value: 'software_engineering',    label_en: 'هندسة البرمجيات',    label_ar: 'برمجيات' },
+  { value: 'artificial_intelligence', label_en: 'الذكاء الاصطناعي', label_ar: 'ذكاء اصطناعي' },
+  { value: 'information_security',    label_en: 'أمن المعلومات',    label_ar: 'أمن سيبراني' },
+  { value: 'communications',          label_en: 'الاتصالات',          label_ar: 'اتصالات' },
+  { value: 'control_robotics',        label_en: 'التحكم والروبوتات',      label_ar: 'تحكم وروبوتات' },
 ];
 
 export const COMMITTEE_STATUSES = [
-  { value: 'draft',     label_en: 'Draft',     label_ar: 'مسودة' },
-  { value: 'scheduled', label_en: 'Scheduled', label_ar: 'مجدولة' },
-  { value: 'completed', label_en: 'Completed', label_ar: 'منجزة' },
-  { value: 'cancelled', label_en: 'Cancelled', label_ar: 'ملغاة' },
+  { value: 'draft',     label_en: 'مسودة',     label_ar: 'مسودة' },
+  { value: 'scheduled', label_en: 'مجدولة', label_ar: 'مجدولة' },
+  { value: 'completed', label_en: 'منجزة', label_ar: 'منجزة' },
+  { value: 'cancelled', label_en: 'ملغاة', label_ar: 'ملغاة' },
 ];
 
 // ── Lookup helpers ────────────────────────────────────────────────────────────

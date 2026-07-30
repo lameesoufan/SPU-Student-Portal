@@ -140,7 +140,7 @@ def get_project_workflow(request, project_board_id):
     result = svc.get_project_workflow_data(request.user, project_board_id)
     if not result['ok']:
         return _error_response(result)
-    return Response(ProjectWorkflowSerializer(result['workflow']).data)
+    return Response(ProjectWorkflowSerializer(result['workflows'], many=True).data)
 
 
 @api_view(['PUT'])
