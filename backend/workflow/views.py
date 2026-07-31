@@ -4,7 +4,11 @@ Workflow App — API Views (Thin Layer)
 كل view هون بيعمل 3 أشياء بس: يتحقق من الصلاحية الأساسية، يفكّ الطلب،
 ويستدعي الدالة المناسبة من services.py. كل منطق العمل موجود حصراً هناك.
 """
+import json
+
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.decorators import parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
@@ -140,7 +144,9 @@ def get_project_workflow(request, project_board_id):
     result = svc.get_project_workflow_data(request.user, project_board_id)
     if not result['ok']:
         return _error_response(result)
-    return Response(ProjectWorkflowSerializer(result['workflows'], many=True).data)
+    return Response(ProjectWorkflowSerializer(
+        result['workflows'], many=True, context={'request': request}
+    ).data)
 
 
 @api_view(['PUT'])
@@ -167,19 +173,34 @@ def replace_workflow_for_project(request, project_board_id):
 @permission_classes([IsAuthenticated, IsStudent])
 def get_pending_stages(request):
     result = svc.get_pending_stages_for_student(request.user)
-    return Response(WorkflowStageInstanceSerializer(result['stages'], many=True).data)
+    return Response(WorkflowStageInstanceSerializer(
+        result['stages'], many=True, context={'request': request}
+    ).data)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsStudent])
 @throttle_classes([WorkflowSubmitThrottle])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def submit_workflow_stage(request, stage_instance_id):
+    field_responses = request.data.get('field_responses', {})
+    if isinstance(field_responses, str):
+        try:
+            field_responses = json.loads(field_responses)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return Response({'error': 'field_responses must contain valid JSON.'}, status=400)
+
     result = svc.submit_workflow_stage(
-        request.user, stage_instance_id, request.data.get('field_responses', {})
+        request.user,
+        stage_instance_id,
+        field_responses,
+        request.FILES,
     )
     if not result['ok']:
         return _error_response(result)
-    return Response(WorkflowStageInstanceSerializer(result['stage_instance']).data)
+    return Response(WorkflowStageInstanceSerializer(
+        result['stage_instance'], context={'request': request}
+    ).data)
 
 
 @api_view(['POST'])

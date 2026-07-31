@@ -27,6 +27,8 @@ class Notification(models.Model):
         # Workflow stages
         ('workflow_stage_reminder', 'Workflow Stage Reminder'),
         ('workflow_stage_opened',   'Workflow Stage Opened'),
+        ('workflow_stage_closing_reminder', 'Workflow Stage Closing Reminder'),
+        ('workflow_stage_closed', 'Workflow Stage Closed'),
     ]
 
     recipient   = models.ForeignKey(

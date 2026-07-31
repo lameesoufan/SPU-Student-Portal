@@ -322,9 +322,17 @@ try:
             'task': 'workflow.tasks.send_workflow_stage_reminders',
             'schedule': crontab(hour=8, minute=0),
         },
+        'workflow-stage-closing-reminders-daily': {
+            'task': 'workflow.tasks.send_workflow_stage_closing_reminders',
+            'schedule': crontab(hour=8, minute=5),
+        },
         'activate-scheduled-stages-daily': {
             'task': 'workflow.tasks.activate_scheduled_stages',
             'schedule': crontab(hour=0, minute=10),
+        },
+        'close-expired-workflow-stages-daily': {
+            'task': 'workflow.tasks.close_expired_workflow_stages',
+            'schedule': crontab(hour=0, minute=15),
         },
     }
 except ImportError:

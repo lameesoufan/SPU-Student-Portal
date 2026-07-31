@@ -436,6 +436,31 @@ function SortableStage({
             </div>
           </div>
 
+          {/* Optional automatic closing */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-300">تاريخ انتهاء المرحلة (اختياري)</label>
+              <input
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                type="date"
+                value={stage.end_date || ''}
+                onChange={e => onChange(index, 'end_date', e.target.value || null)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-300">التنبيه قبل الإغلاق (أيام)</label>
+              <input
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
+                type="number"
+                min="0"
+                disabled={!stage.end_date}
+                value={stage.close_notify_before_days ?? 1}
+                onChange={e => onChange(index, 'close_notify_before_days', e.target.value === '' ? null : Number(e.target.value))}
+              />
+            </div>
+            <p className="md:col-span-2 text-xs text-gray-500 dark:text-gray-400">عند ترك تاريخ الانتهاء فارغًا تبقى المرحلة مفتوحة ولا يتم إرسال تنبيه إغلاق.</p>
+          </div>
+
           {/* Recurring */}
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
@@ -799,6 +824,8 @@ export default function WorkflowBuilder({ onBack }) {
       trigger_days: null,
       trigger_date: null,
       notify_before_days: 3,
+      end_date: null,
+      close_notify_before_days: 1,
       is_required: true,
       is_recurring: false,
       recurrence_unit: '',
@@ -915,6 +942,8 @@ export default function WorkflowBuilder({ onBack }) {
           trigger_days: s.trigger_days ? Number(s.trigger_days) : null,
           trigger_date: s.trigger_date || null,
           notify_before_days: Number(s.notify_before_days || 3),
+          end_date: s.end_date || null,
+          close_notify_before_days: s.end_date ? Number(s.close_notify_before_days ?? 1) : null,
           is_required: s.is_required,
           is_recurring: s.is_recurring || false,
           recurrence_unit: s.is_recurring ? (s.recurrence_unit || null) : null,

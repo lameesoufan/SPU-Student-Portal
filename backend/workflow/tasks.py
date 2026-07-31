@@ -122,6 +122,109 @@ def send_workflow_stage_reminders():
 
 
 @shared_task
+def send_workflow_stage_closing_reminders():
+    """Notify affected users before an optional stage end date."""
+    today = timezone.localdate()
+    instances = WorkflowStageInstance.objects.select_related(
+        'stage',
+        'project_workflow__project_board__proposal__supervisor',
+        'project_workflow__project_board__application__idea__doctor',
+    ).prefetch_related(
+        'project_workflow__project_board__proposal__co_supervisors',
+    ).filter(
+        project_workflow__is_active=True,
+        stage__end_date__isnull=False,
+        status__in=['pending', 'in_progress', 'submitted', 'rejected', 'overdue'],
+    )
+
+    notification_count = 0
+    for instance in instances:
+        days_before = instance.stage.close_notify_before_days
+        if days_before is None:
+            continue
+        reminder_date = instance.stage.end_date - timedelta(days=days_before)
+        if reminder_date != today:
+            continue
+
+        if days_before == 1:
+            timing = 'غدًا'
+        elif days_before == 0:
+            timing = 'اليوم'
+        else:
+            timing = f'بعد {days_before} أيام'
+
+        title = 'تنبيه بقرب إغلاق مرحلة في سير العمل'
+        message = (
+            f'ستُغلق مرحلة «{instance.stage.name}» {timing} '
+            f'ضمن مشروع «{instance.project_workflow.project_board.title}» '
+            f'بتاريخ {instance.stage.end_date:%Y-%m-%d}.'
+        )
+        notification_count += _create_stage_notifications(
+            stage_instance=instance,
+            notif_type='workflow_stage_closing_reminder',
+            title=title,
+            message=message,
+            event_name=f'closing-reminder-{days_before}d',
+        )
+
+    logger.info('Workflow stage closing reminders: created %d notifications', notification_count)
+    return f'Created {notification_count} workflow closing reminder notifications'
+
+
+@shared_task
+def close_expired_workflow_stages():
+    """Close active stage instances whose optional stage end date has arrived."""
+    today = timezone.localdate()
+    ids = list(WorkflowStageInstance.objects.filter(
+        project_workflow__is_active=True,
+        stage__end_date__isnull=False,
+        stage__end_date__lte=today,
+        status__in=['pending', 'in_progress', 'submitted', 'rejected', 'overdue'],
+    ).values_list('pk', flat=True))
+
+    closed_count = 0
+    notification_count = 0
+    for instance_id in ids:
+        with transaction.atomic():
+            locked_instance = WorkflowStageInstance.objects.select_for_update().select_related('stage').get(pk=instance_id)
+            if locked_instance.status not in ['pending', 'in_progress', 'submitted', 'rejected', 'overdue']:
+                continue
+            if not locked_instance.stage.end_date or locked_instance.stage.end_date > today:
+                continue
+            locked_instance.status = 'closed'
+            locked_instance.save(update_fields=['status', 'updated_at'])
+            closed_count += 1
+
+        instance = WorkflowStageInstance.objects.select_related(
+            'stage',
+            'project_workflow__project_board__proposal__supervisor',
+            'project_workflow__project_board__application__idea__doctor',
+        ).prefetch_related(
+            'project_workflow__project_board__proposal__co_supervisors',
+        ).get(pk=instance_id)
+
+        title = 'تم إغلاق مرحلة في سير العمل'
+        message = (
+            f'تم إغلاق مرحلة «{instance.stage.name}» ضمن مشروع '
+            f'«{instance.project_workflow.project_board.title}» لانتهاء مدتها.'
+        )
+        notification_count += _create_stage_notifications(
+            stage_instance=instance,
+            notif_type='workflow_stage_closed',
+            title=title,
+            message=message,
+            event_name='closed',
+        )
+
+    logger.info(
+        'Close workflow stages: closed %d stages and created %d notifications',
+        closed_count,
+        notification_count,
+    )
+    return f'Closed {closed_count} stages; created {notification_count} notifications'
+
+
+@shared_task
 def generate_recurring_stages():
     """Create the next instances for active recurring stages."""
     today = timezone.localdate()

@@ -24,6 +24,15 @@ import {
   XCircle,
 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+
+function getWorkflowFileUrl(response) {
+  if (response?.file_url) return response.file_url;
+  if (!response?.value) return '';
+  const path = String(response.value).replace(/^\/?media\//, '');
+  return `${API_BASE}/media/${path}`;
+}
+
 const STATUS = {
   scheduled: {
     label: 'مجدولة',
@@ -470,7 +479,20 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
     const initial = {};
     fields.forEach((field) => { initial[field.id] = ''; });
     (stageInstance?.field_responses || []).forEach((response) => {
-      initial[response.field] = response.value || '';
+      const field = fields.find((item) => item.id === response.field);
+      if (field?.field_type === 'file') {
+        const hasExistingFile = Boolean(response.file_url || response.value);
+        initial[response.field] = hasExistingFile
+          ? {
+              existing: true,
+              name: response.file_name || String(response.value || '').split('/').pop(),
+              url: getWorkflowFileUrl(response),
+              value: response.value || '',
+            }
+          : null;
+      } else {
+        initial[response.field] = response.value || '';
+      }
     });
     setFormData(initial);
     setValidationErrors({});
@@ -496,7 +518,15 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
     const nextErrors = {};
     fields.forEach((field) => {
       const value = formData[field.id];
-      if (field.required && !String(value || '').trim()) nextErrors[field.id] = 'هذا الحقل مطلوب';
+      if (!field.required) return;
+
+      if (field.field_type === 'file') {
+        const hasFile = value instanceof File || Boolean(value?.existing);
+        if (!hasFile) nextErrors[field.id] = 'هذا الملف مطلوب';
+        return;
+      }
+
+      if (!String(value || '').trim()) nextErrors[field.id] = 'هذا الحقل مطلوب';
     });
     return nextErrors;
   };
@@ -520,7 +550,7 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
   return (
     <div className="space-y-5">
       {fields.map((field) => {
-        const value = formData[field.id] || '';
+        const value = formData[field.id] ?? (field.field_type === 'file' ? null : '');
         const fieldError = validationErrors[field.id];
         const hasError = Boolean(fieldError);
 
@@ -573,7 +603,38 @@ function WorkflowStageForm({ stageInstance, onSubmit, onCancel, submitting, erro
               </div>
             )}
             {field.field_type === 'file' && (
-              <input type="file" className={inputClass(hasError)} onChange={(event) => change(field.id, event.target.files?.[0]?.name || '')} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif" />
+              <div className={`rounded-xl border bg-white p-3.5 dark:bg-slate-950 ${hasError ? 'border-rose-300 dark:border-rose-800' : 'border-slate-200 dark:border-slate-700'}`}>
+                <input
+                  type="file"
+                  className="block w-full text-sm text-slate-600 file:ml-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3.5 file:py-2 file:text-xs file:font-bold file:text-indigo-700 hover:file:bg-indigo-100 dark:text-slate-300 dark:file:bg-indigo-950/40 dark:file:text-indigo-300"
+                  onChange={(event) => change(field.id, event.target.files?.[0] || null)}
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                />
+
+                {value instanceof File && (
+                  <div className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/25 dark:text-emerald-300">
+                    <FileText size={14} />
+                    <span className="min-w-0 flex-1 truncate">{value.name}</span>
+                    <span className="shrink-0 font-normal opacity-70">{(value.size / 1024 / 1024).toFixed(2)} MB</span>
+                  </div>
+                )}
+
+                {(!(value instanceof File) && value?.existing) && (
+                  <div className="mt-3 flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+                    <FileText size={14} />
+                    {value.url ? (
+                      <a href={value.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate font-semibold text-indigo-600 hover:underline dark:text-indigo-300">
+                        {value.name || 'الملف المرفوع'}
+                      </a>
+                    ) : (
+                      <span className="min-w-0 flex-1 truncate font-semibold">{value.name || 'الملف المرفوع'}</span>
+                    )}
+                    <span className="shrink-0 text-[10px] text-slate-400">سيبقى محفوظاً ما لم تختر ملفاً جديداً</span>
+                  </div>
+                )}
+
+                <p className="m-0 mt-2 text-[11px] text-slate-400">PDF أو Word أو صورة، وبحجم أقصى 10 MB.</p>
+              </div>
             )}
 
             {hasError && (
@@ -703,11 +764,20 @@ export default function ProjectWorkflowView({ projectBoardId }) {
     setError('');
     setSubmitting(true);
     try {
+      const payload = new FormData();
       const clean = {};
       Object.entries(formData).forEach(([key, value]) => {
-        clean[key] = value == null ? '' : String(value);
+        if (value instanceof File) {
+          payload.append(`field_file_${key}`, value, value.name);
+          clean[key] = '';
+        } else if (value?.existing) {
+          clean[key] = value.value || value.name || '';
+        } else {
+          clean[key] = value == null ? '' : String(value);
+        }
       });
-      await submitWorkflowStage(selectedStage.id, { field_responses: clean });
+      payload.append('field_responses', JSON.stringify(clean));
+      await submitWorkflowStage(selectedStage.id, payload);
       await load();
       setSelectedStage(null);
     } catch (requestError) {

@@ -549,7 +549,7 @@ def get_project_workflow_data(user, project_board_id):
     ).prefetch_related(
         'template__stages__fields',
         'stage_instances__stage__fields',
-        'stage_instances__field_responses'
+        'stage_instances__field_responses__field',
     ).order_by('-started_at')
 
     if not workflows.exists():
@@ -621,14 +621,31 @@ def validate_field_response(field, value):
     return None
 
 
-def submit_workflow_stage(user, stage_instance_id, field_responses):
-    """يقدّم الطالب ردوده على حقول مرحلة سير عمل معيّنة."""
+def _validate_workflow_upload(file_obj):
+    """Validate workflow attachments before storing them."""
+    from pathlib import Path
+
+    allowed_extensions = {'.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.gif'}
+    max_size = 10 * 1024 * 1024  # 10 MB
+    extension = Path(file_obj.name or '').suffix.lower()
+
+    if extension not in allowed_extensions:
+        return 'Unsupported file type. Allowed: PDF, DOC, DOCX, JPG, JPEG, PNG, GIF.'
+    if getattr(file_obj, 'size', 0) > max_size:
+        return 'File size must not exceed 10 MB.'
+    return None
+
+
+def submit_workflow_stage(user, stage_instance_id, field_responses, uploaded_files=None):
+    """يقدّم الطالب ردوده وملفاته على حقول مرحلة سير عمل معيّنة."""
     from project_management.models import ProjectBoard
+
+    uploaded_files = uploaded_files or {}
 
     try:
         stage_instance = WorkflowStageInstance.objects.select_related(
             'stage', 'project_workflow'
-        ).prefetch_related('stage__fields').get(id=stage_instance_id)
+        ).prefetch_related('stage__fields', 'field_responses').get(id=stage_instance_id)
     except WorkflowStageInstance.DoesNotExist:
         return {'ok': False, 'error': 'Stage instance not found', 'status': 404}
 
@@ -655,21 +672,49 @@ def submit_workflow_stage(user, stage_instance_id, field_responses):
         return {'ok': False, 'error': 'field_responses must be an object', 'status': 400}
 
     fields_by_id = {str(field.id): field for field in stage_instance.stage.fields.all()}
+    existing_by_field = {
+        str(response.field_id): response
+        for response in stage_instance.field_responses.all()
+    }
+
     for field_id in field_responses.keys():
         if str(field_id) not in fields_by_id:
             return {'ok': False, 'error': f'Invalid field for this stage: {field_id}', 'status': 400}
 
+    # Validate multipart file keys and attachment limits.
+    uploaded_by_field = {}
+    for key in uploaded_files.keys():
+        if not key.startswith('field_file_'):
+            continue
+        field_id = key.removeprefix('field_file_')
+        field_obj = fields_by_id.get(str(field_id))
+        if not field_obj or field_obj.field_type != 'file':
+            return {'ok': False, 'error': f'Invalid file field: {field_id}', 'status': 400}
+        file_obj = uploaded_files.get(key)
+        if not file_obj:
+            continue
+        file_error = _validate_workflow_upload(file_obj)
+        if file_error:
+            return {'ok': False, 'error': f'{field_obj.label}: {file_error}', 'status': 400}
+        uploaded_by_field[str(field_id)] = file_obj
+
     # ── التحقق الصارم من الحقول المطلوبة ──
     missing_required = []
-    for field in fields_by_id.values():
+    for field_id, field in fields_by_id.items():
         if not field.required:
             continue
-        raw_value = field_responses.get(str(field.id))
-        if raw_value is None:
-            missing_required.append(field.label)
+
+        if field.field_type == 'file':
+            existing = existing_by_field.get(field_id)
+            has_existing_file = bool(existing and (existing.file or str(existing.value or '').strip()))
+            if field_id not in uploaded_by_field and not has_existing_file:
+                missing_required.append(field.label)
             continue
-        if str(raw_value).strip() == '':
+
+        raw_value = field_responses.get(field_id)
+        if raw_value is None or str(raw_value).strip() == '':
             missing_required.append(field.label)
+
     if missing_required:
         return {
             'ok': False, 'status': 400,
@@ -679,7 +724,7 @@ def submit_workflow_stage(user, stage_instance_id, field_responses):
 
     # التحقق من نوع كل حقل وخياراته
     for field_id_str, value in field_responses.items():
-        field_obj = fields_by_id.get(field_id_str)
+        field_obj = fields_by_id.get(str(field_id_str))
         if field_obj:
             error = validate_field_response(field_obj, value)
             if error:
@@ -688,8 +733,15 @@ def submit_workflow_stage(user, stage_instance_id, field_responses):
     with transaction.atomic():
         stage_instance = WorkflowStageInstance.objects.select_for_update().get(pk=stage_instance.pk)
 
-        # ── Upsert: تحديث أو إنشاء الردود ──
-        for field_id_str, value in field_responses.items():
+        # ── Upsert: تحديث أو إنشاء الردود النصية والملفات ──
+        response_field_ids = set(str(field_id) for field_id in field_responses.keys())
+        response_field_ids.update(uploaded_by_field.keys())
+
+        for field_id_str in response_field_ids:
+            field_obj = fields_by_id.get(str(field_id_str))
+            if not field_obj:
+                continue
+
             try:
                 field_id_int = int(field_id_str)
             except (ValueError, TypeError):
@@ -702,9 +754,34 @@ def submit_workflow_stage(user, stage_instance_id, field_responses):
                 latest = duplicates.order_by('-id').first()
                 duplicates.exclude(pk=latest.pk).delete()
 
-            WorkflowFieldResponse.objects.update_or_create(
-                stage_instance=stage_instance, field_id=field_id_int, defaults={'value': value}
+            response, _ = WorkflowFieldResponse.objects.get_or_create(
+                stage_instance=stage_instance,
+                field_id=field_id_int,
             )
+
+            if field_obj.field_type == 'file':
+                file_obj = uploaded_by_field.get(str(field_id_str))
+                if file_obj:
+                    old_file_name = response.file.name if response.file else None
+                    old_storage = response.file.storage if response.file else None
+                    response.file = file_obj
+                    response.save(update_fields=['file'])
+                    response.value = response.file.name
+                    response.save(update_fields=['value'])
+
+                    if old_file_name and old_file_name != response.file.name and old_storage:
+                        transaction.on_commit(
+                            lambda name=old_file_name, storage=old_storage: storage.delete(name)
+                        )
+                elif not response.value:
+                    # Keep backward compatibility for a previously stored path value.
+                    response.value = str(field_responses.get(str(field_id_str), '') or '')
+                    response.save(update_fields=['value'])
+                continue
+
+            value = field_responses.get(str(field_id_str), '')
+            response.value = value
+            response.save(update_fields=['value'])
 
         # نحذف فقط الردود اللي حقولها لم تعد موجودة بالمرحلة (وليس الحقول التي لم تُرسل بهذا الطلب)
         all_stage_field_ids = set(stage_instance.stage.fields.values_list('id', flat=True))
@@ -714,6 +791,9 @@ def submit_workflow_stage(user, stage_instance_id, field_responses):
         stage_instance.submitted_at = timezone.now()
         stage_instance.save(update_fields=['status', 'submitted_at', 'updated_at'])
 
+    stage_instance = WorkflowStageInstance.objects.select_related(
+        'stage', 'reviewed_by'
+    ).prefetch_related('stage__fields', 'field_responses__field').get(pk=stage_instance.pk)
     return {'ok': True, 'stage_instance': stage_instance}
 
 
@@ -798,7 +878,10 @@ def cleanup_duplicate_stages(user):
                                     WorkflowFieldResponse.objects.update_or_create(
                                         stage_instance=existing_instance,
                                         field=field_in_original,
-                                        defaults={'value': response.value},
+                                        defaults={
+                                            'value': response.value,
+                                            'file': response.file if response.file else None,
+                                        },
                                     )
                                 response.delete()
                             instance.delete()
@@ -1195,26 +1278,52 @@ def get_reviewable_projects(user):
         'proposal__supervisor', 'application__idea__doctor'
     ).prefetch_related('proposal__co_supervisors')
 
-    workflow_map = {
-        w.project_board_id: w
-        for w in ProjectWorkflow.objects.filter(project_board_id__in=all_board_ids, is_active=True)
-    }
+    active_workflows = list(
+        ProjectWorkflow.objects.filter(
+            project_board_id__in=all_board_ids,
+            is_active=True,
+        ).select_related('template__created_by', 'assigned_by')
+    )
+    workflows_by_project = {}
+    for workflow in active_workflows:
+        workflows_by_project.setdefault(workflow.project_board_id, []).append(workflow)
 
-    workflow_ids = [w.id for w in workflow_map.values()]
+    workflow_ids = [workflow.id for workflow in active_workflows]
     pending_counts = dict(
         WorkflowStageInstance.objects.filter(
-            project_workflow_id__in=workflow_ids, status='submitted',
-        ).values('project_workflow_id').annotate(count=Count('id')).values_list('project_workflow_id', 'count')
+            project_workflow_id__in=workflow_ids,
+            status='submitted',
+        ).values('project_workflow_id').annotate(
+            count=Count('id')
+        ).values_list('project_workflow_id', 'count')
     )
 
     data = []
     for project in projects:
         if not project_is_operationally_active(project):
             continue
-        if user.role == 'doctor' and not user_is_project_supervisor(user, project):
-            workflow = workflow_map.get(project.id)
-            if not workflow or workflow.template.created_by != user:
-                continue
+        project_workflows = workflows_by_project.get(project.id, [])
+        is_project_supervisor = user_is_project_supervisor(user, project)
+        department, _ = project_department_and_supervisor(project)
+
+        if user.role == 'doctor':
+            if is_project_supervisor:
+                reviewable_workflows = project_workflows
+            else:
+                reviewable_workflows = [
+                    workflow for workflow in project_workflows
+                    if workflow.template.created_by_id == user.id
+                ]
+        elif user.role == 'hod' and department == user.department:
+            reviewable_workflows = project_workflows
+        else:
+            reviewable_workflows = [
+                workflow for workflow in project_workflows
+                if workflow.template.created_by_id == user.id
+            ]
+
+        if not reviewable_workflows:
+            continue
 
         team_members = project.participants_with_status
 
@@ -1224,8 +1333,10 @@ def get_reviewable_projects(user):
         elif project.application:
             supervisor_name = project.application.idea.doctor.username if project.application.idea else None
 
-        workflow = workflow_map.get(project.id)
-        pending_reviews = pending_counts.get(workflow.id, 0) if workflow else 0
+        pending_reviews = sum(
+            pending_counts.get(workflow.id, 0)
+            for workflow in reviewable_workflows
+        )
 
         data.append({
             'id': project.id,
@@ -1239,6 +1350,7 @@ def get_reviewable_projects(user):
                 else project.application.operational_status if project.application_id else None
             ),
             'pending_reviews': pending_reviews,
+            'workflow_count': len(reviewable_workflows),
         })
 
     return {'ok': True, 'projects': data}

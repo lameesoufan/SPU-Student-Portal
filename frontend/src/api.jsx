@@ -345,7 +345,13 @@ export const fetchPendingWorkflowStages = () =>
   api.get('/api/workflow/pending/');
 
 export const submitWorkflowStage = (stageInstanceId, data) =>
-  api.post(`/api/workflow/stage/${stageInstanceId}/submit/`, data);
+  api.post(
+    `/api/workflow/stage/${stageInstanceId}/submit/`,
+    data,
+    data instanceof FormData
+      ? { headers: { 'Content-Type': 'multipart/form-data' } }
+      : undefined,
+  );
 
 export const reviewWorkflowStage = (stageInstanceId, data) =>
   api.post(`/api/workflow/stage/${stageInstanceId}/review/`, data);

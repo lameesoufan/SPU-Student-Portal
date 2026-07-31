@@ -108,10 +108,27 @@ class WorkflowTemplateSerializer(serializers.ModelSerializer):
 class WorkflowFieldResponseSerializer(serializers.ModelSerializer):
     field_label = serializers.CharField(source='field.label', read_only=True)
     field_type = serializers.CharField(source='field.field_type', read_only=True)
+    file_url = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
+
+    def get_file_url(self, obj):
+        if not obj.file:
+            return None
+        url = obj.file.url
+        request = self.context.get('request')
+        return request.build_absolute_uri(url) if request else url
+
+    def get_file_name(self, obj):
+        if not obj.file:
+            return None
+        return obj.file.name.rsplit('/', 1)[-1]
     
     class Meta:
         model = WorkflowFieldResponse
-        fields = ['id', 'field', 'field_label', 'field_type', 'value']
+        fields = [
+            'id', 'field', 'field_label', 'field_type',
+            'value', 'file_url', 'file_name',
+        ]
 
 
 class WorkflowStageInstanceSerializer(serializers.ModelSerializer):

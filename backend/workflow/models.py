@@ -197,6 +197,11 @@ class WorkflowFieldResponse(models.Model):
     stage_instance = models.ForeignKey(WorkflowStageInstance, on_delete=models.CASCADE, related_name='field_responses')
     field = models.ForeignKey(WorkflowStageField, on_delete=models.CASCADE, related_name='responses')
     value = models.TextField(blank=True)
+    file = models.FileField(
+        upload_to='workflow_uploads/%Y/%m/',
+        blank=True,
+        null=True,
+    )
 
     class Meta:
         unique_together = ('stage_instance', 'field')
