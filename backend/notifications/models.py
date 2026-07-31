@@ -24,6 +24,9 @@ class Notification(models.Model):
         ('invitation_received',     'Invitation Received'),
         ('invitation_accepted',     'Invitation Accepted'),
         ('invitation_rejected',     'Invitation Rejected'),
+        # Workflow stages
+        ('workflow_stage_reminder', 'Workflow Stage Reminder'),
+        ('workflow_stage_opened',   'Workflow Stage Opened'),
     ]
 
     recipient   = models.ForeignKey(
@@ -35,6 +38,8 @@ class Notification(models.Model):
     title       = models.CharField(max_length=255)
     message     = models.TextField()
     is_read     = models.BooleanField(default=False)
+    # Stable key used by scheduled jobs to prevent duplicate notifications.
+    event_key   = models.CharField(max_length=160, unique=True, null=True, blank=True)
     created_at  = models.DateTimeField(auto_now_add=True)
 
     class Meta:

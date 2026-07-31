@@ -295,6 +295,9 @@ GITLAB_EXTERNAL_URL = os.getenv('GITLAB_EXTERNAL_URL', 'http://localhost:8080')
 # Project import settings
 IMPORT_TEMP_PASSWORD_FORMAT = os.getenv('IMPORT_TEMP_PASSWORD_FORMAT', 'SPU{identifier}@2025-2026')
 
+# Send workflow notifications by email to students only, in addition to in-app notifications.
+WORKFLOW_NOTIFICATION_EMAILS = os.getenv('WORKFLOW_NOTIFICATION_EMAILS', 'false').lower() == 'true'
+
 # ── Celery Configuration (optional - needs celery + redis installed) ──────────
 try:
     from celery.schedules import crontab
@@ -314,6 +317,10 @@ try:
         'cleanup-deleted-projects-daily': {
             'task': 'gitlab_integration.tasks.cleanup_deleted_projects',
             'schedule': crontab(hour=1, minute=0),
+        },
+        'workflow-stage-reminders-daily': {
+            'task': 'workflow.tasks.send_workflow_stage_reminders',
+            'schedule': crontab(hour=8, minute=0),
         },
         'activate-scheduled-stages-daily': {
             'task': 'workflow.tasks.activate_scheduled_stages',

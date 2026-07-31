@@ -16,11 +16,12 @@ Convention: كل دالة هون بترجع dict فيه 'ok' (True/False).
 """
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 
 from django.db import IntegrityError, transaction
 from django.db.models import Q, Count, Case, When
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from .models import (
     WorkflowTemplate, WorkflowStage, ProjectWorkflow, WorkflowStageInstance,
@@ -124,15 +125,34 @@ def get_user_department(user, request_data=None):
     return department, None
 
 
+def _coerce_to_date(value):
+    """Normalize model/request date values to ``datetime.date``."""
+    if value is None or value == '':
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        parsed = parse_date(value.strip())
+        if parsed is not None:
+            return parsed
+    raise ValueError(f'Invalid date value: {value!r}')
+
+
 def _stage_due_date_and_status(stage, start_date):
     """يحسب تاريخ استحقاق مرحلة وحالتها الأولية (pending أو scheduled)."""
+    start_date = _coerce_to_date(start_date)
     due_date = None
+
     if stage.trigger_type == 'project_start':
         due_date = start_date
-    elif stage.trigger_type == 'after_days' and stage.trigger_days:
-        due_date = start_date + timedelta(days=stage.trigger_days)
+    elif stage.trigger_type == 'after_days' and stage.trigger_days not in (None, ''):
+        due_date = start_date + timedelta(days=int(stage.trigger_days))
     elif stage.trigger_type == 'date' and stage.trigger_date:
-        due_date = stage.trigger_date
+        # When a stage has just been created from request data, DateField may
+        # still hold the raw ISO string until the instance is reloaded.
+        due_date = _coerce_to_date(stage.trigger_date)
 
     initial_status = 'pending'
     if due_date and due_date > start_date and stage.trigger_type in ('after_days', 'date'):
