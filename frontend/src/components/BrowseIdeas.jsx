@@ -19,6 +19,28 @@ const EMPTY_APPLY = { team_size: 1, member_ids: [], team_size_reason: '', projec
 
 const emptyValueForField = (field) => field.field_type === 'checkbox' ? [] : '';
 
+const flattenApiDetails = (details) => {
+  if (!details) return '';
+  if (typeof details === 'string') return details;
+  if (Array.isArray(details)) return details.map(flattenApiDetails).filter(Boolean).join(' ');
+  if (typeof details === 'object') return Object.values(details).map(flattenApiDetails).filter(Boolean).join(' ');
+  return String(details);
+};
+
+const getApplyErrorMessage = (data) => {
+  if (!data) return 'تعذر إرسال الطلب. حاول مرة أخرى.';
+  if (data.code === 'member_has_project' && data.error) return data.error;
+  if (data.message && data.message !== 'Validation failed.') return data.message;
+  if (data.error && data.error !== 'Validation failed.') {
+    const registeredMatch = data.error.match(/Student \"?([^\":]+)\"?: You already have a registered project\.?/i);
+    if (registeredMatch) {
+      return `الطالب ${registeredMatch[1]} لديه مشروع مسجل بالفعل ولا يمكن إضافته إلى الفريق.`;
+    }
+    return data.error;
+  }
+  return flattenApiDetails(data.details) || 'بيانات الطلب غير صالحة. يرجى مراجعة الحقول والمحاولة مجددًا.';
+};
+
 export default function BrowseIdeas({ onBack }) {
   const [ideas, setIdeas]           = useState([]);
   const [myApp, setMyApp]           = useState(undefined);
@@ -136,7 +158,7 @@ const handleTeamSizeChange = (size) => {
       setApplyModal(null);
     } catch (err) {
       const data = err.response?.data;
-      setApplyError(data?.error || 'Failed to apply. Please try again.');
+      setApplyError(getApplyErrorMessage(data));
     } finally {
       setApplying(false);
     }

@@ -38,6 +38,32 @@ def student_has_registered_project(student):
     return False
 
 
+def _member_unavailable_result(member, username, reason):
+    """Build a clear, localized error when a selected team member is unavailable."""
+    display_name = member.get_full_name().strip() or username
+    if reason == 'You already have a registered project.':
+        return {
+            'ok': False,
+            'code': 'member_has_project',
+            'student_username': username,
+            'error': f'الطالب {display_name} لديه مشروع مسجل بالفعل ولا يمكن إضافته إلى الفريق.',
+        }
+
+    reason_map = {
+        'You already have an active application on a doctor idea.': 'لديه طلب نشط على فكرة مشروع أخرى.',
+        'You already have an active idea proposal.': 'لديه مقترح مشروع نشط بالفعل.',
+        'You are already a member of an active team.': 'هو عضو في فريق مشروع نشط بالفعل.',
+        'You are already a member of an active proposal team.': 'هو عضو في فريق مقترح مشروع نشط بالفعل.',
+    }
+    localized_reason = reason_map.get(reason, reason)
+    return {
+        'ok': False,
+        'code': 'member_unavailable',
+        'student_username': username,
+        'error': f'لا يمكن إضافة الطالب {display_name}: {localized_reason}',
+    }
+
+
 def _student_is_active(student):
     """True if student has any active application/proposal (not yet decided)."""
     if student_has_registered_project(student):
@@ -254,7 +280,7 @@ def create_student_proposal(*, student, supervisors=None, supervisor=None, title
                     return {'ok': False, 'error': 'You cannot add yourself as a team member.'}
                 active, err = _student_is_active(member)
                 if active:
-                    return {'ok': False, 'error': f'Team member "{_display_name(member)}" cannot join: {err}'}
+                    return _member_unavailable_result(member, uid, err)
                 members.append(member)
 
             initial_status = 'pending_supervisor' if team_size == 1 else 'awaiting_members'
@@ -892,9 +918,9 @@ def apply_on_idea(*, student, idea, team_size, team_size_reason='', member_ids=N
                     return {'ok': False, 'error': f'Student with ID "{uid}" not found.'}
                 if m.pk == student.pk:
                     return {'ok': False, 'error': 'You cannot add yourself as a team member.'}
-                active, err = _student_is_active(m)  # ← غيّرنا من student_can_apply لـ _student_is_active
+                active, err = _student_is_active(m)
                 if active:
-                    return {'ok': False, 'error': f'Student "{uid}": {err}'}
+                    return _member_unavailable_result(m, uid, err)
                 members.append(m)
 
             initial_status = 'pending_doctor' if team_size == 1 else 'awaiting_members'

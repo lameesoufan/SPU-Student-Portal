@@ -57,6 +57,21 @@ const STATUS_STEPS = {
 const EMPTY = { title: '', description: '', department: '', supervisor: '', co_supervisor: '', team_size: 2, member_ids: [''], team_size_reason: '', project_type: '' };
 const emptyValueForField = (field) => field.field_type === 'checkbox' ? [] : '';
 
+const flattenApiDetails = (details) => {
+  if (!details) return '';
+  if (typeof details === 'string') return details;
+  if (Array.isArray(details)) return details.map(flattenApiDetails).filter(Boolean).join(' ');
+  if (typeof details === 'object') return Object.values(details).map(flattenApiDetails).filter(Boolean).join(' ');
+  return String(details);
+};
+
+const getProposalErrorMessage = (data) => {
+  if (!data) return 'تعذر إرسال المقترح. حاول مرة أخرى.';
+  if (data.message && data.message !== 'Validation failed.') return data.message;
+  if (data.error && data.error !== 'Validation failed.') return data.error;
+  return flattenApiDetails(data.details) || 'بيانات المقترح غير صالحة. يرجى مراجعة الحقول.';
+};
+
 const STEPS = [
   { id: 'idea',    label: 'فكرة مشروع',   Icon: Lightbulb },
   { id: 'dept',    label: 'القسم',     Icon: Building2 },
@@ -192,9 +207,7 @@ const handleTeamSizeChange = (size) => {
       setExisting(res.data.proposal);
     } catch (err) {
       const data = err.response?.data;
-      if (data?.error) setError(data.error);
-      else if (data && typeof data === 'object') setError(Object.values(data).flat().join(' '));
-      else setError('Something went wrong. Please try again.');
+      setError(getProposalErrorMessage(data));
     } finally {
       setSubmitting(false);
     }

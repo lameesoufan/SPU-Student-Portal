@@ -7,6 +7,7 @@ export default function StudentSearch({ value, onChange, placeholder = 'Search b
   const [results, setResults]   = useState([]);
   const [open, setOpen]         = useState(false);
   const [loading, setLoading]   = useState(false);
+  const [localError, setLocalError] = useState('');
   const debounce                = useRef(null);
   const requestSeq              = useRef(0);
   const wrapRef                 = useRef(null);
@@ -30,6 +31,7 @@ export default function StudentSearch({ value, onChange, placeholder = 'Search b
   const handleInput = (e) => {
     const q = e.target.value;
     setQuery(q);
+    setLocalError('');
     onChange('');
 
     clearTimeout(debounce.current);
@@ -60,6 +62,19 @@ export default function StudentSearch({ value, onChange, placeholder = 'Search b
   };
 
   const handleSelect = (student) => {
+    if (student.available === false || student.has_registered_project) {
+      setQuery(student.display);
+      setLocalError(
+        student.unavailable_reason
+          || `الطالب ${student.name || student.username} لديه مشروع مسجل بالفعل ولا يمكن إضافته إلى الفريق.`
+      );
+      onChange('');
+      setOpen(false);
+      setResults([]);
+      return;
+    }
+
+    setLocalError('');
     setQuery(student.display);
     onChange(student.username);
     setOpen(false);
@@ -104,8 +119,13 @@ export default function StudentSearch({ value, onChange, placeholder = 'Search b
           {results.map((s) => (
             <li
               key={s.username}
-              className="flex items-center justify-between gap-3 px-3.5 py-2.5 cursor-pointer transition-colors hover:bg-[var(--bg-tertiary)]"
+              className={`flex items-center justify-between gap-3 px-3.5 py-2.5 transition-colors ${
+                s.available === false || s.has_registered_project
+                  ? 'cursor-not-allowed bg-red-500/5 opacity-80'
+                  : 'cursor-pointer hover:bg-[var(--bg-tertiary)]'
+              }`}
               role="option"
+              aria-disabled={s.available === false || s.has_registered_project}
               aria-selected={value === s.username}
               onMouseDown={() => handleSelect(s)}
             >
@@ -115,7 +135,13 @@ export default function StudentSearch({ value, onChange, placeholder = 'Search b
                 </div>
                 <span className="text-sm font-semibold text-[var(--primary)] truncate">{s.name || s.username}</span>
               </div>
-              <span className="text-xs text-[var(--primary)] bg-[var(--primary)]/10 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">{s.username}</span>
+              {s.available === false || s.has_registered_project ? (
+                <span className="text-xs font-semibold text-red-600 bg-red-500/10 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
+                  لديه مشروع
+                </span>
+              ) : (
+                <span className="text-xs text-[var(--primary)] bg-[var(--primary)]/10 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">{s.username}</span>
+              )}
             </li>
           ))}
         </ul>
@@ -125,6 +151,12 @@ export default function StudentSearch({ value, onChange, placeholder = 'Search b
       {open && results.length === 0 && !loading && query.trim() && (
         <div className="absolute top-[calc(100%+4px)] left-0 right-0 bg-[var(--card)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-3 text-sm text-[var(--text-muted)] z-[200]">
           No students found
+        </div>
+      )}
+
+      {localError && (
+        <div className="mt-1.5 text-xs font-semibold text-red-600 dark:text-red-400" role="alert">
+          {localError}
         </div>
       )}
     </div>
