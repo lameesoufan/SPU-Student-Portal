@@ -109,6 +109,27 @@ export default function SupervisorReview({ onBack }) {
                 </div>
                 <p className="sv-card-desc">{p.description}</p>
 
+                {(p.supervisors || []).length > 0 && (
+                  <div className="sv-team-row">
+                    <span className="sv-team-label">المشرفون:</span>
+                    {p.supervisors.map((supervisor) => (
+                      <span
+                        key={supervisor.id}
+                        className={`sv-team-member sv-team-member--${
+                          supervisor.status === 'approved'
+                            ? 'accepted'
+                            : supervisor.status === 'rejected'
+                              ? 'rejected'
+                              : 'pending'
+                        }`}
+                        title={supervisor.rejection_reason || ''}
+                      >
+                        {supervisor.name} — {supervisor.status === 'approved' ? 'موافق' : supervisor.status === 'rejected' ? 'رافض' : 'بانتظار الرد'}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 {/* Team info */}
                 {p.invitations && p.invitations.length > 0 && (
                   <div className="sv-team-row">
@@ -184,7 +205,7 @@ export default function SupervisorReview({ onBack }) {
 
             {reviewing.action === 'approve' && (
               <p className="sv-modal-note">
-                This will forward the proposal to the HoD for final review.
+                سيتم تسجيل موافقتك بشكل مستقل. ينتقل المقترح إلى رئيس القسم بعد اكتمال موافقات المشرفين النشطين، أو بعد أن يختار الطالب المتابعة بمشرف واحد موافق.
               </p>
             )}
 

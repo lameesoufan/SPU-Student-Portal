@@ -164,7 +164,7 @@ class StudentProposalAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
 
         proposal.refresh_from_db()
-        self.assertEqual(proposal.status, 'rejected')
+        self.assertEqual(proposal.status, 'supervisor_action_required')
 
     @patch('projects.services.notify_many')
     @patch('projects.services.notify')

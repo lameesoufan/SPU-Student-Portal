@@ -6,6 +6,7 @@ from .models import (
     IdeaApplication,
     TeamInvitation,
     ProposalInvitation,
+    ProposalSupervisorDecision,
     ProjectParticipation,
     ProjectParticipationStatusLog,
 )
@@ -43,6 +44,13 @@ class IdeaApplicationAdmin(admin.ModelAdmin):
 class ProposalInvitationAdmin(admin.ModelAdmin):
     list_display  = ('invitee', 'proposal', 'status', 'created_at')
     list_filter   = ('status',)
+
+
+@admin.register(ProposalSupervisorDecision)
+class ProposalSupervisorDecisionAdmin(admin.ModelAdmin):
+    list_display = ('proposal', 'supervisor', 'is_primary', 'status', 'is_active', 'responded_at')
+    list_filter = ('status', 'is_primary', 'is_active')
+    search_fields = ('proposal__title', 'supervisor__username', 'supervisor__first_name', 'supervisor__last_name')
 
 
 @admin.register(ProjectParticipation)

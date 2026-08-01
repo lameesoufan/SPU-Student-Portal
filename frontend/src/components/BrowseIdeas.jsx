@@ -50,7 +50,7 @@ export default function BrowseIdeas({ onBack }) {
           setMyApp({ _type: 'board', status: 'registered', idea_title: boardData.board?.title || 'مشروعك' });
         } else if (appData && ['awaiting_members', 'pending_doctor', 'pending_hod', 'registered'].includes(appData.status)) {
           setMyApp(appData);
-        } else if (propData && ['pending_supervisor', 'pending_hod', 'assigned'].includes(propData.status)) {
+        } else if (propData && ['pending_supervisor', 'supervisor_action_required', 'pending_hod', 'assigned'].includes(propData.status)) {
           setMyApp({ _type: 'proposal', status: propData.status });
         } else {
           setMyApp(null);

@@ -54,6 +54,7 @@ DOCTOR_IDEA_STATUS = [
 STUDENT_IDEA_STATUS = [
     ('awaiting_members', 'Awaiting Member Confirmation'),
     ('pending_supervisor', 'Pending Supervisor Approval'),
+    ('supervisor_action_required', 'Supervisor Action Required'),
     ('pending_hod',        'Pending HoD Review'),
     ('assigned',           'Assigned'),
     ('rejected',           'Rejected'),
@@ -118,7 +119,7 @@ class StudentIdeaProposal(models.Model):
     team_size        = models.PositiveSmallIntegerField(default=1)
     team_size_reason = models.TextField(blank=True, help_text='Required when team_size is 1 or 4')
     project_type     = models.CharField(max_length=20, choices=PROJECT_TYPES, default='seasonal')
-    status           = models.CharField(max_length=25, choices=STUDENT_IDEA_STATUS, default='pending_supervisor')
+    status           = models.CharField(max_length=32, choices=STUDENT_IDEA_STATUS, default='pending_supervisor')
     operational_status = models.CharField(
         max_length=20,
         choices=PROJECT_OPERATIONAL_STATUS_CHOICES,
@@ -139,13 +140,58 @@ class StudentIdeaProposal(models.Model):
         models.UniqueConstraint(
             fields=['student'],
             condition=Q(status__in=[
-                'awaiting_members', 'pending_supervisor', 'pending_hod', 'assigned'
+                'awaiting_members', 'pending_supervisor',
+                'supervisor_action_required', 'pending_hod', 'assigned'
             ]),
             name='unique_active_proposal_per_student',
         ),
     ]
     def __str__(self):
         return f"[Student] {self.title} ({self.student.username})"
+
+
+class ProposalSupervisorDecision(models.Model):
+    """Independent approval decision for every supervisor selected by a student."""
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    proposal = models.ForeignKey(
+        StudentIdeaProposal,
+        on_delete=models.CASCADE,
+        related_name='supervisor_decisions',
+    )
+    supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='proposal_supervisor_decisions',
+        limit_choices_to={'role__in': ['doctor', 'hod']},
+    )
+    is_primary = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    rejection_reason = models.TextField(blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['proposal', 'supervisor'],
+                name='unique_supervisor_decision_per_proposal',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['supervisor', 'status', 'is_active']),
+            models.Index(fields=['proposal', 'is_active', 'status']),
+        ]
+
+    def __str__(self):
+        return f"{self.supervisor.username} → {self.proposal.title} [{self.status}]"
 
 
 class ProposalInvitation(models.Model):
@@ -164,6 +210,7 @@ class ProposalInvitation(models.Model):
     status    = models.CharField(max_length=10, choices=[
         ('pending', 'Pending'), ('accepted', 'Accepted'), ('rejected', 'Rejected'),
     ], default='pending')
+    rejection_reason = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

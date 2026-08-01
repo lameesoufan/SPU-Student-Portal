@@ -190,11 +190,23 @@ export const respondToInvitation = (invId, action) =>
 export const fetchMyProposalInvitations = () =>
   api.get('/api/projects/proposal-invitations/mine/');
 
-export const respondToProposalInvitation = (invId, action) =>
-  api.post(`/api/projects/proposal-invitations/${invId}/respond/`, { action });
+export const respondToProposalInvitation = (invId, action, rejection_reason = '') =>
+  api.post(`/api/projects/proposal-invitations/${invId}/respond/`, { action, rejection_reason });
 
 export const replaceProposalMember = (proposalId, old_member_id, new_member_id) =>
   api.post(`/api/projects/proposals/${proposalId}/replace-member/`, { old_member_id, new_member_id });
+
+export const removeRejectedProposalMember = (proposalId, member_id, team_size_reason = '') =>
+  api.post(`/api/projects/proposals/${proposalId}/remove-rejected-member/`, { member_id, team_size_reason });
+
+export const replaceRejectedSupervisor = (proposalId, old_supervisor_id, new_supervisor_id) =>
+  api.post(`/api/projects/proposals/${proposalId}/replace-supervisor/`, { old_supervisor_id, new_supervisor_id });
+
+export const continueWithApprovedSupervisor = (proposalId, approved_supervisor_id) =>
+  api.post(`/api/projects/proposals/${proposalId}/continue-with-supervisor/`, { approved_supervisor_id });
+
+export const reviseStudentProposal = (proposalId, data) =>
+  api.post(`/api/projects/proposals/${proposalId}/revise/`, data);
 
 export const replaceApplicationMember = (appId, old_member_id, new_member_id) =>
   api.post(`/api/projects/applications/${appId}/replace-member/`, { old_member_id, new_member_id });

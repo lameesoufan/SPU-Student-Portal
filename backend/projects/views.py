@@ -28,7 +28,10 @@ from .services import (
     hod_review_doctor_idea,
     apply_on_idea, doctor_review_application, hod_review_application,
     respond_to_invitation, respond_to_proposal_invitation,
-    replace_proposal_member, replace_application_member,
+    replace_proposal_member, remove_rejected_proposal_member,
+    replace_rejected_supervisor, continue_with_approved_supervisor,
+    revise_student_proposal,
+    replace_application_member,
 )
 from .models import (
     StudentIdeaProposal,
@@ -36,6 +39,7 @@ from .models import (
     IdeaApplication,
     TeamInvitation,
     ProposalInvitation,
+    ProposalSupervisorDecision,
     ProjectParticipation,
     ProjectParticipationStatusLog,
 )
@@ -123,6 +127,19 @@ def propose_idea(request):
 
     team_size_reason = request.data.get('team_size_reason', '').strip()
 
+    supervisor_ids = serializer.validated_data.get('supervisor_ids')
+    if not supervisor_ids:
+        legacy_supervisor = serializer.validated_data.get('supervisor')
+        supervisor_ids = [legacy_supervisor.pk] if legacy_supervisor else []
+
+    supervisors_by_id = {
+        doctor.id: doctor
+        for doctor in User.objects.filter(id__in=supervisor_ids, role__in=['doctor', 'hod'])
+    }
+    supervisors = [supervisors_by_id.get(supervisor_id) for supervisor_id in supervisor_ids]
+    if not supervisor_ids or any(supervisor is None for supervisor in supervisors):
+        return _validation_error_response({'supervisor_ids': 'Choose one or two valid supervisors.'})
+
     if hasattr(request.data, 'getlist'):
         member_ids = request.data.getlist('member_ids')
     else:
@@ -144,7 +161,7 @@ def propose_idea(request):
         with transaction.atomic():
             result = create_student_proposal(
                 student=request.user,
-                supervisor=serializer.validated_data['supervisor'],
+                supervisors=supervisors,
                 title=serializer.validated_data['title'],
                 description=serializer.validated_data['description'],
                 department=serializer.validated_data['department'],
@@ -257,8 +274,15 @@ def supervisor_pending_proposals(request):
 def supervisor_review(request, proposal_id):
     try:
         proposal = StudentIdeaProposal.objects.filter(
-            Q(supervisor=request.user) | Q(co_supervisors=request.user),
             pk=proposal_id,
+        ).filter(
+            Q(
+                supervisor_decisions__supervisor=request.user,
+                supervisor_decisions__is_active=True,
+                supervisor_decisions__status='pending',
+            )
+            | Q(supervisor_decisions__isnull=True, supervisor=request.user)
+            | Q(supervisor_decisions__isnull=True, co_supervisors=request.user)
         ).distinct().get()
     except StudentIdeaProposal.DoesNotExist:
         return Response({'error': 'Proposal not found.'}, status=404)
@@ -269,6 +293,7 @@ def supervisor_review(request, proposal_id):
 
     result = supervisor_review_proposal(
         proposal=proposal,
+        reviewer=request.user,
         action=serializer.validated_data['action'],
         rejection_reason=serializer.validated_data.get('rejection_reason', ''),
     )
@@ -538,7 +563,11 @@ def respond_proposal_invitation(request, inv_id):
     if action not in ('accept', 'reject'):
         return Response({'error': 'action must be accept or reject.'}, status=400)
 
-    result = respond_to_proposal_invitation(invitation=inv, action=action)
+    result = respond_to_proposal_invitation(
+        invitation=inv,
+        action=action,
+        rejection_reason=request.data.get('rejection_reason', ''),
+    )
     if not result['ok']:
         return Response({'error': result['error']}, status=400)
     return Response(ProposalInvitationSerializer(result['invitation']).data)
@@ -561,6 +590,88 @@ def replace_proposal_member_view(request, proposal_id):
     if not result['ok']:
         return Response({'error': result['error']}, status=400)
     return Response({'message': 'Member replaced successfully.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsStudent])
+def remove_rejected_proposal_member_view(request, proposal_id):
+    try:
+        proposal = StudentIdeaProposal.objects.get(pk=proposal_id, student=request.user)
+    except StudentIdeaProposal.DoesNotExist:
+        return Response({'error': 'Proposal not found.'}, status=404)
+
+    member_id = str(request.data.get('member_id', '')).strip()
+    if not member_id:
+        return Response({'error': 'member_id is required.'}, status=400)
+
+    result = remove_rejected_proposal_member(
+        proposal=proposal,
+        member_id=member_id,
+        team_size_reason=request.data.get('team_size_reason', ''),
+    )
+    if not result['ok']:
+        return Response({'error': result['error']}, status=400)
+    return Response(StudentIdeaProposalSerializer(result['proposal']).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsStudent])
+def replace_rejected_supervisor_view(request, proposal_id):
+    try:
+        proposal = StudentIdeaProposal.objects.get(pk=proposal_id, student=request.user)
+    except StudentIdeaProposal.DoesNotExist:
+        return Response({'error': 'Proposal not found.'}, status=404)
+
+    old_supervisor_id = request.data.get('old_supervisor_id')
+    new_supervisor_id = request.data.get('new_supervisor_id')
+    try:
+        new_supervisor = User.objects.get(pk=new_supervisor_id, role__in=['doctor', 'hod'])
+    except (User.DoesNotExist, TypeError, ValueError):
+        return Response({'error': 'A valid replacement supervisor is required.'}, status=400)
+
+    result = replace_rejected_supervisor(
+        proposal=proposal,
+        old_supervisor_id=old_supervisor_id,
+        new_supervisor=new_supervisor,
+    )
+    if not result['ok']:
+        return Response({'error': result['error']}, status=400)
+    return Response(StudentIdeaProposalSerializer(result['proposal']).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsStudent])
+def continue_with_approved_supervisor_view(request, proposal_id):
+    try:
+        proposal = StudentIdeaProposal.objects.get(pk=proposal_id, student=request.user)
+    except StudentIdeaProposal.DoesNotExist:
+        return Response({'error': 'Proposal not found.'}, status=404)
+
+    result = continue_with_approved_supervisor(
+        proposal=proposal,
+        approved_supervisor_id=request.data.get('approved_supervisor_id'),
+    )
+    if not result['ok']:
+        return Response({'error': result['error']}, status=400)
+    return Response(StudentIdeaProposalSerializer(result['proposal']).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsStudent])
+def revise_student_proposal_view(request, proposal_id):
+    try:
+        proposal = StudentIdeaProposal.objects.get(pk=proposal_id, student=request.user)
+    except StudentIdeaProposal.DoesNotExist:
+        return Response({'error': 'Proposal not found.'}, status=404)
+
+    result = revise_student_proposal(
+        proposal=proposal,
+        title=request.data.get('title', ''),
+        description=request.data.get('description', ''),
+    )
+    if not result['ok']:
+        return Response({'error': result['error']}, status=400)
+    return Response(StudentIdeaProposalSerializer(result['proposal']).data)
 
 
 @api_view(['POST'])

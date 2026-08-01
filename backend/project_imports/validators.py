@@ -395,7 +395,10 @@ class RowValidator:
                 return f'Student {student.username} already has an active registered project'
             return ''
 
-        active_proposal_statuses = ['awaiting_members', 'pending_supervisor', 'pending_hod']
+        active_proposal_statuses = [
+            'awaiting_members', 'pending_supervisor',
+            'supervisor_action_required', 'pending_hod',
+        ]
         active_application_statuses = ['awaiting_members', 'pending_doctor', 'pending_hod']
 
         if StudentIdeaProposal.objects.filter(student=student, status__in=active_proposal_statuses).exists():

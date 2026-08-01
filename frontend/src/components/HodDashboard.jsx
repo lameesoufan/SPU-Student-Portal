@@ -26,6 +26,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import usePageHistory from '../hooks/usePageHistory';
 import './DashboardLayout.css';
 import HodProposalReview from './HodProposalReview';
+import SupervisorReview from './SupervisorReview';
 import HodIdeaReview from './HodIdeaReview';
 import HodApplicationReview from './HodApplicationReview';
 import HodFormBuilder from './HodFormBuilder';
@@ -80,6 +81,7 @@ const Icon = {
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'نظرة عامة', IconComp: Icon.Overview },
   { id: 'my-ideas', label: 'أفكاري', IconComp: Icon.Lightbulb },
+  { id: 'supervisor-review', label: 'مقترحات للإشراف', IconComp: Icon.FileText },
   { id: 'ideas', label: 'أفكار الدكاترة', IconComp: Icon.Lightbulb },
   { id: 'proposals', label: 'مقترحات الطلاب', IconComp: Icon.ClipboardCheck },
   { id: 'applications', label: 'طلبات الأفكار', IconComp: Icon.Inbox },
@@ -101,6 +103,13 @@ const MODULE_CARDS = [
     desc: 'تقديم وإدارة أفكار مشاريعك الخاصة (موافقة تلقائية)',
     page: 'my-ideas',
     gradient: 'linear-gradient(135deg, #ef4444, #f87171)',
+  },
+  {
+    IconComp: Icon.FileText,
+    label: 'مقترحات للإشراف',
+    desc: 'مراجعة المقترحات التي اختارك الطلاب مشرفًا عليها بصفتك دكتورًا',
+    page: 'supervisor-review',
+    gradient: 'linear-gradient(135deg, #0ea5e9, #38bdf8)',
   },
   {
     IconComp: Icon.Lightbulb,
@@ -283,6 +292,13 @@ usePolling(async () => {
         </div>                                                        // ← أضف
       );                                                              // ← أضف
     }  
+    if (page === 'supervisor-review') {
+      return (
+        <div className="std-page-wrapper">
+          <SupervisorReview onBack={goBack} />
+        </div>
+      );
+    }
     if (page === 'ideas') {
       return (
         <div className="std-page-wrapper">

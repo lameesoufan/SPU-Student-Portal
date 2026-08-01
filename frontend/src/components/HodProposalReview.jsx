@@ -154,7 +154,7 @@ export default function HodProposalReview({ onBack }) {
                   </span>
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 tracking-wide">
                     <User size={11} />
-                    {p.supervisor_name}
+                    {(p.supervisors || []).filter((item) => item.status === 'approved').map((item) => item.name).join('، ') || p.supervisor_name}
                   </span>
                 </div>
               </div>
@@ -162,6 +162,26 @@ export default function HodProposalReview({ onBack }) {
               {/* Card Body */}
               <div className="px-6 py-4 flex flex-col gap-3.5">
                 <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed m-0 line-clamp-3">{p.description}</p>
+
+                {(p.supervisors || []).length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">موافقات المشرفين:</span>
+                    {p.supervisors.map((supervisor) => (
+                      <span
+                        key={supervisor.id}
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          supervisor.status === 'approved'
+                            ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                            : supervisor.status === 'rejected'
+                              ? 'bg-red-500/10 text-red-600 border border-red-500/20'
+                              : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                        }`}
+                      >
+                        {supervisor.name}: {supervisor.status === 'approved' ? 'موافق' : supervisor.status === 'rejected' ? 'رافض' : 'بانتظار الرد'}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 {/* Team Members */}
                 {p.invitations && p.invitations.length > 0 && (

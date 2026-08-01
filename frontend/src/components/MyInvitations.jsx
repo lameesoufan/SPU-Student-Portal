@@ -35,9 +35,13 @@ export default function MyInvitations({ onBack }) {
   };
 
   const handlePropRespond = async (invId, action) => {
+    let rejectionReason = '';
+    if (action === 'reject') {
+      rejectionReason = window.prompt('يمكنك كتابة سبب رفض الانضمام إلى الفريق (اختياري):') || '';
+    }
     setActing(invId);
     try {
-      await respondToProposalInvitation(invId, action);
+      await respondToProposalInvitation(invId, action, rejectionReason);
       setPropInvs((prev) => prev.filter((i) => i.id !== invId));
     } catch (err) {
       setError(err.response?.data?.error || 'Something went wrong.');

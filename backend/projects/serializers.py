@@ -6,6 +6,7 @@ from .models import (
     IdeaApplication,
     TeamInvitation,
     ProposalInvitation,
+    ProposalSupervisorDecision,
     ProjectParticipation,
     ProjectParticipationStatusLog,
 )
@@ -73,6 +74,18 @@ class ProjectIdeaSerializer(serializers.ModelSerializer):
 class StudentIdeaProposalSerializer(serializers.ModelSerializer):
     supervisor_name = serializers.SerializerMethodField(read_only=True)
     co_supervisor_names = serializers.SerializerMethodField(read_only=True)
+    supervisor_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        min_length=1,
+        max_length=2,
+        write_only=True,
+        required=False,
+    )
+    supervisors = serializers.SerializerMethodField(read_only=True)
+    approved_supervisor_count = serializers.SerializerMethodField(read_only=True)
+    pending_supervisor_count = serializers.SerializerMethodField(read_only=True)
+    rejected_supervisor_count = serializers.SerializerMethodField(read_only=True)
+    can_continue_with_one = serializers.SerializerMethodField(read_only=True)
     student_name    = serializers.SerializerMethodField(read_only=True)
     invitations     = serializers.SerializerMethodField(read_only=True)
 
@@ -80,13 +93,21 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
         model  = StudentIdeaProposal
         fields = [
             'id', 'title', 'description', 'department',
-            'supervisor', 'supervisor_name', 'co_supervisor_names', 'student_name',
+            'supervisor', 'supervisor_ids', 'supervisor_name', 'co_supervisor_names',
+            'supervisors', 'approved_supervisor_count', 'pending_supervisor_count',
+            'rejected_supervisor_count', 'can_continue_with_one', 'student_name',
             'team_size', 'team_size_reason', 'project_type',
             'status', 'rejection_reason', 'invitations',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['status', 'rejection_reason', 'created_at', 'updated_at',
-                            'supervisor_name', 'co_supervisor_names', 'student_name', 'invitations']
+                            'supervisor_name', 'co_supervisor_names', 'supervisors',
+                            'approved_supervisor_count', 'pending_supervisor_count',
+                            'rejected_supervisor_count', 'can_continue_with_one',
+                            'student_name', 'invitations']
+        extra_kwargs = {
+            'supervisor': {'required': False, 'allow_null': True},
+        }
 
     def validate_supervisor(self, value):
         if value and getattr(value, 'role', None) not in ('doctor', 'hod'):
@@ -100,6 +121,21 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'team_size_reason': f'A justification is required when team size is {team_size}.'
             })
+
+        supervisor_ids = data.get('supervisor_ids')
+        legacy_supervisor = data.get('supervisor')
+        if supervisor_ids is None:
+            if legacy_supervisor:
+                supervisor_ids = [legacy_supervisor.pk]
+            elif self.instance is None:
+                raise serializers.ValidationError({'supervisor_ids': 'Choose one or two supervisors.'})
+
+        if supervisor_ids is not None:
+            if len(supervisor_ids) != len(set(supervisor_ids)):
+                raise serializers.ValidationError({'supervisor_ids': 'Duplicate supervisors are not allowed.'})
+            if not 1 <= len(supervisor_ids) <= 2:
+                raise serializers.ValidationError({'supervisor_ids': 'Choose one or two supervisors.'})
+
         return data
     def get_supervisor_name(self, obj):
         if obj.supervisor:
@@ -112,6 +148,62 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
             for supervisor in obj.co_supervisors.all()
         ]
 
+    def _active_decisions(self, obj):
+        prefetched = getattr(obj, '_prefetched_objects_cache', {}).get('supervisor_decisions')
+        decisions = prefetched if prefetched is not None else obj.supervisor_decisions.select_related('supervisor').all()
+        return [decision for decision in decisions if decision.is_active]
+
+    def get_supervisors(self, obj):
+        decisions = sorted(self._active_decisions(obj), key=lambda item: (not item.is_primary, item.id))
+        if not decisions:
+            fallback = []
+            if obj.supervisor_id:
+                fallback.append({
+                    'id': obj.supervisor_id,
+                    'name': obj.supervisor.get_full_name() or obj.supervisor.username,
+                    'is_primary': True,
+                    'status': 'approved' if obj.status in ('pending_hod', 'assigned') else 'pending',
+                    'rejection_reason': '',
+                })
+            for supervisor in obj.co_supervisors.all():
+                fallback.append({
+                    'id': supervisor.id,
+                    'name': supervisor.get_full_name() or supervisor.username,
+                    'is_primary': False,
+                    'status': 'approved' if obj.status in ('pending_hod', 'assigned') else 'pending',
+                    'rejection_reason': '',
+                })
+            return fallback
+        return [
+            {
+                'id': decision.supervisor_id,
+                'name': decision.supervisor.get_full_name() or decision.supervisor.username,
+                'is_primary': decision.is_primary,
+                'status': decision.status,
+                'rejection_reason': decision.rejection_reason,
+                'responded_at': decision.responded_at,
+            }
+            for decision in decisions
+        ]
+
+    def get_approved_supervisor_count(self, obj):
+        return sum(1 for decision in self._active_decisions(obj) if decision.status == 'approved')
+
+    def get_pending_supervisor_count(self, obj):
+        return sum(1 for decision in self._active_decisions(obj) if decision.status == 'pending')
+
+    def get_rejected_supervisor_count(self, obj):
+        return sum(1 for decision in self._active_decisions(obj) if decision.status == 'rejected')
+
+    def get_can_continue_with_one(self, obj):
+        statuses = [decision.status for decision in self._active_decisions(obj)]
+        return (
+            obj.status == 'supervisor_action_required'
+            and 'approved' in statuses
+            and 'rejected' in statuses
+            and 'pending' not in statuses
+        )
+
     def get_student_name(self, obj):
         return obj.student.get_full_name() or obj.student.username
 
@@ -122,6 +214,7 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
                 'invitee_id': inv.invitee.username,
                 'invitee_name': inv.invitee.get_full_name() or inv.invitee.username,
                 'status': inv.status,
+                'rejection_reason': inv.rejection_reason,
             }
             for inv in obj.invitations.all()
         ]
@@ -135,7 +228,7 @@ class ProposalInvitationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = ProposalInvitation
-        fields = ['id', 'proposal', 'idea_title', 'leader_name', 'status', 'created_at']
+        fields = ['id', 'proposal', 'idea_title', 'leader_name', 'status', 'rejection_reason', 'created_at']
         read_only_fields = ['status', 'created_at', 'idea_title', 'leader_name']
 
     def get_idea_title(self, obj):

@@ -5,9 +5,19 @@ import DynamicCheckboxGroup from './DynamicCheckboxGroup';
 import {
   Send, Users, Clock, RefreshCw, CheckCircle, XCircle, Info,
   Lightbulb, UserPlus, Building2, Clipboard, ChevronRight, ChevronDown, ChevronLeft,
-  Loader2, User, Check, UserMinus
+  Loader2, User, Check, UserMinus, UserCheck, UserX
 } from 'lucide-react';
-import { submitStudentProposal, fetchMyProposal, fetchDoctorsList, fetchStudentForm, replaceProposalMember } from '../api';
+import {
+  submitStudentProposal,
+  fetchMyProposal,
+  fetchDoctorsList,
+  fetchStudentForm,
+  replaceProposalMember,
+  removeRejectedProposalMember,
+  replaceRejectedSupervisor,
+  continueWithApprovedSupervisor,
+  reviseStudentProposal,
+} from '../api';
 import { PROJECT_TYPES } from '../lib/constants';
 
 const DEPARTMENTS = [
@@ -28,7 +38,8 @@ const BADGE_STYLES = {
 
 const STATUS_META = {
   awaiting_members:   { label: 'بانتظار الأعضاء',    Icon: Users,     color: 'amber' },
-  pending_supervisor: { label: 'بانتظار المشرف',   Icon: Clock,     color: 'blue' },
+  pending_supervisor: { label: 'بانتظار المشرفين',   Icon: Clock,     color: 'blue' },
+  supervisor_action_required: { label: 'مطلوب تعديل المشرفين', Icon: UserX, color: 'red' },
   pending_hod:        { label: 'بانتظار مراجعة رئيس القسم',   Icon: RefreshCw, color: 'purple' },
   assigned:           { label: 'Approved & Assigned',   Icon: CheckCircle, color: 'green' },
   rejected:           { label: 'مرفوض',              Icon: XCircle,   color: 'red' },
@@ -37,12 +48,13 @@ const STATUS_META = {
 const STATUS_STEPS = {
   awaiting_members:   1,
   pending_supervisor: 2,
+  supervisor_action_required: 2,
   pending_hod:        3,
   assigned:           4,
   rejected:           0,
 };
 
-const EMPTY = { title: '', description: '', department: '', supervisor: '', team_size: 2, member_ids: [''], team_size_reason: '', project_type: '' };
+const EMPTY = { title: '', description: '', department: '', supervisor: '', co_supervisor: '', team_size: 2, member_ids: [''], team_size_reason: '', project_type: '' };
 const emptyValueForField = (field) => field.field_type === 'checkbox' ? [] : '';
 
 const STEPS = [
@@ -67,6 +79,13 @@ export default function ProposeIdea({ onBack }) {
   const [replacingId, setReplacingId]     = useState(null);   // username of member being replaced
   const [replaceLoading, setReplaceLoading] = useState(false);
   const [replaceError, setReplaceError]   = useState('');
+  const [replacingSupervisorId, setReplacingSupervisorId] = useState(null);
+  const [supervisorActionLoading, setSupervisorActionLoading] = useState(false);
+  const [supervisorActionError, setSupervisorActionError] = useState('');
+  const [editingRevision, setEditingRevision] = useState(false);
+  const [revisionForm, setRevisionForm] = useState({ title: '', description: '' });
+  const [revisionLoading, setRevisionLoading] = useState(false);
+  const [revisionError, setRevisionError] = useState('');
   useEffect(() => {
     setLoading(true);
     Promise.allSettled([fetchMyProposal(), fetchDoctorsList()])
@@ -101,7 +120,11 @@ export default function ProposeIdea({ onBack }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [name]: value };
+      if (name === 'supervisor' && value === prev.co_supervisor) next.co_supervisor = '';
+      return next;
+    });
   };
 
 const handleTeamSizeChange = (size) => {
@@ -156,6 +179,7 @@ const handleTeamSizeChange = (size) => {
         description:      form.description,
         department:       form.department,
         supervisor:       Number(form.supervisor),
+        supervisor_ids:   [form.supervisor, form.co_supervisor].filter(Boolean).map(Number),
         team_size:        Number(form.team_size),
         team_size_reason: (Number(form.team_size) === 1 || Number(form.team_size) > 3) ? form.team_size_reason.trim() : '',
         project_type:     form.project_type,
@@ -192,6 +216,88 @@ const handleTeamSizeChange = (size) => {
       setReplaceLoading(false);
     }
   };
+
+  const refreshExisting = async () => {
+    const res = await fetchMyProposal();
+    setExisting(res.data || null);
+  };
+
+  const handleRemoveRejectedMember = async (memberId) => {
+    const nextSize = Math.max(1, Number(existing?.team_size || 1) - 1);
+    let reason = '';
+    if (nextSize === 1 && !existing?.team_size_reason) {
+      reason = window.prompt('أدخل سبب الاستمرار بالمشروع بشكل فردي:') || '';
+      if (!reason.trim()) return;
+    }
+    setReplaceLoading(true);
+    setReplaceError('');
+    try {
+      await removeRejectedProposalMember(existing.id, memberId, reason);
+      await refreshExisting();
+    } catch (err) {
+      setReplaceError(err.response?.data?.error || 'تعذر حذف العضو المرفوض.');
+    } finally {
+      setReplaceLoading(false);
+    }
+  };
+
+  const handleReplaceSupervisor = async (oldSupervisorId, newSupervisorId) => {
+    if (!newSupervisorId) return;
+    setSupervisorActionLoading(true);
+    setSupervisorActionError('');
+    try {
+      await replaceRejectedSupervisor(existing.id, oldSupervisorId, Number(newSupervisorId));
+      await refreshExisting();
+      setReplacingSupervisorId(null);
+    } catch (err) {
+      setSupervisorActionError(err.response?.data?.error || 'تعذر استبدال المشرف.');
+    } finally {
+      setSupervisorActionLoading(false);
+    }
+  };
+
+  const handleContinueWithOne = async (approvedSupervisorId) => {
+    setSupervisorActionLoading(true);
+    setSupervisorActionError('');
+    try {
+      await continueWithApprovedSupervisor(existing.id, approvedSupervisorId);
+      await refreshExisting();
+    } catch (err) {
+      setSupervisorActionError(err.response?.data?.error || 'تعذر المتابعة بالمشرف الموافق.');
+    } finally {
+      setSupervisorActionLoading(false);
+    }
+  };
+  const openRevision = () => {
+    setRevisionForm({
+      title: existing?.title || '',
+      description: existing?.description || '',
+    });
+    setRevisionError('');
+    setEditingRevision(true);
+  };
+
+  const handleRevisionSubmit = async () => {
+    if (!revisionForm.title.trim() || !revisionForm.description.trim()) {
+      setRevisionError('العنوان والوصف مطلوبان.');
+      return;
+    }
+    setRevisionLoading(true);
+    setRevisionError('');
+    try {
+      await reviseStudentProposal(existing.id, {
+        title: revisionForm.title.trim(),
+        description: revisionForm.description.trim(),
+      });
+      await refreshExisting();
+      setEditingRevision(false);
+    } catch (err) {
+      setRevisionError(err.response?.data?.error || 'تعذر تعديل الفكرة وإعادة إرسالها.');
+    } finally {
+      setRevisionLoading(false);
+    }
+  };
+
   /* ── Loading State ── */
   if (loading) {
     return (
@@ -244,7 +350,7 @@ const handleTeamSizeChange = (size) => {
               <div className="flex items-center justify-between relative my-4">
                 <div className="absolute top-5 left-0 right-0 h-0.5 bg-[var(--border)]" />
                 <div className="absolute top-5 left-0 h-0.5 bg-emerald-500 transition-all duration-500" style={{ width: `${(stepProgress / 4) * 100}%` }} />
-                {['الأعضاء', 'المشرف', 'HoD', 'مقبول'].map((label, i) => (
+                {['الأعضاء', 'المشرفون', 'رئيس القسم', 'مقبول'].map((label, i) => (
                   <div key={label} className="flex flex-col items-center gap-2 z-10">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
                       i + 1 <= stepProgress
@@ -263,7 +369,7 @@ const handleTeamSizeChange = (size) => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { label: 'القسم', value: existing.department.replace(/_/g, ' ') },
-                { label: 'المشرف', value: existing.supervisor_name || '—' },
+                { label: 'المشرفون', value: (existing.supervisors || []).map((item) => item.name).join('، ') || existing.supervisor_name || '—' },
                 { label: 'حجم الفريق', value: `${existing.team_size} student${existing.team_size > 1 ? 's' : ''}` },
                 { label: 'مُرسل', value: new Date(existing.created_at).toLocaleDateString() },
               ].map(item => (
@@ -273,6 +379,165 @@ const handleTeamSizeChange = (size) => {
                 </div>
               ))}
             </div>
+
+            {(existing.supervisors || []).length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold">حالة موافقة المشرفين</span>
+                {(existing.supervisors || []).map((supervisor) => {
+                  const statusStyle = supervisor.status === 'approved'
+                    ? BADGE_STYLES.green
+                    : supervisor.status === 'rejected'
+                      ? BADGE_STYLES.red
+                      : BADGE_STYLES.blue;
+                  const statusLabel = supervisor.status === 'approved'
+                    ? 'موافق'
+                    : supervisor.status === 'rejected'
+                      ? 'رافض'
+                      : 'بانتظار الرد';
+                  return (
+                    <div key={supervisor.id} className="rounded-[var(--radius-sm)] border border-[var(--border-light)] bg-[var(--bg-tertiary)] p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-[var(--card)] flex items-center justify-center text-[var(--primary)]">
+                          <UserCheck size={16} />
+                        </div>
+                        <span className="flex-1 text-sm font-semibold text-[var(--text)]">
+                          {supervisor.name}{supervisor.is_primary ? ' — المشرف الأساسي' : ' — المشرف المشارك'}
+                        </span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium ${statusStyle}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+
+                      {supervisor.rejection_reason && (
+                        <p className="mt-2 text-xs leading-5 text-red-600 dark:text-red-400">
+                          سبب الرفض: {supervisor.rejection_reason}
+                        </p>
+                      )}
+
+                      {existing.status === 'supervisor_action_required' && supervisor.status === 'rejected' && (
+                        <div className="mt-3">
+                          {replacingSupervisorId === supervisor.id ? (
+                            <div className="flex flex-col gap-2">
+                              <select
+                                className={inputCls}
+                                defaultValue=""
+                                disabled={supervisorActionLoading}
+                                onChange={(event) => handleReplaceSupervisor(supervisor.id, event.target.value)}
+                              >
+                                <option value="">اختر مشرفاً بديلاً</option>
+                                {doctors
+                                  .filter((doctor) => !(existing.supervisors || []).some((item) => item.id === doctor.id))
+                                  .map((doctor) => (
+                                    <option key={doctor.id} value={doctor.id}>{doctor.name}</option>
+                                  ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => setReplacingSupervisorId(null)}
+                                className="self-start text-xs text-[var(--text-muted)] hover:text-[var(--text)]"
+                              >
+                                إلغاء
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setReplacingSupervisorId(supervisor.id)}
+                              className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600"
+                            >
+                              <RefreshCw size={13} /> استبدال المشرف
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {existing.can_continue_with_one && (
+                  <button
+                    type="button"
+                    disabled={supervisorActionLoading}
+                    onClick={() => {
+                      const approved = (existing.supervisors || []).find((item) => item.status === 'approved');
+                      if (approved) handleContinueWithOne(approved.id);
+                    }}
+                    className="inline-flex w-fit items-center gap-2 rounded-[var(--radius-sm)] bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {supervisorActionLoading ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
+                    المتابعة بالمشرف الموافق فقط
+                  </button>
+                )}
+
+                {supervisorActionError && (
+                  <div className="text-xs text-red-500">{supervisorActionError}</div>
+                )}
+              </div>
+            )}
+            {existing.status === 'supervisor_action_required' && (
+              <div className="rounded-[var(--radius-sm)] border border-purple-500/20 bg-purple-500/5 p-4">
+                {!editingRevision ? (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-bold text-[var(--text)]">تعديل الفكرة وإعادة طلب الموافقات</div>
+                      <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+                        عند تعديل العنوان أو الوصف ستُعاد موافقة أعضاء الفريق والمشرفين لأن النسخة الجديدة تختلف عن النسخة السابقة.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openRevision}
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--radius-sm)] border border-purple-500/20 bg-purple-500/10 px-4 py-2 text-sm font-semibold text-purple-600 hover:bg-purple-500/20"
+                    >
+                      <RefreshCw size={15} /> تعديل وإعادة الإرسال
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-[var(--text)]">عنوان الفكرة</label>
+                      <input
+                        className={inputCls}
+                        value={revisionForm.title}
+                        onChange={(event) => setRevisionForm((current) => ({ ...current, title: event.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-[var(--text)]">وصف الفكرة</label>
+                      <textarea
+                        className={`${inputCls} min-h-[120px] resize-y`}
+                        value={revisionForm.description}
+                        onChange={(event) => setRevisionForm((current) => ({ ...current, description: event.target.value }))}
+                      />
+                    </div>
+                    <div className="rounded-[var(--radius-sm)] border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-300">
+                      سيُطلب من أعضاء الفريق تأكيد مشاركتهم من جديد، وبعد موافقتهم سيصل المقترح المعدّل إلى المشرف أو المشرفين مرة أخرى.
+                    </div>
+                    {revisionError && <div className="text-xs font-medium text-red-500">{revisionError}</div>}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={revisionLoading}
+                        onClick={handleRevisionSubmit}
+                        className="inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+                      >
+                        {revisionLoading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                        حفظ وإعادة الإرسال
+                      </button>
+                      <button
+                        type="button"
+                        disabled={revisionLoading}
+                        onClick={() => { setEditingRevision(false); setRevisionError(''); }}
+                        className="rounded-[var(--radius-sm)] border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]"
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Team Size Reason */}
 {existing.team_size_reason && (
   <div className="bg-amber-500/5 p-3.5 rounded-[var(--radius-sm)] border border-amber-500/20">
@@ -305,14 +570,25 @@ const handleTeamSizeChange = (size) => {
                           {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
                         </span>
                         {canReplace && !isReplacing && (
-                          <button
-                            type="button"
-                            onClick={() => { setReplacingId(inv.invitee_id); setReplaceError(''); }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-medium bg-amber-500/10 text-amber-600 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
-                          >
-                            <UserMinus size={12} />
-                            Replace
-                          </button>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => { setReplacingId(inv.invitee_id); setReplaceError(''); }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-medium bg-amber-500/10 text-amber-600 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
+                            >
+                              <RefreshCw size={12} />
+                              استبدال
+                            </button>
+                            <button
+                              type="button"
+                              disabled={replaceLoading}
+                              onClick={() => handleRemoveRejectedMember(inv.invitee_id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-medium bg-red-500/10 text-red-600 border border-red-500/20 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                            >
+                              <UserMinus size={12} />
+                              حذف والمتابعة بفريق أصغر
+                            </button>
+                          </div>
                         )}
                       </div>
                       {/* Replace member search */}
@@ -371,7 +647,19 @@ const handleTeamSizeChange = (size) => {
             {existing.status === 'pending_supervisor' && (
               <div className="flex items-center gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm">
                 <Info size={16} className="shrink-0" />
-                <span>بانتظار مراجعة <strong>{existing.supervisor_name}</strong> لمقترحك.</span>
+                <span>
+                  بانتظار مراجعة المشرفين الذين لم يردّوا بعد:
+                  {' '}
+                  <strong>{(existing.supervisors || []).filter((item) => item.status === 'pending').map((item) => item.name).join('، ') || existing.supervisor_name}</strong>
+                </span>
+              </div>
+            )}
+            {existing.status === 'supervisor_action_required' && (
+              <div className="flex items-start gap-2 p-3 rounded-[var(--radius-sm)] bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-sm">
+                <Info size={16} className="shrink-0 mt-0.5" />
+                <span>
+                  رفض مشرف واحد أو أكثر المقترح. يمكنك استبدال المشرف الرافض، أو المتابعة بالمشرف الموافق فقط بعد اكتمال الردود.
+                </span>
               </div>
             )}
             {existing.status === 'pending_hod' && (
@@ -494,10 +782,10 @@ const handleTeamSizeChange = (size) => {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-[var(--text)]">القسم والمشرف</h2>
-                  <p className="text-sm text-[var(--text-muted)]">اختر قسمك والمشرف المفضل</p>
+                  <p className="text-sm text-[var(--text-muted)]">اختر قسمك ومشرفاً واحداً أو مشرفين اثنين</p>
                 </div>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="p-dept" className="text-sm font-semibold text-[var(--text)]">
                     Department <span className="text-[var(--danger)]">*</span>
@@ -545,6 +833,31 @@ const handleTeamSizeChange = (size) => {
                   )}
                 </div>
                 <div className="flex flex-col gap-1.5">
+                  <label htmlFor="p-co-sup" className="text-sm font-semibold text-[var(--text)]">
+                    المشرف الثاني <span className="text-xs font-normal text-[var(--text-muted)]">(اختياري)</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="p-co-sup"
+                      name="co_supervisor"
+                      className={`${inputCls} appearance-none pr-10`}
+                      value={form.co_supervisor}
+                      onChange={handleChange}
+                      disabled={!form.supervisor || doctors.length < 2}
+                    >
+                      <option value="">المتابعة بمشرف واحد</option>
+                      {doctors
+                        .filter((doctor) => doctor.id !== Number(form.supervisor))
+                        .map((doctor) => (
+                          <option key={doctor.id} value={doctor.id}>
+                            {doctor.name}{doctor.department ? ` (${doctor.department.replace(/_/g, ' ')})` : ''}
+                          </option>
+                        ))}
+                    </select>
+                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
                   <label htmlFor="p-type" className="text-sm font-semibold text-[var(--text)]">
                     Project Type <span className="text-[var(--danger)]">*</span>
                   </label>
@@ -565,7 +878,7 @@ const handleTeamSizeChange = (size) => {
               </div>
               <div className="flex items-start gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm">
                 <Info size={16} className="shrink-0 mt-0.5" />
-                <span>المشرف الذي تختاره سيراجع ويوافق على مقترحك قبل إرساله إلى رئيس القسم.</span>
+                <span>يمكنك اختيار مشرف واحد أو إضافة مشرف ثانٍ. بعد موافقة أعضاء الفريق، يراجع كل مشرف المقترح بشكل مستقل قبل انتقاله إلى رئيس القسم.</span>
               </div>
             </div>
           )}
@@ -685,7 +998,14 @@ const handleTeamSizeChange = (size) => {
                 {[
                   { label: 'العنوان', value: form.title || '—' },
                   { label: 'القسم', value: DEPARTMENTS.find(d => d.value === form.department)?.label || '—' },
-                  { label: 'المشرف', value: doctors.find(d => d.id === Number(form.supervisor))?.name || '—' },
+                  {
+                    label: 'المشرفون',
+                    value: [form.supervisor, form.co_supervisor]
+                      .filter(Boolean)
+                      .map((id) => doctors.find((doctor) => doctor.id === Number(id))?.name)
+                      .filter(Boolean)
+                      .join('، ') || '—',
+                  },
                   { label: 'حجم الفريق', value: `${form.team_size} طالب` },
                 ].map(item => (
                   <div key={item.label} className="bg-[var(--bg-tertiary)] p-3 rounded-[var(--radius-sm)] border border-[var(--border-light)]">
