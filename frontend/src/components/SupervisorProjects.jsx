@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { fetchSupervisorBoards } from '../api';
 import KanbanBoard, { COLUMNS } from './KanbanBoard';
 import GitLabPanel from './GitLabPanel';
+import { getProjectTypeLabel } from '../lib/constants';
 import {
   FolderKanban, ListTodo, CheckCircle2, TrendingUp,
   ArrowLeft, Users, ArrowRight, GitBranch, Loader2, FolderOpen,
@@ -57,10 +58,30 @@ export default function SupervisorProjects({ onBack }) {
             All Projects
           </button>
           <div className="flex-1">
-            <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">{selectedBoard.title}</h1>
-            <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">
-              {selectedBoard.members.map(m => m.name || m.username).join(', ')}
-            </p>
+            <div className="flex items-center gap-2 mb-1">
+              <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">{selectedBoard.title}</h1>
+              {selectedBoard.project_type && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  {getProjectTypeLabel(selectedBoard.project_type)}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0 flex-1">
+                {selectedBoard.members.map(m => m.name || m.username).join(', ')}
+              </p>
+{selectedBoard.github_repo && selectedBoard.github_repo.startsWith('http') && (
+  <a 
+    href={selectedBoard.github_repo} 
+    target="_blank" 
+    rel="noreferrer" 
+    className="inline-flex items-center gap-1.5 text-[13px] font-medium text-violet-600 dark:text-violet-400 hover:underline"
+  >
+    <GitBranch size={14} />
+    GitHub Repo
+  </a>
+)}
+            </div>
           </div>
         </div>
 
@@ -110,8 +131,8 @@ export default function SupervisorProjects({ onBack }) {
           <FolderKanban size={20} />
         </div>
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">Supervised Projects</h1>
-          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">Track and manage all projects you are supervising.</p>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">المشاريع المشرف عليها</h1>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">متابعة وإدارة جميع المشاريع التي تشرف عليها.</p>
         </div>
       </div>
 
@@ -123,7 +144,7 @@ export default function SupervisorProjects({ onBack }) {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-[22px] font-bold text-gray-900 dark:text-white leading-none">{loading ? '—' : boards.length}</span>
-            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Projects</span>
+            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">إجمالي المشاريع</span>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex items-center gap-4 shadow-sm transition-all hover:border-violet-500/30 hover:shadow-md">
@@ -132,7 +153,7 @@ export default function SupervisorProjects({ onBack }) {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-[22px] font-bold text-gray-900 dark:text-white leading-none">{loading ? '—' : totalTasks}</span>
-            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Tasks</span>
+            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">إجمالي المهام</span>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex items-center gap-4 shadow-sm transition-all hover:border-violet-500/30 hover:shadow-md">
@@ -141,7 +162,7 @@ export default function SupervisorProjects({ onBack }) {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-[22px] font-bold text-gray-900 dark:text-white leading-none">{loading ? '—' : completedTasks}</span>
-            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Completed</span>
+            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">منجزة</span>
           </div>
         </div>
         <div className="bg-violet-500/5 border border-violet-500/20 rounded-xl p-5 flex items-center gap-4 shadow-sm transition-all hover:border-violet-500 hover:shadow-md">
@@ -150,7 +171,7 @@ export default function SupervisorProjects({ onBack }) {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-[22px] font-bold text-gray-900 dark:text-white leading-none">{loading ? '—' : `${avgProgress}%`}</span>
-            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Avg. Progress</span>
+            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">متوسط التقدم</span>
           </div>
         </div>
       </div>
@@ -175,7 +196,7 @@ export default function SupervisorProjects({ onBack }) {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400">
             <FolderOpen size={32} />
           </div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white">No active projects</h3>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">لا توجد مشاريع نشطة</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm leading-relaxed">
             Projects will appear here once student proposals or applications are registered and approved.
           </p>
@@ -204,6 +225,14 @@ export default function SupervisorProjects({ onBack }) {
                       {total} tasks
                     </span>
                   </div>
+
+                  {board.project_type && (
+                    <div className="flex items-start mt-1">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 tracking-wide">
+                        {getProjectTypeLabel(board.project_type)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Members */}
                   <div className="flex items-center gap-2 mt-3 flex-wrap">
@@ -243,7 +272,7 @@ export default function SupervisorProjects({ onBack }) {
                 {/* Progress Footer */}
                 <div className="px-5 py-4 mt-4 border-t border-gray-200/50 dark:border-gray-700/50">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[13px] font-semibold text-gray-500 dark:text-gray-400">Progress</span>
+                    <span className="text-[13px] font-semibold text-gray-500 dark:text-gray-400">التقدم</span>
                     <span className={`text-[13px] font-bold ${pct === 100 ? 'text-emerald-500' : 'text-gray-900 dark:text-white'}`}>{pct}%</span>
                   </div>
                   <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">

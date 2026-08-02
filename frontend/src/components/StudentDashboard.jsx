@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ChangeEmail from './ChangeEmail';
 import './DashboardLayout.css';
 import ProposeIdea from './ProposeIdea';
 import BrowseIdeas from './BrowseIdeas';
 import MyInvitations from './MyInvitations';
 import MyProject from './MyProject';
+import MyGrades from './MyGrades';
+import ChangePassword from './ChangePassword';
 import {
   fetchUnreadCount,
   fetchNotifications,
@@ -140,74 +143,75 @@ const SubIcon = {
 };
 /* ── Navigation Items ── */
 const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Overview', IconComp: Icon.Overview },
-  { id: 'browse', label: 'Browse Ideas', IconComp: Icon.Search },
-  { id: 'propose', label: 'Propose Idea', IconComp: Icon.Layers },
-  { id: 'invitations', label: 'Invitations', IconComp: Icon.Mail },
+  { id: 'dashboard', label: 'نظرة عامة', IconComp: Icon.Overview },
+  { id: 'browse', label: 'تصفح الأفكار', IconComp: Icon.Search },
+  { id: 'propose', label: 'اقتراح فكرة', IconComp: Icon.Layers },
+  { id: 'invitations', label: 'الدعوات', IconComp: Icon.Mail },
   {
     id: 'myproject',
-    label: 'My Project',
+    label: 'مشروعي',
     IconComp: Icon.Book,
     children: [
-      { id: 'board', label: 'Board', IconComp: SubIcon.Board },
-      { id: 'workflow', label: 'Workflow', IconComp: SubIcon.Workflow },
+      { id: 'board', label: 'اللوحة', IconComp: SubIcon.Board },
+      { id: 'workflow', label: 'سير العمل', IconComp: SubIcon.Workflow },
       { id: 'gitlab', label: 'GitLab', IconComp: SubIcon.GitLab },
     ],
   },
+  { id: 'my-grades', label: 'علاماتي', IconComp: Icon.CheckCircle },
 ];
 /* ── Breadcrumb Map ── */
 const BREADCRUMB_MAP = {
-  dashboard: [{ label: 'Overview', id: 'dashboard' }],
+  dashboard: [{ label: 'نظرة عامة', id: 'dashboard' }],
   browse: [
-    { label: 'Overview', id: 'dashboard' },
-    { label: 'Browse Ideas', id: 'browse' },
+    { label: 'نظرة عامة', id: 'dashboard' },
+    { label: 'تصفح الأفكار', id: 'browse' },
   ],
   propose: [
-    { label: 'Overview', id: 'dashboard' },
-    { label: 'Propose Idea', id: 'propose' },
+    { label: 'نظرة عامة', id: 'dashboard' },
+    { label: 'اقتراح فكرة', id: 'propose' },
   ],
   invitations: [
-    { label: 'Overview', id: 'dashboard' },
-    { label: 'Invitations', id: 'invitations' },
+    { label: 'نظرة عامة', id: 'dashboard' },
+    { label: 'الدعوات', id: 'invitations' },
   ],
   myproject: [
-    { label: 'Overview', id: 'dashboard' },
-    { label: 'My Project', id: 'myproject' },
+    { label: 'نظرة عامة', id: 'dashboard' },
+    { label: 'مشروعي', id: 'myproject' },
   ],
 };
 
 const MYPROJECT_SUB_TABS = {
-  board: 'Board',
-  workflow: 'Workflow',
+  board: 'اللوحة',
+  workflow: 'سير العمل',
   gitlab: 'GitLab',
 };
 /* ── Module Cards ── */
 const MODULE_CARDS = [
   {
     IconComp: Icon.Search,
-    label: 'Browse Ideas',
-    desc: 'Discover innovative project ideas submitted by faculty and apply to join',
+    label: 'تصفح الأفكار',
+    desc: 'اكتشف أفكار المشاريع المبتكرة المقدمة من الهيئة التدريسية وتقدم للانضمام',
     page: 'browse',
     gradient: 'linear-gradient(135deg, #6366f1, #818cf8)',
   },
   {
     IconComp: Icon.Layers,
-    label: 'Propose Idea',
-    desc: 'Submit your own graduation project idea and invite team members',
+    label: 'اقتراح فكرة',
+    desc: 'اقترح فكرة مشروع تخرجك وادعُ أعضاء الفريق',
     page: 'propose',
     gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)',
   },
   {
     IconComp: Icon.Mail,
-    label: 'Team Invitations',
-    desc: 'Review and respond to project team invitations from your peers',
+    label: 'دعوات الفريق',
+    desc: 'مراجعة والرد على دعوات فرق المشاريع من زملائك',
     page: 'invitations',
     gradient: 'linear-gradient(135deg, #06b6d4, #22d3ee)',
   },
   {
     IconComp: Icon.Book,
-    label: 'My Project',
-    desc: 'Access your Kanban board, track tasks, and monitor project progress',
+    label: 'مشروعي',
+    desc: 'الوصول إلى لوحة كانبان، تتبع المهام، ومراقبة تقدم المشروع',
     page: 'myproject',
     gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)',
   },
@@ -531,15 +535,19 @@ const handleSubNavClick = (parentId, childId) => {
     }
   };
 
+  const goBack = () => {
+    setPage('dashboard');
+  };
+
   /* ── Determine student status text ── */
   const getStatusInfo = () => {
     if (dashboardStats.hasProject) {
-      return { label: 'Project Active', color: '#10b981', className: 'std-text-green' };
+      return { label: 'مشروع نشط', color: '#10b981', className: 'std-text-green' };
     }
     if (dashboardStats.hasProposal || dashboardStats.hasApplication) {
-      return { label: 'Pending Review', color: '#f59e0b', className: 'std-text-amber' };
+      return { label: 'قيد المراجعة', color: '#f59e0b', className: 'std-text-amber' };
     }
-    return { label: 'No Project Yet', color: '#64748b', className: 'std-text-gray' };
+    return { label: 'لا يوجد مشروع بعد', color: '#64748b', className: 'std-text-gray' };
   };
 
   const statusInfo = getStatusInfo();
@@ -556,6 +564,8 @@ const getBreadcrumbs = () => {
 const breadcrumbs = getBreadcrumbs();
   /* ── Render sub-pages ── */
   const renderContent = () => {
+    if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword user={user} onBack={goBack} /></div>;
+    if (page === 'change-email') return <div className="std-page-wrapper"><ChangeEmail user={user} onBack={goBack} /></div>;
     if (page === 'propose') {
       return (
         <div className="std-page-wrapper">
@@ -584,6 +594,13 @@ const breadcrumbs = getBreadcrumbs();
         </div>
       );
     }
+    if (page === 'my-grades') {
+      return (
+        <div className="std-page-wrapper">
+          <MyGrades />
+        </div>
+      );
+    }
 
     // ── Overview Dashboard ──
     return (
@@ -598,7 +615,7 @@ const breadcrumbs = getBreadcrumbs();
           <div className="std-hero-content">
             <div className="std-hero-text">
               <h1 className="std-hero-title">
-                Welcome back, <span className="std-gradient-text">{user.username}</span>
+                مرحباً بعودتك، <span className="std-gradient-text">{user.username}</span>
               </h1>
               <p className="std-hero-sub">
                 Manage your graduation project journey — from idea to delivery.
@@ -608,12 +625,12 @@ const breadcrumbs = getBreadcrumbs();
               {dashboardStats.hasProject ? (
                 <>
                   <ProgressRing radius={46} stroke={5} progress={dashboardStats.projectProgress} />
-                  <span className="std-ring-label">Progress</span>
+                  <span className="std-ring-label">التقدم</span>
                 </>
               ) : (
                 <div className="std-hero-empty-ring">
                   <Icon.Book size={28} />
-                  <span>No active project</span>
+                  <span>لا يوجد مشروع نشط</span>
                 </div>
               )}
             </div>
@@ -627,8 +644,8 @@ const breadcrumbs = getBreadcrumbs();
               <Icon.Calendar size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Semester</span>
-              <span className="std-stat-value">Spring</span>
+              <span className="std-stat-title">الفصل</span>
+              <span className="std-stat-value">ربيعي</span>
             </div>
           </div>
           <div className="std-stat-card">
@@ -636,7 +653,7 @@ const breadcrumbs = getBreadcrumbs();
               <Icon.CheckCircle size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Status</span>
+              <span className="std-stat-title">الحالة</span>
               <span className={`std-stat-value ${statusInfo.className}`}>{statusInfo.label}</span>
             </div>
           </div>
@@ -645,7 +662,7 @@ const breadcrumbs = getBreadcrumbs();
               <Icon.TaskCheck size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Tasks Done</span>
+              <span className="std-stat-title">المهام المنجزة</span>
               <span className="std-stat-value std-text-purple">
                 {loading ? '—' : animatedTasks}
               </span>
@@ -656,7 +673,7 @@ const breadcrumbs = getBreadcrumbs();
               <Icon.Mail size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Invitations</span>
+              <span className="std-stat-title">الدعوات</span>
               <span className="std-stat-value std-text-amber">
                 {loading ? '—' : animatedInvitations}
               </span>
@@ -666,7 +683,7 @@ const breadcrumbs = getBreadcrumbs();
 
         {/* Modules */}
         <div className={`std-modules ${mounted ? 'std-animate-in std-delay-2' : ''}`}>
-          <h2 className="std-section-title">Project Modules</h2>
+          <h2 className="std-section-title">وحدات المشروع</h2>
           <div className="std-modules-grid">
             {MODULE_CARDS.map((m, i) => (
               <div
@@ -694,12 +711,12 @@ const breadcrumbs = getBreadcrumbs();
 
         {/* Recent Notifications Preview */}
         <div className={`std-activity ${mounted ? 'std-animate-in std-delay-3' : ''}`}>
-          <h2 className="std-section-title">Recent Notifications</h2>
+          <h2 className="std-section-title">آخر الإشعارات</h2>
           <div className="std-activity-list">
             {notifications.length === 0 ? (
               <div className="std-empty-state">
                 <Icon.Bell size={32} />
-                <p>No notifications yet</p>
+                <p>لا توجد إشعارات بعد</p>
               </div>
             ) : (
               notifications.slice(0, 4).map((n, i) => (
@@ -741,7 +758,7 @@ const breadcrumbs = getBreadcrumbs();
 
   /* ── Sidebar ── */
   const collapsed = !sidebarOpen;
-  const currentPageLabel = NAV_ITEMS.find((n) => n.id === page)?.label || 'Overview';
+  const currentPageLabel = NAV_ITEMS.find((n) => n.id === page)?.label || 'نظرة عامة';
   const initial = user.username ? user.username.charAt(0).toUpperCase() : 'S';
 
   return (
@@ -757,8 +774,8 @@ const breadcrumbs = getBreadcrumbs();
           </div>
           {!collapsed && (
             <div className="std-logo-text">
-              <span className="std-logo-title">SPU Portal</span>
-              <span className="std-logo-sub">Student Dashboard</span>
+              <span className="std-logo-title">بوابة SPU</span>
+              <span className="std-logo-sub">لوحة الطالب</span>
             </div>
           )}
         </div>
@@ -767,7 +784,7 @@ const breadcrumbs = getBreadcrumbs();
 
         {/* Navigation */}
 <nav className="std-sidebar-nav">
-  {!collapsed && <div className="std-nav-label">Menu</div>}
+  {!collapsed && <div className="std-nav-label">القائمة</div>}
   {NAV_ITEMS.map((item, index) => {
     const hasChildren = item.children && item.children.length > 0;
     const isExpanded = expandedGroups[item.id];
@@ -824,7 +841,7 @@ const breadcrumbs = getBreadcrumbs();
             <span style={{ transform: collapsed ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.3s', display: 'inline-flex' }}>
               <Icon.Collapse size={16} />
             </span>
-            {!collapsed && <span>Collapse</span>}
+            {!collapsed && <span>طي</span>}
           </button>
         </div>
       </aside>
@@ -875,7 +892,7 @@ const breadcrumbs = getBreadcrumbs();
             {/* Search Bar */}
             <div className="std-search-bar">
               <Icon.Search size={15} />
-              <input type="text" placeholder="Search..." className="std-search-input" />
+              <input type="text" placeholder="بحث..." className="std-search-input" />
               <kbd className="std-search-kbd">Ctrl+K</kbd>
             </div>
 
@@ -898,7 +915,7 @@ const breadcrumbs = getBreadcrumbs();
               {notifOpen && (
                 <div className="std-notif-dropdown">
                   <div className="std-notif-header">
-                    <h3>Notifications</h3>
+                    <h3>الإشعارات</h3>
                     {unreadCount > 0 && (
                       <button className="std-notif-mark-read" onClick={handleMarkAllRead}>
                         Mark all read
@@ -907,7 +924,7 @@ const breadcrumbs = getBreadcrumbs();
                   </div>
                   <div className="std-notif-list">
                     {notifications.length === 0 ? (
-                      <div className="std-notif-empty">No notifications</div>
+                      <div className="std-notif-empty">لا توجد إشعارات</div>
                     ) : (
                       notifications.slice(0, 5).map((n) => (
                         <div
@@ -956,8 +973,8 @@ const breadcrumbs = getBreadcrumbs();
               >
                 <div className="std-avatar">{initial}</div>
                 <div className="std-profile-info">
-                  <span className="std-profile-name">{user.username || 'Student'}</span>
-                  <span className="std-profile-role">Student</span>
+                  <span className="std-profile-name">{user.username || 'طالب'}</span>
+                  <span className="std-profile-role">طالب</span>
                 </div>
                 <span style={{ transform: profileOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', display: 'inline-flex' }}>
                   <Icon.ChevronDown size={14} />
@@ -969,29 +986,36 @@ const breadcrumbs = getBreadcrumbs();
                   <div className="std-profile-dropdown-header">
                     <div className="std-avatar std-avatar-lg">{initial}</div>
                     <div>
-                      <span className="std-profile-dropdown-name">{user.username || 'Student'}</span>
+                      <span className="std-profile-dropdown-name">{user.username || 'طالب'}</span>
                       <span className="std-profile-dropdown-email">{user.email || 'student@spu.edu'}</span>
                     </div>
                   </div>
                   <div className="std-profile-dropdown-divider" />
                   <button
                     className="std-profile-dropdown-item"
-                    onClick={() => { setPage('dashboard'); setProfileOpen(false); }}
+                    onClick={() => { setPage('change-password'); setProfileOpen(false); }}
                   >
                     <Icon.Settings size={16} />
-                    Settings
+                    تغيير كلمة المرور
+                  </button>
+                  <button
+                    className="std-profile-dropdown-item"
+                    onClick={() => { setPage('change-email'); setProfileOpen(false); }}
+                  >
+                    <Icon.Mail size={16} />
+                    تغيير البريد الإلكتروني
                   </button>
                   <button
                     className="std-profile-dropdown-item"
                     onClick={() => setProfileOpen(false)}
                   >
                     <Icon.Help size={16} />
-                    Help
+                    المساعدة
                   </button>
                   <div className="std-profile-dropdown-divider" />
                   <button className="std-profile-dropdown-item std-profile-item-danger" onClick={handleLogout}>
                     <Icon.Logout size={16} />
-                    Sign Out
+                    تسجيل الخروج
                   </button>
                 </div>
               )}

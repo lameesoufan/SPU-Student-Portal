@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { fetchMyBoard } from '../api';
+import { fetchMyBoard, updateBoard } from '../api';
 import KanbanBoard from './KanbanBoard';
 import ProjectWorkflowView from './ProjectWorkflowView';
 import GitLabPanel from './GitLabPanel';
+import { GitBranch, Edit2, Check, X } from 'lucide-react';
+
 
 export default function MyProject() {
   const [board, setBoard]     = useState(null);
@@ -40,7 +42,7 @@ useEffect(() => {
   if (loading) return (
     <div className="mp-loading-state">
       <div className="spinner spinner-dark"></div>
-      <p>Loading your project board…</p>
+      <p>جاري تحميل لوحة مشروعك…</p>
     </div>
   );
 
@@ -53,7 +55,7 @@ useEffect(() => {
   if (!board) return (
     <div className="my-project-page">
       <div className="page-header">
-        <h1 className="page-title">My Project</h1>
+        <h1 className="page-title">مشروعي</h1>
       </div>
       <div className="mp-empty-state">
         <div className="empty-state">
@@ -64,8 +66,8 @@ useEffect(() => {
               <line x1="9" y1="21" x2="9" y2="9"/>
             </svg>
           </div>
-          <h3>No Active Project</h3>
-          <p>Your project board will appear here once your project proposal is approved by the Head of Department.</p>
+          <h3>لا يوجد مشروع نشط</h3>
+          <p>ستظهر لوحة مشروعك هنا بمجرد موافقة رئيس القسم على مقترح مشروعك.</p>
         </div>
       </div>
     </div>
@@ -73,8 +75,9 @@ useEffect(() => {
 
   return (
     <div className="my-project-page">
-      <div className="page-header">
-        <h1 className="page-title">My Project</h1>
+      <div className="page-header" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
+        <h1 className="page-title m-0">مشروعي</h1>
+        <GithubLink board={board} setBoard={setBoard} />
       </div>
 
       <div className="flex gap-0 mb-6 border-b-2 border-gray-200 dark:border-gray-700 p-0">
@@ -110,6 +113,63 @@ useEffect(() => {
           <GitLabPanel boardId={board.id} canManage={false} />
         )}
       </div>
+    </div>
+  );
+}
+
+function GithubLink({ board, setBoard }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [repo, setRepo] = useState(board.github_repo || '');
+  const [loading, setLoading] = useState(false);
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const res = await updateBoard(board.id, { github_repo: repo });
+      setBoard(res.data);
+      setIsEditing(false);
+    } catch (err) {
+      alert('فشل تحديث رابط مستودع GitHub');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-2 mt-1">
+        <GitBranch size={18} className="text-gray-500" />
+        <input 
+          type="url" 
+          value={repo} 
+          onChange={e => setRepo(e.target.value)} 
+          placeholder="https://github.com/username/repo"
+          className="border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:border-violet-500 w-64"
+          disabled={loading}
+        />
+        <button onClick={handleSave} disabled={loading} className="text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 p-1.5 rounded transition-colors">
+          <Check size={16} />
+        </button>
+        <button onClick={() => { setIsEditing(false); setRepo(board.github_repo || ''); }} disabled={loading} className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 p-1.5 rounded transition-colors">
+          <X size={16} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <GitBranch size={18} className={board.github_repo ? "text-gray-900 dark:text-white" : "text-gray-400"} />
+      {board.github_repo ? (
+        <a href={board.github_repo} target="_blank" rel="noreferrer" className="text-sm text-violet-600 dark:text-violet-400 hover:underline font-medium">
+          {board.github_repo}
+        </a>
+      ) : (
+        <span className="text-sm text-gray-400 italic">لا يوجد مستودع GitHub مربوط</span>
+      )}
+      <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-violet-600 p-1 rounded transition-colors" title="تعديل رابط مستودع GitHub">
+        <Edit2 size={14} />
+      </button>
     </div>
   );
 }

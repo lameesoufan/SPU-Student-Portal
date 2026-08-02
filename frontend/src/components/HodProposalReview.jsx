@@ -93,8 +93,8 @@ export default function HodProposalReview({ onBack }) {
           <FileCheck size={20} />
         </div>
         <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">Student Proposals</h1>
-          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">Review and approve project proposals from students</p>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">مقترحات الطلاب</h1>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">مراجعة والموافقة على مقترحات المشاريع من الطلاب</p>
         </div>
         {proposals.length > 0 && (
           <div className="ml-auto flex items-center justify-center min-w-[36px] h-9 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-lg text-sm font-bold px-3">
@@ -124,8 +124,8 @@ export default function HodProposalReview({ onBack }) {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-500">
             <ClipboardCheck size={32} />
           </div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white">All caught up</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">No proposals pending your review. New submissions will appear here.</p>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">تمت المراجعة</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">لا توجد مقترحات معلقة للمراجعة. الطلبات الجديدة ستظهر هنا.</p>
         </div>
       )}
 
@@ -154,7 +154,7 @@ export default function HodProposalReview({ onBack }) {
                   </span>
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 tracking-wide">
                     <User size={11} />
-                    {p.supervisor_name}
+                    {(p.supervisors || []).filter((item) => item.status === 'approved').map((item) => item.name).join('، ') || p.supervisor_name}
                   </span>
                 </div>
               </div>
@@ -162,6 +162,26 @@ export default function HodProposalReview({ onBack }) {
               {/* Card Body */}
               <div className="px-6 py-4 flex flex-col gap-3.5">
                 <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed m-0 line-clamp-3">{p.description}</p>
+
+                {(p.supervisors || []).length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">موافقات المشرفين:</span>
+                    {p.supervisors.map((supervisor) => (
+                      <span
+                        key={supervisor.id}
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          supervisor.status === 'approved'
+                            ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                            : supervisor.status === 'rejected'
+                              ? 'bg-red-500/10 text-red-600 border border-red-500/20'
+                              : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                        }`}
+                      >
+                        {supervisor.name}: {supervisor.status === 'approved' ? 'موافق' : supervisor.status === 'rejected' ? 'رافض' : 'بانتظار الرد'}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 {/* Team Members */}
                 {p.invitations && p.invitations.length > 0 && (
@@ -243,14 +263,14 @@ export default function HodProposalReview({ onBack }) {
                 {reviewing.action === 'approve' ? <CheckCircle2 size={22} /> : <XCircle size={22} />}
               </div>
               <h3 className="text-lg font-bold text-gray-900 dark:text-white m-0">
-                {reviewing.action === 'approve' ? 'Approve & Assign' : 'Reject Proposal'}
+                {reviewing.action === 'approve' ? 'Approve & Assign' : 'رفض المقترح'}
               </h3>
             </div>
 
             {/* Approve Note */}
             {reviewing.action === 'approve' && (
               <p className="text-sm leading-relaxed mt-3 p-3 px-4 bg-sky-500/10 rounded-lg border border-sky-500/20 text-sky-700 dark:text-sky-400">
-                Approving will assign this project to the student and automatically create a project application with status <strong>Accepted</strong>.
+                Approving will assign this project to the student and automatically create a project application with status <strong>مقبول</strong>.
               </p>
             )}
 
@@ -266,7 +286,7 @@ export default function HodProposalReview({ onBack }) {
                   rows={3}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Explain why this proposal is being rejected…"
+                  placeholder="اشرح سبب رفض هذا المقترح…"
                 />
               </div>
             )}
@@ -297,7 +317,7 @@ export default function HodProposalReview({ onBack }) {
                 disabled={confirming}
               >
                 {confirming && <Loader2 size={14} className="animate-spin" />}
-                {confirming ? 'Processing…' : 'Confirm'}
+                {confirming ? 'Processing…' : 'تأكيد'}
               </button>
             </div>
           </div>

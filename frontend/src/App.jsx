@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import usePageHistory from './hooks/usePageHistory';
 import './index.css';
-
-import { logoutUser } from './api';
+import UploadReference from './components/UploadReference';
+import { logoutUser, clearAccessToken, fetchCurrentUser } from './api';
 import Login from './components/Login';
 import SelfRegister from './components/SelfRegister';
 import Navbar from './components/Navbar';
@@ -13,35 +13,77 @@ import DoctorDashboard from './components/DoctorDashboard';
 import HodDashboard from './components/HodDashboard';
 import DeanDashboard from './components/DeanDashboard';
 import AssignHod from './components/AssignHod';
-
 import ChangePassword from './components/ChangePassword';
+import ChangeUsername from './components/ChangeUsername';
+import ForgotPassword from './components/ForgotPassword';
+
 
 function AppInner() {
   const [user, setUser]     = useState(null);
   const [page, setPage, goBack] = usePageHistory('dashboard');
-  const [screen, setScreen] = useState('login'); // 'login' | 'register'
+  const [screen, setScreen] = useState('login'); // login | register | forgot-password
+  const [bootstrapped, setBootstrapped] = useState(false);
+
+  // ── Restore session on app mount ──
+  // If the HttpOnly JWT cookies are still valid, fetch the current user
+  // from the backend so the user is not bounced to the login screen on
+  // every page refresh.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchCurrentUser();
+        if (!cancelled && res.data) {
+          setUser(res.data);
+        }
+      } catch {
+        // Not authenticated — that's fine, stay on the login screen.
+      } finally {
+        if (!cancelled) setBootstrapped(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleLogin      = (u) => { setUser(u); setPage('dashboard'); setScreen('login'); };
   const handleRegistered = (u) => { setUser(u); setPage('dashboard'); };
-
-const handleLogout = async () => {
+  const handlePasswordChanged = () => setUser({ ...user, must_change_password: false });
+  const handleUsernameChanged = (newUsername) => setUser({ ...user, username: newUsername, must_change_username: false });
+  const handleLogout = async () => {
     try { await logoutUser(); } catch { /* proceed */ }
-    // Cookies are cleared by the backend — no localStorage to clean
+    clearAccessToken();  // ← مسح الـ token من الذاكرة
     setUser(null);
     setScreen('login');
     setPage('dashboard');
   };
 
-  const handlePasswordChanged = () => setUser({ ...user, must_change_password: false });
+
+
+  // Show a minimal loader while we check if the session is still valid.
+  if (!bootstrapped) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+      </div>
+    );
+  }
 
   if (!user) {
+    if (screen === 'forgot-password')
+      return <ForgotPassword onBack={() => setScreen('login')} />;
     if (screen === 'register')
       return <SelfRegister onRegistered={handleRegistered} onBack={() => setScreen('login')} />;
-    return <Login onLogin={handleLogin} onRegister={() => setScreen('register')} />;
+    return <Login onLogin={handleLogin} onRegister={() => setScreen('register')} onForgotPassword={() => setScreen('forgot-password')} />;
   }
 
   if (user.must_change_password)
     return <ChangePassword user={user} onSuccess={handlePasswordChanged} />;
+
+  // Imported doctors choose a permanent username after completing the
+  // mandatory first-login password change. HoDs are included because an
+  // imported doctor may be promoted before their first login.
+  if (user.must_change_username && ['doctor', 'hod'].includes(user.role))
+    return <ChangeUsername user={user} onSuccess={handleUsernameChanged} />;
 
   if (user.role === 'student') return <StudentDashboard user={user} onLogout={handleLogout} />;
   if (user.role === 'doctor')  return <DoctorDashboard  user={user} onLogout={handleLogout} />;

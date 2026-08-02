@@ -15,7 +15,7 @@ const renderResponseValue = (value, fieldType) => {
     return (
       <a href={value.url} target="_blank" rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 text-[var(--primary)] hover:underline font-medium">
-        📎 {value.name || 'Download file'}
+        📎 {value.name || 'تنزيل الملف'}
       </a>
     );
   }
@@ -93,8 +93,8 @@ export default function DoctorApplicationReview({ onBack }) {
           <ClipboardCheck size={20} />
         </div>
         <div>
-          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">Student Applications</h1>
-          <p className="text-sm text-[var(--text-muted)]">Pending your approval</p>
+          <h1 className="text-xl font-extrabold text-[var(--text)] leading-tight">طلبات الطلاب</h1>
+          <p className="text-sm text-[var(--text-muted)]">بانتظار موافقتك</p>
         </div>
       </div>
 
@@ -116,7 +116,7 @@ export default function DoctorApplicationReview({ onBack }) {
           <div className="w-16 h-16 flex items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 mb-4">
             <CheckCircle size={28} />
           </div>
-          <h3 className="text-lg font-bold text-[var(--text)]">No pending applications</h3>
+          <h3 className="text-lg font-bold text-[var(--text)]">لا توجد طلبات معلقة</h3>
           <p className="text-sm text-[var(--text-muted)] mt-1">All caught up!</p>
         </div>
       )}
@@ -181,7 +181,7 @@ export default function DoctorApplicationReview({ onBack }) {
                   <div className="flex items-start gap-2 p-3 rounded-[var(--radius-sm)] bg-amber-500/10 border border-amber-500/20">
                     <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
                     <div>
-                      <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Team Size Justification</span>
+                      <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">مبرر حجم الفريق</span>
                       <p className="text-sm text-[var(--text)] mt-0.5">{app.team_size_reason}</p>
                     </div>
                   </div>
@@ -217,10 +217,10 @@ export default function DoctorApplicationReview({ onBack }) {
               {/* ── Card Footer ── */}
               <div className="flex gap-3 px-5 py-4 border-t border-[var(--border-light)] bg-[var(--bg-tertiary)]">
                 <button className="inline-flex items-center gap-2 px-4 py-2 rounded-[var(--radius-sm)] bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors" onClick={() => openReview(app.id, 'approve')}>
-                  <CheckCircle size={16} /> Approve
+                  <CheckCircle size={16} /> موافقة
                 </button>
                 <button className="inline-flex items-center gap-2 px-4 py-2 rounded-[var(--radius-sm)] bg-transparent border-2 border-red-400 text-red-500 font-semibold text-sm hover:bg-red-500/10 transition-colors" onClick={() => openReview(app.id, 'reject')}>
-                  <XCircle size={16} /> Reject
+                  <XCircle size={16} /> رفض
                 </button>
               </div>
             </div>
@@ -242,14 +242,14 @@ export default function DoctorApplicationReview({ onBack }) {
                 </div>
               )}
               <h3 className="text-lg font-extrabold text-[var(--text)]">
-                {reviewing.action === 'approve' ? 'Approve Application' : 'Reject Application'}
+                {reviewing.action === 'approve' ? 'الموافقة على الطلب' : 'رفض الطلب'}
               </h3>
             </div>
 
             {reviewing.action === 'approve' && (
               <div className="flex items-start gap-2 p-3 rounded-[var(--radius-sm)] bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm mb-4">
                 <Info size={16} className="shrink-0 mt-0.5" />
-                <span>This will forward the application to the HoD for final approval.</span>
+                <span>سيؤدي هذا إلى إرسال الطلب إلى رئيس القسم للموافقة النهائية.</span>
               </div>
             )}
 
@@ -258,7 +258,7 @@ export default function DoctorApplicationReview({ onBack }) {
                 <label htmlFor="dr-reason" className="block text-sm font-semibold text-[var(--text)] mb-1.5">
                   Rejection Reason <span className="text-[var(--danger)]">*</span>
                 </label>
-                <textarea id="dr-reason" className="w-full bg-[var(--input-bg)] text-[var(--text)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors resize-none" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Explain why…" />
+                <textarea id="dr-reason" className="w-full bg-[var(--input-bg)] text-[var(--text)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors resize-none" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="اشرح السبب…" />
               </div>
             )}
 
@@ -271,10 +271,10 @@ export default function DoctorApplicationReview({ onBack }) {
 
             <div className="flex gap-3 justify-end">
               <button className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-[var(--radius-sm)] font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${reviewing.action === 'approve' ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-red-500 text-white hover:bg-red-600'}`} onClick={handleConfirm} disabled={confirming}>
-                {confirming ? <><Loader2 size={16} className="animate-spin" /> Processing…</> : 'Confirm'}
+                {confirming ? <><Loader2 size={16} className="animate-spin" /> جاري المعالجة…</> : 'تأكيد'}
               </button>
               <button className="inline-flex items-center justify-center gap-2 bg-transparent border border-[var(--border)] text-[var(--text)] font-medium py-2.5 px-5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-tertiary)] transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => setReviewing(null)} disabled={confirming}>
-                Cancel
+                إلغاء
               </button>
             </div>
           </div>

@@ -83,6 +83,26 @@ class BoardAccessTests(TestCase):
         response = self.client.get('/api/project-management/hod/boards/')
         self.assertEqual(response.status_code, 403)
 
+    def test_hod_can_manage_project_they_supervise(self):
+        self.board.proposal.supervisor = self.hod
+        self.board.proposal.save(update_fields=['supervisor'])
+        self.client.force_authenticate(user=self.hod)
+        response = self.client.post(
+            f'/api/project-management/board/{self.board.id}/tasks/',
+            {'title': 'HoD managed task', 'status': 'todo'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201)
+
+    def test_hod_cannot_manage_other_department_project(self):
+        self.client.force_authenticate(user=self.hod)
+        response = self.client.post(
+            f'/api/project-management/board/{self.board.id}/tasks/',
+            {'title': 'Forbidden task', 'status': 'todo'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 404)
+
 
 class TaskCRUDTests(TestCase):
     """Tests for task create, update, and delete."""

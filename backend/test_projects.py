@@ -501,7 +501,7 @@ class ProposalReviewTests(BaseTestCase):
         )
         self.assertTrue(result['ok'])
         proposal.refresh_from_db()
-        self.assertEqual(proposal.status, 'rejected')
+        self.assertEqual(proposal.status, 'supervisor_action_required')
         self.assertEqual(proposal.rejection_reason, 'Not feasible')
 
     def test_hod_approve(self):
@@ -910,8 +910,8 @@ class StudentActivityTests(BaseTestCase):
         active, msg = _student_is_active(self.student1)
         self.assertTrue(active)
 
-    def test_rejected_proposal_frees_student(self):
-        """Student with rejected proposal can propose again."""
+    def test_supervisor_rejection_keeps_proposal_active_for_correction(self):
+        """A supervisor rejection keeps the proposal active so the student can replace them."""
         result = create_student_proposal(
             student=self.student1, supervisor=self.doctor1,
             title='Rejected', description='Desc',
@@ -921,9 +921,9 @@ class StudentActivityTests(BaseTestCase):
         proposal = result['proposal']
         supervisor_review_proposal(proposal=proposal, action='reject', rejection_reason='Bad')
 
-        # Student should be free now
+        # The proposal stays active until the student replaces/removes the rejected supervisor or cancels.
         active, msg = _student_is_active(self.student1)
-        self.assertFalse(active)
+        self.assertTrue(active)
 
     def test_pending_invitation_does_not_block_acceptance(self):
         """Having a pending invitation should NOT block accepting another invitation."""
@@ -1074,8 +1074,8 @@ class EdgeCaseTests(BaseTestCase):
         app.refresh_from_db()
         self.assertEqual(app.status, 'registered')
 
-    def test_rejection_frees_student_for_new_proposal(self):
-        """After proposal rejection, student can create a new proposal."""
+    def test_supervisor_rejection_blocks_duplicate_proposal_until_resolved(self):
+        """The student cannot open a second proposal while supervisor action is required."""
         result = create_student_proposal(
             student=self.student1, supervisor=self.doctor1,
             title='First', description='Desc',
@@ -1085,14 +1085,14 @@ class EdgeCaseTests(BaseTestCase):
         proposal = result['proposal']
         supervisor_review_proposal(proposal=proposal, action='reject', rejection_reason='Bad')
 
-        # Can propose again
+        # A second proposal is blocked until the current one is corrected or cancelled.
         result2 = create_student_proposal(
             student=self.student1, supervisor=self.doctor1,
             title='Second', description='Desc',
             department='software_engineering', team_size=1,
             team_size_reason='Solo again', member_ids=[],
         )
-        self.assertTrue(result2['ok'])
+        self.assertFalse(result2['ok'])
 
     def test_cancel_frees_student_for_new_proposal(self):
         """After cancelling proposal, student can create a new one."""
@@ -1153,8 +1153,8 @@ class EdgeCaseTests(BaseTestCase):
         )
         self.assertFalse(result['ok'])
 
-    def test_supervisor_reject_resets_invitations(self):
-        """When supervisor rejects, all invitations are also rejected."""
+    def test_supervisor_reject_preserves_accepted_team(self):
+        """Supervisor rejection preserves the approved team while the supervisor is replaced."""
         result = create_student_proposal(
             student=self.student1, supervisor=self.doctor1,
             title='Rejected', description='Desc',
@@ -1167,13 +1167,12 @@ class EdgeCaseTests(BaseTestCase):
 
         supervisor_review_proposal(proposal=proposal, action='reject', rejection_reason='No')
 
-        # Check invitation was rejected
+        # The accepted team remains attached to the active proposal.
         inv.refresh_from_db()
-        self.assertEqual(inv.status, 'rejected')
+        self.assertEqual(inv.status, 'accepted')
 
-        # Student2 should be free now
         active, _ = _student_is_active(self.student2)
-        self.assertFalse(active)
+        self.assertTrue(active)
 
     def test_hod_reject_resets_invitations(self):
         """When HoD rejects, all invitations are also rejected."""

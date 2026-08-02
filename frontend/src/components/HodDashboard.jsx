@@ -1,3 +1,5 @@
+import ChangeEmail from './ChangeEmail';
+import ChangePassword from './ChangePassword';
 import {
   LayoutGrid,
   Search,
@@ -24,6 +26,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import usePageHistory from '../hooks/usePageHistory';
 import './DashboardLayout.css';
 import HodProposalReview from './HodProposalReview';
+import SupervisorReview from './SupervisorReview';
 import HodIdeaReview from './HodIdeaReview';
 import HodApplicationReview from './HodApplicationReview';
 import HodFormBuilder from './HodFormBuilder';
@@ -32,6 +35,9 @@ import WorkflowBuilder from './WorkflowBuilder';
 import ApplyWorkflow from './ApplyWorkflow';
 import WorkflowReview from './WorkflowReview';import MyIdeas from './MyIdeas';         
 import SubmitIdea from './SubmitIdea';
+import CollectiveGradingSettings from './CollectiveGradingSettings';
+import HodGradesSummary from './HodGradesSummary';
+import GradeEntry from './committees/GradeEntry';
 import { useTheme } from '../ThemeContext';
 import {
   fetchUnreadCount,
@@ -41,10 +47,10 @@ import {
 } from '../api';
 import { NotifIcon, notifBgColor, notifTextColor } from './NotifHelpers.jsx';
 const DEPT_LABELS = {
-  software_engineering:    'Software Engineering',
-  artificial_intelligence: 'Artificial Intelligence',
-  information_security:    'Information Security',
-  communications:          'Communications',
+  software_engineering:    'برمجيات',
+  artificial_intelligence: 'ذكاء اصطناعي',
+  information_security:    'أمن سيبراني',
+  communications:          'اتصالات',
   control_robotics:        'Control & Robotics',
 };
 import usePolling from '../hooks/usePolling';
@@ -73,82 +79,107 @@ const Icon = {
 
 /* ── Navigation Items ── */
 const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Overview', IconComp: Icon.Overview },
-  { id: 'my-ideas', label: 'My Ideas', IconComp: Icon.Lightbulb },
-  { id: 'ideas', label: 'Doctor Ideas', IconComp: Icon.Lightbulb },
-  { id: 'proposals', label: 'Student Proposals', IconComp: Icon.ClipboardCheck },
-  { id: 'applications', label: 'Idea Applications', IconComp: Icon.Inbox },
-  { id: 'formbuilder', label: 'Form Builder', IconComp: Icon.Forms },
-  { id: 'projects', label: 'Active Projects', IconComp: Icon.Kanban },
-  { id: 'workflow', label: 'Workflow Builder', IconComp: Icon.BarChart },
-  { id: 'applyworkflow', label: 'Apply Workflow', IconComp: Icon.ClipboardList },
-  { id: 'reviewworkflow', label: 'Review Workflows', IconComp: Icon.CheckCircle },
+  { id: 'dashboard', label: 'نظرة عامة', IconComp: Icon.Overview },
+  { id: 'my-ideas', label: 'أفكاري', IconComp: Icon.Lightbulb },
+  { id: 'supervisor-review', label: 'مقترحات للإشراف', IconComp: Icon.FileText },
+  { id: 'ideas', label: 'أفكار الدكاترة', IconComp: Icon.Lightbulb },
+  { id: 'proposals', label: 'مقترحات الطلاب', IconComp: Icon.ClipboardCheck },
+  { id: 'applications', label: 'طلبات الأفكار', IconComp: Icon.Inbox },
+  { id: 'formbuilder', label: 'منشئ النماذج', IconComp: Icon.Forms },
+  { id: 'projects', label: 'المشاريع النشطة', IconComp: Icon.Kanban },
+  { id: 'workflow', label: 'منشئ سير العمل', IconComp: Icon.BarChart },
+  { id: 'applyworkflow', label: 'تطبيق سير العمل', IconComp: Icon.ClipboardList },
+  { id: 'reviewworkflow', label: 'مراجعة سير العمل', IconComp: Icon.CheckCircle },
+  { id: 'grading-settings', label: 'إعدادات التقييم', IconComp: Icon.CheckCircle },
+  { id: 'hod-grades', label: 'علامات المشاريع', IconComp: Icon.BarChart },
+  { id: 'grade-entry', label: 'إدخال العلامات', IconComp: Icon.CheckCircle },
 ];
 
 /* ── Module Cards ── */
 const MODULE_CARDS = [
     {                                              // ← أضف هاد البلوك كامل
     IconComp: Icon.Lightbulb,
-    label: 'My Ideas',
-    desc: 'Submit and manage your own project ideas (auto-approved)',
+    label: 'أفكاري',
+    desc: 'تقديم وإدارة أفكار مشاريعك الخاصة (موافقة تلقائية)',
     page: 'my-ideas',
     gradient: 'linear-gradient(135deg, #ef4444, #f87171)',
   },
   {
+    IconComp: Icon.FileText,
+    label: 'مقترحات للإشراف',
+    desc: 'مراجعة المقترحات التي اختارك الطلاب مشرفًا عليها بصفتك دكتورًا',
+    page: 'supervisor-review',
+    gradient: 'linear-gradient(135deg, #0ea5e9, #38bdf8)',
+  },
+  {
     IconComp: Icon.Lightbulb,
-    label: 'Doctor Ideas',
-    desc: 'Review and approve doctor project ideas for your department',
+    label: 'أفكار الدكاترة',
+    desc: 'مراجعة والموافقة على أفكار المشاريع المقدمة من الدكاترة في قسمك',
     page: 'ideas',
     gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)',
   },
   {
     IconComp: Icon.ClipboardCheck,
-    label: 'Student Proposals',
-    desc: 'Review and approve student project proposals submitted',
+    label: 'مقترحات الطلاب',
+    desc: 'مراجعة والموافقة على مقترحات المشاريع المقدمة من الطلاب',
     page: 'proposals',
     gradient: 'linear-gradient(135deg, #6366f1, #818cf8)',
   },
   {
     IconComp: Icon.Inbox,
-    label: 'Idea Applications',
-    desc: 'Register and manage student applications on doctor ideas',
+    label: 'طلبات الأفكار',
+    desc: 'تسجيل وإدارة طلبات الطلاب على أفكار الدكاترة',
     page: 'applications',
     gradient: 'linear-gradient(135deg, #06b6d4, #22d3ee)',
   },
   {
     IconComp: Icon.Forms,
-    label: 'Form Builder',
-    desc: 'Customize student submission forms for your department',
+    label: 'منشئ النماذج',
+    desc: 'تخصيص نماذج تقديم الطلاب لقسمك',
     page: 'formbuilder',
     gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)',
   },
   {
     IconComp: Icon.Kanban,
-    label: 'Active Projects',
-    desc: 'Monitor department project progress and status',
+    label: 'المشاريع النشطة',
+    desc: 'مراقبة تقدم وحالة مشاريع القسم',
     page: 'projects',
     gradient: 'linear-gradient(135deg, #10b981, #34d399)',
   },
   {
     IconComp: Icon.BarChart,
-    label: 'Workflow Builder',
-    desc: 'Create dynamic project workflow templates with stages',
+    label: 'منشئ سير العمل',
+    desc: 'إنشاء قوالب سير عمل ديناميكية للمشاريع بمراحل',
     page: 'workflow',
     gradient: 'linear-gradient(135deg, #ec4899, #f472b6)',
   },
   {
     IconComp: Icon.ClipboardList,
-    label: 'Apply Workflow',
-    desc: 'Apply workflow templates to student projects',
+    label: 'تطبيق سير العمل',
+    desc: 'تطبيق قوالب سير العمل على مشاريع الطلاب',
     page: 'applyworkflow',
     gradient: 'linear-gradient(135deg, #14b8a6, #2dd4bf)',
   },
   {
     IconComp: Icon.CheckCircle,
-    label: 'Review Workflows',
-    desc: 'Review and approve workflow submissions from students',
+    label: 'مراجعة سير العمل',
+    desc: 'مراجعة والموافقة على طلبات سير العمل من الطلاب',
     page: 'reviewworkflow',
     gradient: 'linear-gradient(135deg, #f97316, #fb923c)',
+  },
+  {
+    IconComp: Icon.BarChart,
+    label: 'علامات المشاريع',
+    desc: 'عرض وتصفية علامات مشاريع القسم حسب النوع والفصل الدراسي',
+    page: 'hod-grades',
+    gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)',
+  },
+  {
+    IconComp: Icon.CheckCircle,
+    label: 'إدخال العلامات',
+    desc: 'أدخل علامات المشاريع للجان التي أنت عضو فيها',
+    page: 'grade-entry',
+    gradient: 'linear-gradient(135deg, #10b981, #34d399)',
   },
 ];
 
@@ -165,7 +196,7 @@ export default function HodDashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
 
 
-  const deptLabel = DEPT_LABELS[user.department] || 'Your Department';
+  const deptLabel = DEPT_LABELS[user.department] || 'قسمك';
 
   /* ── Fetch notifications ── */
   const loadNotifications = useCallback(async () => {
@@ -244,6 +275,8 @@ usePolling(async () => {
 
   /* ── Render sub-pages ── */
   const renderContent = () => {
+    if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword user={user} onBack={goBack} /></div>;
+    if (page === 'change-email') return <div className="std-page-wrapper"><ChangeEmail user={user} onBack={goBack} /></div>;
       
     if (page === 'my-ideas') {                                        // ← أضف
       return (                                                        // ← أضف
@@ -259,6 +292,13 @@ usePolling(async () => {
         </div>                                                        // ← أضف
       );                                                              // ← أضف
     }  
+    if (page === 'supervisor-review') {
+      return (
+        <div className="std-page-wrapper">
+          <SupervisorReview onBack={goBack} />
+        </div>
+      );
+    }
     if (page === 'ideas') {
       return (
         <div className="std-page-wrapper">
@@ -315,6 +355,27 @@ usePolling(async () => {
         </div>
       );
     }
+    if (page === 'grading-settings') {
+      return (
+        <div className="std-page-wrapper">
+          <CollectiveGradingSettings user={user} />
+        </div>
+      );
+    }
+    if (page === 'hod-grades') {
+      return (
+        <div className="std-page-wrapper">
+          <HodGradesSummary onBack={goBack} />
+        </div>
+      );
+    }
+    if (page === 'grade-entry') {
+      return (
+        <div className="std-page-wrapper">
+          <GradeEntry onBack={goBack} />
+        </div>
+      );
+    }
 
     return (
       <div className="std-content">
@@ -327,7 +388,7 @@ usePolling(async () => {
           <div className="std-hero-content">
             <div className="std-hero-text">
               <h1 className="std-hero-title">
-                Welcome back, <span className="std-gradient-text">Dr. {user.username}</span>
+                مرحباً بعودتك، <span className="std-gradient-text">د. {user.username}</span>
               </h1>
               <p className="std-hero-sub">
                 Managing operations for {deptLabel}. Review ideas, approve proposals, and oversee department projects.
@@ -336,7 +397,7 @@ usePolling(async () => {
             <div className="std-hero-right">
               <div className="std-hero-empty-ring">
                 <Icon.GradCap size={28} />
-                <span>HoD Portal</span>
+                <span>بوابة رئيس القسم</span>
               </div>
             </div>
           </div>
@@ -348,8 +409,8 @@ usePolling(async () => {
               <Icon.Calendar size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Semester</span>
-              <span className="std-stat-value">Spring</span>
+              <span className="std-stat-title">الفصل</span>
+              <span className="std-stat-value">ربيعي</span>
             </div>
           </div>
           <div className="std-stat-card">
@@ -357,7 +418,7 @@ usePolling(async () => {
               <Icon.GradCap size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Role</span>
+              <span className="std-stat-title">الدور</span>
               <span className="std-stat-value std-text-green">Head of Dept</span>
             </div>
           </div>
@@ -366,7 +427,7 @@ usePolling(async () => {
               <Icon.Book size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Department</span>
+              <span className="std-stat-title">القسم</span>
               <span className="std-stat-value std-text-purple" style={{ fontSize: '14px' }}>{deptLabel}</span>
             </div>
           </div>
@@ -375,7 +436,7 @@ usePolling(async () => {
               <Icon.Bell size={20} />
             </div>
             <div className="std-stat-info">
-              <span className="std-stat-title">Notifications</span>
+              <span className="std-stat-title">الإشعارات</span>
               <span className="std-stat-value std-text-amber">
                 {loading ? '—' : unreadCount}
               </span>
@@ -384,7 +445,7 @@ usePolling(async () => {
         </div>
 
         <div className={`std-modules ${mounted ? 'std-animate-in std-delay-2' : ''}`}>
-          <h2 className="std-section-title">Department Operations</h2>
+          <h2 className="std-section-title">عمليات القسم</h2>
           <div className="std-modules-grid">
             {MODULE_CARDS.map((m, i) => (
               <div
@@ -411,12 +472,12 @@ usePolling(async () => {
         </div>
 
         <div className={`std-activity ${mounted ? 'std-animate-in std-delay-3' : ''}`}>
-          <h2 className="std-section-title">Recent Notifications</h2>
+          <h2 className="std-section-title">آخر الإشعارات</h2>
           <div className="std-activity-list">
             {notifications.length === 0 ? (
               <div className="std-empty-state">
                 <Icon.Bell size={32} />
-                <p>No notifications yet</p>
+                <p>لا توجد إشعارات بعد</p>
               </div>
             ) : (
               notifications.slice(0, 4).map((n, i) => (
@@ -457,7 +518,7 @@ usePolling(async () => {
   };
 
 
-  const currentPageLabel = NAV_ITEMS.find((n) => n.id === page)?.label || 'Overview';
+  const currentPageLabel = NAV_ITEMS.find((n) => n.id === page)?.label || 'نظرة عامة';
     const initial = user.username ? user.username.charAt(0).toUpperCase() : 'H';
 
   /* ── Notification Slot ── */
@@ -467,7 +528,7 @@ usePolling(async () => {
       activePage={page}
       onNavigate={handleNavClick}
       unreadCount={unreadCount}
-      logoSubtitle="HOD Dashboard"
+      logoSubtitle="لوحة التحكم"
       pageTitle={currentPageLabel}
       theme={theme}
       onToggleTheme={toggleTheme}

@@ -3,6 +3,60 @@ import {
   fetchReviewableProjects, fetchProjectWorkflow, reviewWorkflowStage
 } from '../api';
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+
+function getWorkflowFileUrl(response) {
+  if (response?.file_url) return response.file_url;
+  if (!response?.value) return '';
+  const path = String(response.value).replace(/^\/?media\//, '');
+  return `${API_BASE}/media/${path}`;
+}
+
+function getStageReviewRows(stage) {
+  const configuredFields = stage?.stage_details?.fields || [];
+  const responses = stage?.field_responses || [];
+  const responsesByField = new Map(
+    responses.map((response) => [String(response.field), response]),
+  );
+
+  const rows = configuredFields.map((field) => {
+    const response = responsesByField.get(String(field.id));
+    return {
+      key: `field-${field.id}`,
+      fieldId: field.id,
+      label: field.label,
+      fieldType: field.field_type,
+      required: Boolean(field.required),
+      value: response?.value || '',
+      fileUrl: response?.file_url || '',
+      fileName: response?.file_name || '',
+      response,
+    };
+  });
+
+  const configuredIds = new Set(configuredFields.map((field) => String(field.id)));
+  responses.forEach((response) => {
+    if (configuredIds.has(String(response.field))) return;
+    rows.push({
+      key: `response-${response.id || response.field}`,
+      fieldId: response.field,
+      label: response.field_label || 'حقل محذوف',
+      fieldType: response.field_type,
+      required: false,
+      value: response.value || '',
+      fileUrl: response.file_url || '',
+      fileName: response.file_name || '',
+      response,
+    });
+  });
+
+  return rows;
+}
+
+function workflowSubmittedCount(workflow) {
+  return (workflow?.stage_instances || []).filter((stage) => stage.status === 'submitted').length;
+}
+
 const TRIGGER_DOT_COLORS = {
   project_start: 'bg-emerald-400',
   after_days: 'bg-amber-400',
@@ -31,11 +85,11 @@ const Icons = {
 };
 
 const STATUS_META = {
-  pending:   { label: 'Pending',   icon: Icons.Clock,      cls: 'bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300' },
-  submitted: { label: 'Submitted', icon: Icons.CheckCircle, cls: 'bg-violet-100 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300' },
-  approved:  { label: 'Approved',  icon: Icons.CheckCircle, cls: 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' },
-  rejected:  { label: 'Rejected',  icon: Icons.XCircle,     cls: 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300' },
-  overdue:   { label: 'Overdue',   icon: Icons.AlertCircle, cls: 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300' },
+  pending:   { label: 'معلق',   icon: Icons.Clock,      cls: 'bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300' },
+  submitted: { label: 'مُرسل', icon: Icons.CheckCircle, cls: 'bg-violet-100 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300' },
+  approved:  { label: 'مقبول',  icon: Icons.CheckCircle, cls: 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' },
+  rejected:  { label: 'مرفوض',  icon: Icons.XCircle,     cls: 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300' },
+  overdue:   { label: 'متأخر',   icon: Icons.AlertCircle, cls: 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300' },
 };
 
 // ── Pipeline Progress Bar ────────────────────────────────────────────────
@@ -80,6 +134,7 @@ function PipelineProgress({ stages, selectedIndex, onSelect }) {
 export default function WorkflowReview({ onBack }) {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [workflows, setWorkflows] = useState([]);
   const [workflow, setWorkflow] = useState(null);
   const [selectedStage, setSelectedStage] = useState(null);
   const [activeStageIdx, setActiveStageIdx] = useState(null);
@@ -98,22 +153,32 @@ export default function WorkflowReview({ onBack }) {
       const res = await fetchReviewableProjects();
       setProjects(res.data);
     } catch {
-      setError('Failed to load projects');
+      setError('فشل تحميل المشاريع');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadProjectWorkflow = async (projectId) => {
+  const loadProjectWorkflow = async (projectId, preferredWorkflowId = null) => {
     setLoading(true);
     setError('');
     try {
       const res = await fetchProjectWorkflow(projectId);
-      setWorkflow(res.data);
-      setSelectedProject(projects.find(p => p.id === projectId));
+      const items = Array.isArray(res.data) ? res.data : (res.data ? [res.data] : []);
+      const preferredId = preferredWorkflowId ?? workflow?.id;
+      const selected = items.find((item) => item.id === preferredId)
+        || items.find((item) => workflowSubmittedCount(item) > 0)
+        || items[0]
+        || null;
+
+      setWorkflows(items);
+      setWorkflow(selected);
+      setSelectedProject(projects.find((project) => project.id === projectId) || null);
       setActiveStageIdx(null);
     } catch {
-      setError('Failed to load workflow');
+      setWorkflows([]);
+      setWorkflow(null);
+      setError('فشل تحميل سير العمل');
     } finally {
       setLoading(false);
     }
@@ -121,7 +186,7 @@ export default function WorkflowReview({ onBack }) {
 
   const handleReview = async (stageInstanceId, action) => {
     if (action === 'reject' && !feedback.trim()) {
-      setError('Please provide feedback for rejection');
+      setError('يرجى تقديم ملاحظات للرفض');
       return;
     }
 
@@ -132,11 +197,11 @@ export default function WorkflowReview({ onBack }) {
         action,
         feedback: feedback.trim()
       });
-      await loadProjectWorkflow(selectedProject.id);
+      await loadProjectWorkflow(selectedProject.id, workflow?.id);
       setSelectedStage(null);
       setFeedback('');
     } catch {
-      setError('Failed to review stage');
+      setError('فشل مراجعة المرحلة');
     } finally {
       setReviewing(false);
     }
@@ -148,7 +213,7 @@ export default function WorkflowReview({ onBack }) {
       <div className="w-full overflow-x-hidden flex items-center justify-center min-h-[280px]">
         <div className="flex items-center gap-3 text-gray-500 dark:text-gray-400">
           <div className="w-7 h-7 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm">Loading...</span>
+          <span className="text-sm">جاري التحميل...</span>
         </div>
       </div>
     );
@@ -157,6 +222,7 @@ export default function WorkflowReview({ onBack }) {
   // ── Review Modal (Overlay) ──
   if (selectedStage) {
     const meta = STATUS_META[selectedStage.status] || STATUS_META.pending;
+    const reviewRows = getStageReviewRows(selectedStage);
 
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -169,9 +235,9 @@ export default function WorkflowReview({ onBack }) {
               </span>
               <div>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 m-0">
-                  {selectedStage.stage_details?.name || 'Stage Review'}
+                  {selectedStage.stage_details?.name || 'مراجعة المرحلة'}
                 </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Review student submission</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">مراجعة طلب الطالب</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -200,7 +266,7 @@ export default function WorkflowReview({ onBack }) {
             <div className="grid grid-cols-2 gap-3">
               {selectedStage.submitted_at && (
                 <div className="px-3 py-2.5 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                  <div className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Submitted</div>
+                  <div className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">مُرسل</div>
                   <div className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">
                     {new Date(selectedStage.submitted_at).toLocaleString()}
                   </div>
@@ -208,7 +274,7 @@ export default function WorkflowReview({ onBack }) {
               )}
               {selectedStage.due_date && (
                 <div className="px-3 py-2.5 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                  <div className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Due Date</div>
+                  <div className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">تاريخ الاستحقاق</div>
                   <div className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">
                     {new Date(selectedStage.due_date).toLocaleDateString()}
                   </div>
@@ -216,34 +282,60 @@ export default function WorkflowReview({ onBack }) {
               )}
             </div>
 
-            {/* Student Responses */}
-            {selectedStage.field_responses && selectedStage.field_responses.length > 0 ? (
+            {/* Stage fields and student responses */}
+            {reviewRows.length > 0 ? (
               <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center gap-1.5">
-                  {Icons.FileText} Student Responses
-                </h4>
-                {selectedStage.field_responses.map((response, idx) => (
-                  <div key={idx} className="flex gap-3 px-3 py-2.5 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 min-w-[140px] max-w-[140px] truncate" title={response.field_label}>
-                      {response.field_label}:
-                    </span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 break-all">
-                      {response.value && response.field_type === 'file' ? (
-                        <a href={`http://localhost:8000/media/${response.value}`}
-                           target="_blank" rel="noopener noreferrer"
-                           className="text-violet-600 dark:text-violet-400 no-underline font-medium hover:underline">
-                          {response.value}
-                        </a>
-                      ) : (
-                        response.value || '—'
-                      )}
-                    </span>
-                  </div>
-                ))}
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="m-0 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center gap-1.5">
+                    {Icons.FileText} حقول المرحلة وإجابات الطالب
+                  </h4>
+                  <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700 dark:bg-violet-900/20 dark:text-violet-300">
+                    {reviewRows.length} حقول
+                  </span>
+                </div>
+
+                {reviewRows.map((row) => {
+                  const fileResponse = row.response || {
+                    value: row.value,
+                    file_url: row.fileUrl,
+                    file_name: row.fileName,
+                  };
+                  const hasFile = row.fieldType === 'file' && (row.fileUrl || row.value);
+
+                  return (
+                    <div key={row.key} className="rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-3 dark:border-gray-700 dark:bg-gray-700/50">
+                      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                          {row.label}
+                        </span>
+                        {row.required && (
+                          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:bg-red-900/20 dark:text-red-300">
+                            مطلوب
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm leading-6 text-gray-600 dark:text-gray-300 break-words">
+                        {hasFile ? (
+                          <a
+                            href={getWorkflowFileUrl(fileResponse)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 font-semibold text-violet-600 no-underline hover:underline dark:text-violet-400"
+                          >
+                            {Icons.FileText}
+                            {row.fileName || String(row.value || '').split('/').pop() || 'فتح الملف المرفوع'}
+                          </a>
+                        ) : (
+                          row.value || <span className="text-gray-400 dark:text-gray-500">لم يقدّم الطالب إجابة لهذا الحقل.</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="py-6 text-center text-sm text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
-                No responses submitted yet.
+                لا توجد حقول معرفة لهذه المرحلة.
               </div>
             )}
 
@@ -252,7 +344,7 @@ export default function WorkflowReview({ onBack }) {
               <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-50 dark:bg-amber-900/10 border-l-[3px] border-l-amber-400 rounded-r-lg">
                 {Icons.MessageSquare}
                 <div>
-                  <div className="text-xs font-semibold text-amber-600 dark:text-amber-400">Previous Feedback</div>
+                  <div className="text-xs font-semibold text-amber-600 dark:text-amber-400">الملاحظات السابقة</div>
                   <p className="text-sm text-gray-700 dark:text-gray-300 m-0 mt-0.5">{selectedStage.feedback}</p>
                 </div>
               </div>
@@ -269,7 +361,7 @@ export default function WorkflowReview({ onBack }) {
                   rows={3}
                   value={feedback}
                   onChange={e => setFeedback(e.target.value)}
-                  placeholder="Provide feedback to the student..."
+                  placeholder="قدم ملاحظات للطالب..."
                 />
               </div>
             )}
@@ -292,7 +384,7 @@ export default function WorkflowReview({ onBack }) {
                 disabled={reviewing}
               >
                 {Icons.ThumbsDown}
-                {reviewing ? 'Rejecting...' : 'Reject'}
+                {reviewing ? 'Rejecting...' : 'رفض'}
               </button>
               <button
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-600 dark:bg-emerald-500 rounded-lg hover:bg-emerald-700 dark:hover:bg-emerald-600 shadow-sm transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -300,7 +392,7 @@ export default function WorkflowReview({ onBack }) {
                 disabled={reviewing}
               >
                 {Icons.ThumbsUp}
-                {reviewing ? 'Approving...' : 'Approve'}
+                {reviewing ? 'Approving...' : 'موافقة'}
               </button>
             </div>
           )}
@@ -321,7 +413,7 @@ export default function WorkflowReview({ onBack }) {
           <div className="flex items-center gap-3 flex-wrap">
             <button
               className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors duration-200"
-              onClick={() => { setWorkflow(null); setSelectedProject(null); setActiveStageIdx(null); }}
+              onClick={() => { setWorkflow(null); setWorkflows([]); setSelectedProject(null); setActiveStageIdx(null); }}
             >
               {Icons.ArrowLeft} Back to Projects
             </button>
@@ -334,6 +426,53 @@ export default function WorkflowReview({ onBack }) {
               </p>
             </div>
           </div>
+
+          {/* Workflow selector: a project can contain more than one independent workflow. */}
+          {workflows.length > 1 && (
+            <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+              <div className="mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400">اختر مسار سير العمل</div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {workflows.map((item) => {
+                  const selected = item.id === workflow.id;
+                  const pending = workflowSubmittedCount(item);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setWorkflow(item);
+                        setSelectedStage(null);
+                        setActiveStageIdx(null);
+                        setFeedback('');
+                        setError('');
+                      }}
+                      className={`min-w-[220px] rounded-xl border px-3.5 py-3 text-right transition ${
+                        selected
+                          ? 'border-violet-300 bg-violet-50 ring-1 ring-violet-100 dark:border-violet-600 dark:bg-violet-900/20 dark:ring-violet-900/40'
+                          : 'border-gray-200 bg-gray-50 hover:border-violet-200 hover:bg-white dark:border-gray-700 dark:bg-gray-700/40 dark:hover:border-violet-700 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-bold text-gray-900 dark:text-gray-100">
+                            {item.template_details?.name || 'سير عمل'}
+                          </div>
+                          <div className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                            {item.assigned_by_name || item.template_details?.created_by_name || 'غير محدد'}
+                          </div>
+                        </div>
+                        {pending > 0 && (
+                          <span className="shrink-0 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                            {pending} للمراجعة
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Submitted Alert */}
           {submittedCount > 0 && (
@@ -361,6 +500,9 @@ export default function WorkflowReview({ onBack }) {
             {stages.map((stage, idx) => {
               const meta = STATUS_META[stage.status] || STATUS_META.pending;
               const isSubmitted = stage.status === 'submitted';
+              const configuredFieldCount = stage.stage_details?.fields?.length || 0;
+              const responseCount = stage.field_responses?.length || 0;
+              const canOpenDetails = configuredFieldCount > 0 || responseCount > 0;
 
               return (
                 <div
@@ -402,7 +544,13 @@ export default function WorkflowReview({ onBack }) {
                           </>
                         )}
                         {stage.submitted_at && (
-                          <span>Submitted {new Date(stage.submitted_at).toLocaleDateString()}</span>
+                          <span>أُرسل في {new Date(stage.submitted_at).toLocaleDateString('ar-SY')}</span>
+                        )}
+                        {canOpenDetails && (
+                          <>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <span>{configuredFieldCount || responseCount} حقول</span>
+                          </>
                         )}
                       </div>
                     </div>
@@ -414,22 +562,28 @@ export default function WorkflowReview({ onBack }) {
                     </span>
                   </div>
 
-                  {/* Stage Body — Review button or Feedback */}
-                  {(isSubmitted || stage.feedback) && (
-                    <div className="px-4 pb-3 ml-10">
-                      {isSubmitted && (
+                  {/* Stage Body — review submitted stages and inspect previous submissions. */}
+                  {(canOpenDetails || stage.feedback) && (
+                    <div className="px-4 pb-3 ml-10 space-y-2">
+                      {canOpenDetails && (
                         <button
-                          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 dark:bg-violet-500 rounded-lg hover:bg-violet-700 dark:hover:bg-violet-600 shadow-sm transition-colors duration-200"
+                          type="button"
+                          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg shadow-sm transition-colors duration-200 ${
+                            isSubmitted
+                              ? 'bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-600'
+                              : 'border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30'
+                          }`}
                           onClick={() => setSelectedStage(stage)}
                         >
-                          {Icons.Eye} Review Submission
+                          {Icons.Eye}
+                          {isSubmitted ? 'مراجعة الطلب' : 'عرض الحقول والإجابات'}
                         </button>
                       )}
                       {stage.feedback && !isSubmitted && (
                         <div className="flex items-start gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-xs">
                           {Icons.MessageSquare}
                           <div>
-                            <span className="font-semibold text-gray-600 dark:text-gray-300">Feedback:</span>
+                            <span className="font-semibold text-gray-600 dark:text-gray-300">الملاحظات:</span>
                             <span className="text-gray-500 dark:text-gray-400 ml-1">{stage.feedback}</span>
                           </div>
                         </div>
@@ -474,8 +628,8 @@ export default function WorkflowReview({ onBack }) {
                 <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
               </svg>
             </div>
-            <p className="text-gray-500 dark:text-gray-400 font-medium">No projects with workflows found.</p>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Apply workflows to projects first.</p>
+            <p className="text-gray-500 dark:text-gray-400 font-medium">لا توجد مشاريع بسير عمل موجودة.</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">طبّق سير العمل على المشاريع أولاً.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -503,7 +657,7 @@ export default function WorkflowReview({ onBack }) {
                           <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-1">
                             {Icons.Users}
                             <span className="truncate">
-                              {project.team_members?.map(m => m.name).join(', ') || 'No team'}
+                              {project.team_members?.map(m => m.name).join(', ') || 'بدون فريق'}
                             </span>
                           </div>
                         </div>

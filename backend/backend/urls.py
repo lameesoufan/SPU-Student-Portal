@@ -18,8 +18,11 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from grades.views import GradesExportView
 
 urlpatterns = [
+    # مسار مباشر قبل جميع include لضمان عدم اعتراض /api/grades/export/.
+    path('api/grades/export/', GradesExportView.as_view(), name='grades-export-direct'),
     path('api/gitlab/', include('gitlab_integration.urls')),
     path('admin/', admin.site.urls),
     path('', include('accounts.urls')),
@@ -27,7 +30,10 @@ urlpatterns = [
     path('', include('notifications.urls')),
     path('', include('dy_forms.urls')),
     path('', include('project_management.urls')),
-    path('api/workflow/', include('workflow.urls')),
+    path('api/workflow/', include(('workflow.urls', 'workflow'), namespace='workflow')),
+    path('api/import/', include('project_imports.urls')),
+    path('api/committees/', include('committees.urls')),
+    path('api/grades/', include('grades.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

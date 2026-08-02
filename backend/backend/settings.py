@@ -60,6 +60,9 @@ INSTALLED_APPS = [
     'workflow',
     'corsheaders',
     'gitlab_integration',
+    'project_imports',
+    'committees',
+    'grades',
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
@@ -76,14 +79,19 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'accounts_login': '10/minute',
         'accounts_register': '5/minute',
+         'password_reset': '3/hour', 
         'propose_idea': '10/hour',
         'workflow_submit': '30/hour',
         'file_upload': '20/hour',
+        'import': os.getenv('IMPORT_RATE_LIMIT', '5/hour'),
         'anon': os.getenv('DRF_ANON_THROTTLE_RATE', '60/minute'),
         'user': os.getenv('DRF_USER_THROTTLE_RATE', '600/minute'),
+        'student_login_request': '12/hour',  # 3 requests per 15 min = 12 per hour
+        'student_login_verify': '10/hour',   # 5 requests per 30 min = 10 per hour
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': int(os.getenv('DRF_PAGE_SIZE', '50')),
+    'EXCEPTION_HANDLER': 'backend.error_handling_middleware.custom_exception_handler',
 }
 
 MIDDLEWARE = [
@@ -96,6 +104,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'accounts.middleware.JWTCookieMiddleware',
+    'backend.error_handling_middleware.ErrorHandlingMiddleware',
 ]
 
 ROOT_URLCONF = 'backend.urls'
@@ -166,7 +175,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
+# settings.py — أضف هاد
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',  # fallback
+]
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -192,31 +205,63 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# File upload settings
+DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024  # 15MB (to accommodate 10MB files with overhead)
+FILE_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024  # 15MB
+
 # ── JWT Settings ──────────────────────────────────────────────────────────────
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME':  timedelta(minutes=30),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS':  True,   # يعطي refresh token جديد مع كل تجديد
-    'BLACKLIST_AFTER_ROTATION': True, # يبلاكليست القديم تلقائياً
+    'ACCESS_TOKEN_LIFETIME':  timedelta(hours=8),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS':  True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 # JWT Cookie Settings (HttpOnly cookies)
-JWT_COOKIE_SECURE = False          # True لما تستخدمي HTTPS
+JWT_COOKIE_SECURE = not DEBUG         # True في production (HTTPS)
 JWT_COOKIE_HTTPONLY = True         # لا يقدر JavaScript يقرأه
 JWT_COOKIE_SAMESITE = 'Lax'        # حماية من CSRF
 JWT_COOKIE_ACCESS_MAX_AGE = 60 * 60 * 24       # يوم واحد (بالثواني)
 JWT_COOKIE_REFRESH_MAX_AGE = 60 * 60 * 24 * 7  # أسبوع
 
+# ── Email Settings (OTP) ──────────────────────────────────────────────────────
+# ── Email Settings (OTP) ──────────────────────────────────────────────────────
+# للاختبار: طباعة OTP في console بدلاً من الإرسال عبر Gmail
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # للإنتاج: استخدم SMTP
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', True)
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'SPU Portal <noreply@spu.edu.sy>')
+
+# ملاحظة: لتفعيل إرسال البريد الحقيقي:
+# 1. غيّر EMAIL_BACKEND إلى smtp
+# 2. احصل على App Password صحيح من Google
+# 3. حطه في .env بدون مسافات
+
 # ── CORS Settings ─────────────────────────────────────────────────────────────
 # MUST NOT use CORS_ALLOW_ALL_ORIGINS with credentials
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173').split(',')
-    if origin.strip()
-]
+# في settings.py
+if DEBUG:
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+    ]
+else:
+    # في production، يجب أن تكون من .env فقط
+    origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
+    if not origins or 'localhost' in origins:
+        raise ImproperlyConfigured(
+            'CORS_ALLOWED_ORIGINS must be set in production and must not include localhost'
+        )
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in origins.split(',') if o.strip()]
+
 
 # ── Production Security Settings ──────────────────────────────────────────────
 # تتفعل تلقائياً لما DEBUG=False (إنتاج)، وتتنفصل لما DEBUG=True (تطوير)
@@ -247,6 +292,12 @@ GITLAB_WEBHOOK_SECRET = os.getenv('GITLAB_WEBHOOK_SECRET', '')
 GITLAB_WEBHOOK_BASE_URL = os.getenv('GITLAB_WEBHOOK_BASE_URL', 'http://localhost:8000')
 GITLAB_EXTERNAL_URL = os.getenv('GITLAB_EXTERNAL_URL', 'http://localhost:8080')
 
+# Project import settings
+IMPORT_TEMP_PASSWORD_FORMAT = os.getenv('IMPORT_TEMP_PASSWORD_FORMAT', 'SPU{identifier}@2025-2026')
+
+# Send workflow notifications by email to students only, in addition to in-app notifications.
+WORKFLOW_NOTIFICATION_EMAILS = os.getenv('WORKFLOW_NOTIFICATION_EMAILS', 'false').lower() == 'true'
+
 # ── Celery Configuration (optional - needs celery + redis installed) ──────────
 try:
     from celery.schedules import crontab
@@ -267,9 +318,21 @@ try:
             'task': 'gitlab_integration.tasks.cleanup_deleted_projects',
             'schedule': crontab(hour=1, minute=0),
         },
+        'workflow-stage-reminders-daily': {
+            'task': 'workflow.tasks.send_workflow_stage_reminders',
+            'schedule': crontab(hour=8, minute=0),
+        },
+        'workflow-stage-closing-reminders-daily': {
+            'task': 'workflow.tasks.send_workflow_stage_closing_reminders',
+            'schedule': crontab(hour=8, minute=5),
+        },
         'activate-scheduled-stages-daily': {
             'task': 'workflow.tasks.activate_scheduled_stages',
             'schedule': crontab(hour=0, minute=10),
+        },
+        'close-expired-workflow-stages-daily': {
+            'task': 'workflow.tasks.close_expired_workflow_stages',
+            'schedule': crontab(hour=0, minute=15),
         },
     }
 except ImportError:

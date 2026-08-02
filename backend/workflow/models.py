@@ -38,7 +38,10 @@ WORKFLOW_STATUS = [
 class WorkflowTemplate(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    department = models.CharField(max_length=50, choices=DEPARTMENTS)
+    department = models.CharField(
+    max_length=50, choices=DEPARTMENTS, null=True, blank=True,
+    help_text='Leave empty for a global template accessible to all departments'
+)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -57,7 +60,7 @@ class WorkflowTemplate(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.name} ({self.department})"
+        return f"{self.name} ({self.department or 'Global'})"
 
 
 class WorkflowStage(models.Model):
@@ -69,6 +72,8 @@ class WorkflowStage(models.Model):
     trigger_days = models.PositiveIntegerField(null=True, blank=True, help_text='Days after project start')
     trigger_date = models.DateField(null=True, blank=True, help_text='Specific date')
     notify_before_days = models.PositiveIntegerField(default=3, help_text='Notify students X days before due')
+    end_date = models.DateField(null=True, blank=True, help_text='Optional date when the stage closes automatically')
+    close_notify_before_days = models.PositiveIntegerField(null=True, blank=True, default=1, help_text='Notify before automatic closing')
     is_required = models.BooleanField(default=True)
     is_recurring = models.BooleanField(default=False)
     recurrence_unit = models.CharField(max_length=20, choices=RECURRENCE_UNITS, null=True, blank=True)
@@ -121,6 +126,13 @@ class ProjectWorkflow(models.Model):
         related_name='workflows',              
     )
     template = models.ForeignKey(WorkflowTemplate, on_delete=models.CASCADE, related_name='project_workflows')
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='assigned_project_workflows',
+        null=True, blank=True,
+        help_text='The doctor or HOD who assigned this workflow to the project',
+    )
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -129,9 +141,9 @@ class ProjectWorkflow(models.Model):
         ordering = ['-started_at']
         constraints = [
             models.UniqueConstraint(
-                fields=['project_board'],
+                fields=['project_board', 'assigned_by'],
                 condition=Q(is_active=True),
-                name='unique_active_workflow_per_project_board',
+                name='unique_active_workflow_per_project_assigner',
             ),
         ]
         indexes = [
@@ -152,6 +164,7 @@ class WorkflowStageInstance(models.Model):
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
         ('overdue', 'Overdue'),
+        ('closed', 'Closed'),
     ]
     project_workflow = models.ForeignKey(ProjectWorkflow, on_delete=models.CASCADE, related_name='stage_instances')
     stage = models.ForeignKey(WorkflowStage, on_delete=models.CASCADE, related_name='instances')
@@ -187,6 +200,11 @@ class WorkflowFieldResponse(models.Model):
     stage_instance = models.ForeignKey(WorkflowStageInstance, on_delete=models.CASCADE, related_name='field_responses')
     field = models.ForeignKey(WorkflowStageField, on_delete=models.CASCADE, related_name='responses')
     value = models.TextField(blank=True)
+    file = models.FileField(
+        upload_to='workflow_uploads/%Y/%m/',
+        blank=True,
+        null=True,
+    )
 
     class Meta:
         unique_together = ('stage_instance', 'field')

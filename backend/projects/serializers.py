@@ -1,5 +1,21 @@
 from rest_framework import serializers
-from .models import ProjectIdea, StudentIdeaProposal, ProjectApplication, IdeaApplication, TeamInvitation, ProposalInvitation
+from .models import (
+    ProjectIdea,
+    StudentIdeaProposal,
+    ProjectApplication,
+    IdeaApplication,
+    TeamInvitation,
+    ProposalInvitation,
+    ProposalSupervisorDecision,
+    ProjectParticipation,
+    ProjectParticipationStatusLog,
+)
+from .participation_services import (
+    get_project_participations,
+    project_for_participation,
+    team_stats_for_project,
+    user_display_name,
+)
 
 
 # ── UC-01: Doctor idea ────────────────────────────────────────────────────────
@@ -13,7 +29,7 @@ class ProjectIdeaSerializer(serializers.ModelSerializer):
         model  = ProjectIdea
         fields = [
             'id', 'title', 'description', 'department',
-            'required_skills', 'max_team_size', 'status',
+            'required_skills', 'max_team_size', 'project_type', 'status',
             'rejection_reason', 'created_at', 'doctor_name',
             'is_taken', 'registered_team',
         ]
@@ -57,6 +73,19 @@ class ProjectIdeaSerializer(serializers.ModelSerializer):
 
 class StudentIdeaProposalSerializer(serializers.ModelSerializer):
     supervisor_name = serializers.SerializerMethodField(read_only=True)
+    co_supervisor_names = serializers.SerializerMethodField(read_only=True)
+    supervisor_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        min_length=1,
+        max_length=2,
+        write_only=True,
+        required=False,
+    )
+    supervisors = serializers.SerializerMethodField(read_only=True)
+    approved_supervisor_count = serializers.SerializerMethodField(read_only=True)
+    pending_supervisor_count = serializers.SerializerMethodField(read_only=True)
+    rejected_supervisor_count = serializers.SerializerMethodField(read_only=True)
+    can_continue_with_one = serializers.SerializerMethodField(read_only=True)
     student_name    = serializers.SerializerMethodField(read_only=True)
     invitations     = serializers.SerializerMethodField(read_only=True)
 
@@ -64,13 +93,21 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
         model  = StudentIdeaProposal
         fields = [
             'id', 'title', 'description', 'department',
-            'supervisor', 'supervisor_name', 'student_name',
-            'team_size', 'team_size_reason',
+            'supervisor', 'supervisor_ids', 'supervisor_name', 'co_supervisor_names',
+            'supervisors', 'approved_supervisor_count', 'pending_supervisor_count',
+            'rejected_supervisor_count', 'can_continue_with_one', 'student_name',
+            'team_size', 'team_size_reason', 'project_type',
             'status', 'rejection_reason', 'invitations',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['status', 'rejection_reason', 'created_at', 'updated_at',
-                            'supervisor_name', 'student_name', 'invitations']
+                            'supervisor_name', 'co_supervisor_names', 'supervisors',
+                            'approved_supervisor_count', 'pending_supervisor_count',
+                            'rejected_supervisor_count', 'can_continue_with_one',
+                            'student_name', 'invitations']
+        extra_kwargs = {
+            'supervisor': {'required': False, 'allow_null': True},
+        }
 
     def validate_supervisor(self, value):
         if value and getattr(value, 'role', None) not in ('doctor', 'hod'):
@@ -84,11 +121,88 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'team_size_reason': f'A justification is required when team size is {team_size}.'
             })
+
+        supervisor_ids = data.get('supervisor_ids')
+        legacy_supervisor = data.get('supervisor')
+        if supervisor_ids is None:
+            if legacy_supervisor:
+                supervisor_ids = [legacy_supervisor.pk]
+            elif self.instance is None:
+                raise serializers.ValidationError({'supervisor_ids': 'Choose one or two supervisors.'})
+
+        if supervisor_ids is not None:
+            if len(supervisor_ids) != len(set(supervisor_ids)):
+                raise serializers.ValidationError({'supervisor_ids': 'Duplicate supervisors are not allowed.'})
+            if not 1 <= len(supervisor_ids) <= 2:
+                raise serializers.ValidationError({'supervisor_ids': 'Choose one or two supervisors.'})
+
         return data
     def get_supervisor_name(self, obj):
         if obj.supervisor:
             return obj.supervisor.get_full_name() or obj.supervisor.username
         return None
+
+    def get_co_supervisor_names(self, obj):
+        return [
+            supervisor.get_full_name() or supervisor.username
+            for supervisor in obj.co_supervisors.all()
+        ]
+
+    def _active_decisions(self, obj):
+        prefetched = getattr(obj, '_prefetched_objects_cache', {}).get('supervisor_decisions')
+        decisions = prefetched if prefetched is not None else obj.supervisor_decisions.select_related('supervisor').all()
+        return [decision for decision in decisions if decision.is_active]
+
+    def get_supervisors(self, obj):
+        decisions = sorted(self._active_decisions(obj), key=lambda item: (not item.is_primary, item.id))
+        if not decisions:
+            fallback = []
+            if obj.supervisor_id:
+                fallback.append({
+                    'id': obj.supervisor_id,
+                    'name': obj.supervisor.get_full_name() or obj.supervisor.username,
+                    'is_primary': True,
+                    'status': 'approved' if obj.status in ('pending_hod', 'assigned') else 'pending',
+                    'rejection_reason': '',
+                })
+            for supervisor in obj.co_supervisors.all():
+                fallback.append({
+                    'id': supervisor.id,
+                    'name': supervisor.get_full_name() or supervisor.username,
+                    'is_primary': False,
+                    'status': 'approved' if obj.status in ('pending_hod', 'assigned') else 'pending',
+                    'rejection_reason': '',
+                })
+            return fallback
+        return [
+            {
+                'id': decision.supervisor_id,
+                'name': decision.supervisor.get_full_name() or decision.supervisor.username,
+                'is_primary': decision.is_primary,
+                'status': decision.status,
+                'rejection_reason': decision.rejection_reason,
+                'responded_at': decision.responded_at,
+            }
+            for decision in decisions
+        ]
+
+    def get_approved_supervisor_count(self, obj):
+        return sum(1 for decision in self._active_decisions(obj) if decision.status == 'approved')
+
+    def get_pending_supervisor_count(self, obj):
+        return sum(1 for decision in self._active_decisions(obj) if decision.status == 'pending')
+
+    def get_rejected_supervisor_count(self, obj):
+        return sum(1 for decision in self._active_decisions(obj) if decision.status == 'rejected')
+
+    def get_can_continue_with_one(self, obj):
+        statuses = [decision.status for decision in self._active_decisions(obj)]
+        return (
+            obj.status == 'supervisor_action_required'
+            and 'approved' in statuses
+            and 'rejected' in statuses
+            and 'pending' not in statuses
+        )
 
     def get_student_name(self, obj):
         return obj.student.get_full_name() or obj.student.username
@@ -100,23 +214,12 @@ class StudentIdeaProposalSerializer(serializers.ModelSerializer):
                 'invitee_id': inv.invitee.username,
                 'invitee_name': inv.invitee.get_full_name() or inv.invitee.username,
                 'status': inv.status,
+                'rejection_reason': inv.rejection_reason,
             }
             for inv in obj.invitations.all()
         ]
 
-    def validate_supervisor(self, value):
-        if value and getattr(value, 'role', None) != 'doctor':
-            raise serializers.ValidationError('Supervisor must be a doctor.')
-        return value
 
-    def validate(self, data):
-        team_size = data.get('team_size')
-        reason = data.get('team_size_reason', '').strip()
-        if team_size in (1, 4) and not reason:
-            raise serializers.ValidationError({
-                'team_size_reason': f'A justification is required when team size is {team_size}.'
-            })
-        return data
 
 
 class ProposalInvitationSerializer(serializers.ModelSerializer):
@@ -125,7 +228,7 @@ class ProposalInvitationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = ProposalInvitation
-        fields = ['id', 'proposal', 'idea_title', 'leader_name', 'status', 'created_at']
+        fields = ['id', 'proposal', 'idea_title', 'leader_name', 'status', 'rejection_reason', 'created_at']
         read_only_fields = ['status', 'created_at', 'idea_title', 'leader_name']
 
     def get_idea_title(self, obj):
@@ -157,7 +260,7 @@ class IdeaApplicationSerializer(serializers.ModelSerializer):
         model  = IdeaApplication
         fields = [
     'id', 'idea', 'idea_title', 'doctor_name', 'team_size',
-    'team_size_reason',
+    'team_size_reason', 'project_type',
     'student_name', 'status', 'rejection_reason',
     'invitations', 'created_at', 'updated_at',
     ]   
@@ -212,3 +315,172 @@ class TeamInvitationSerializer(serializers.ModelSerializer):
 
     def get_doctor_name(self, obj):
         return obj.application.idea.doctor.get_full_name() or obj.application.idea.doctor.username
+
+
+class ProjectParticipationStatusChangeSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class ProjectParticipationStatusLogSerializer(serializers.ModelSerializer):
+    changed_by_name = serializers.SerializerMethodField()
+    project_title = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProjectParticipationStatusLog
+        fields = [
+            'id',
+            'participation',
+            'student',
+            'project_source',
+            'idea_application',
+            'student_proposal',
+            'project_title',
+            'previous_status',
+            'new_status',
+            'reason',
+            'notes',
+            'changed_by',
+            'changed_by_name',
+            'changed_at',
+            'action_type',
+            'metadata',
+        ]
+        read_only_fields = fields
+
+    def get_changed_by_name(self, obj):
+        return user_display_name(obj.changed_by)
+
+    def get_project_title(self, obj):
+        if obj.idea_application_id:
+            return obj.idea_application.idea.title
+        if obj.student_proposal_id:
+            return obj.student_proposal.title
+        return ''
+
+
+class ProjectParticipationManagementSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+    university_id = serializers.SerializerMethodField()
+    department = serializers.SerializerMethodField()
+    registered_project = serializers.SerializerMethodField()
+    project_id = serializers.SerializerMethodField()
+    project_type = serializers.SerializerMethodField()
+    supervisor = serializers.SerializerMethodField()
+    team_size = serializers.SerializerMethodField()
+    current_status = serializers.CharField(source='status', read_only=True)
+    designation_date = serializers.DateTimeField(source='status_changed_at', read_only=True)
+    reason = serializers.CharField(source='status_reason', read_only=True)
+    notes = serializers.CharField(source='status_notes', read_only=True)
+    last_changed_by = serializers.SerializerMethodField()
+    team_members = serializers.SerializerMethodField()
+    project_operational_status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProjectParticipation
+        fields = [
+            'id',
+            'student',
+            'student_name',
+            'university_id',
+            'department',
+            'role',
+            'project_source',
+            'project_id',
+            'registered_project',
+            'project_type',
+            'supervisor',
+            'team_size',
+            'current_status',
+            'designation_date',
+            'reason',
+            'notes',
+            'last_changed_by',
+            'team_members',
+            'project_operational_status',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = fields
+
+    def get_student_name(self, obj):
+        return user_display_name(obj.student)
+
+    def get_university_id(self, obj):
+        return obj.student.username
+
+    def get_department(self, obj):
+        project = project_for_participation(obj)
+        if isinstance(project, IdeaApplication):
+            return project.idea.department
+        if isinstance(project, StudentIdeaProposal):
+            return project.department
+        return obj.student.department
+
+    def get_registered_project(self, obj):
+        return obj.project_title
+
+    def get_project_id(self, obj):
+        return obj.project_id_display
+
+    def get_project_type(self, obj):
+        project = project_for_participation(obj)
+        if isinstance(project, IdeaApplication):
+            return project.project_type or project.idea.project_type
+        if isinstance(project, StudentIdeaProposal):
+            return project.project_type
+        return None
+
+    def get_supervisor(self, obj):
+        project = project_for_participation(obj)
+        if isinstance(project, IdeaApplication) and project.idea_id:
+            return {
+                'id': project.idea.doctor_id,
+                'name': user_display_name(project.idea.doctor),
+            }
+        if isinstance(project, StudentIdeaProposal) and project.supervisor_id:
+            return {
+                'id': project.supervisor_id,
+                'name': user_display_name(project.supervisor),
+            }
+        return None
+
+    def get_team_size(self, obj):
+        project = project_for_participation(obj)
+        return team_stats_for_project(project) if project else {
+            'active': 0,
+            'failed': 0,
+            'withdrawn': 0,
+            'total': 0,
+            'label': '0/0',
+        }
+
+    def get_last_changed_by(self, obj):
+        if not obj.status_changed_by_id:
+            return None
+        return {
+            'id': obj.status_changed_by_id,
+            'name': user_display_name(obj.status_changed_by),
+        }
+
+    def get_team_members(self, obj):
+        project = project_for_participation(obj)
+        if not project:
+            return []
+        return [
+            {
+                'id': participation.student_id,
+                'name': user_display_name(participation.student),
+                'university_id': participation.student.username,
+                'role': participation.role,
+                'is_leader': participation.role == 'leader',
+                'status': participation.status,
+                'designation_date': participation.status_changed_at,
+                'reason': participation.status_reason,
+            }
+            for participation in get_project_participations(project)
+        ]
+
+    def get_project_operational_status(self, obj):
+        project = project_for_participation(obj)
+        return getattr(project, 'operational_status', None)

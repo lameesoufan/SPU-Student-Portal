@@ -1,5 +1,5 @@
 import axios from 'axios';
-
+import { setAccessToken, getAccessToken } from './api';
 const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:8000') + '/api/gitlab';
 const ROOT_API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
@@ -8,7 +8,13 @@ const api = axios.create({
   withCredentials: true,  // ← يبعث الـ cookies تلقائياً
 });
 let refreshPromise = null;
-
+api.interceptors.request.use((config) => {
+  const token = getAccessToken();
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+});
 // لا نحتاج نحط Authorization header يدوي — الـ cookies بتنرسل تلقائياً
 // والـ JWTCookieMiddleware بالـ backend بيقري الـ cookie وبيحط الـ header
 api.interceptors.response.use(
@@ -24,9 +30,13 @@ api.interceptors.response.use(
 
     original._retry = true;
     try {
-      if (!refreshPromise) {
-        refreshPromise = axios.post(`${ROOT_API_BASE}/api/token/refresh/`, {}, {
+        if (!refreshPromise) {
+          refreshPromise = axios.post(`${ROOT_API_BASE}/api/token/refresh/`, {}, {
           withCredentials: true,
+        }).then((res) => {
+          const newAccess = res.data?.access;
+          if (newAccess) setAccessToken(newAccess);  // sync with api.jsx
+          return res;
         }).finally(() => { refreshPromise = null; });
       }
       await refreshPromise;

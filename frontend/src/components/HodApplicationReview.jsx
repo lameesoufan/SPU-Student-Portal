@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchHodPendingApplications, hodReviewApplication, fetchResponseByApplication } from '../api';
+import { getProjectTypeLabel } from '../lib/constants';
 import { FileCheck2, Loader2, ClipboardCheck, CheckCircle2, XCircle, User, Users, ChevronDown, GraduationCap, Calendar, Stethoscope, Info } from 'lucide-react';
 
 const TEAM_STATUS_STYLES = {
@@ -18,7 +19,7 @@ const renderResponseValue = (value, fieldType) => {
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 text-[var(--primary)] hover:underline font-medium"
       >
-        📎 {value.name || 'Download file'}
+        📎 {value.name || 'تنزيل الملف'}
       </a>
     );
   }
@@ -95,8 +96,8 @@ export default function HodApplicationReview({ onBack }) {
           <FileCheck2 size={20} />
         </div>
         <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">Student Applications</h1>
-          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">Review and register project applications submitted by students</p>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">طلبات الطلاب</h1>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">مراجعة وتسجيل طلبات المشاريع المقدمة من الطلاب</p>
         </div>
         {apps.length > 0 && (
           <div className="ml-auto flex items-center justify-center min-w-[36px] h-9 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-lg text-sm font-bold px-3">
@@ -126,8 +127,8 @@ export default function HodApplicationReview({ onBack }) {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-500">
             <ClipboardCheck size={32} />
           </div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white">All caught up</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">No pending applications. New submissions will appear here for your review.</p>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">تمت المراجعة</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">لا توجد طلبات معلقة. الطلبات الجديدة ستظهر هنا للمراجعة.</p>
         </div>
       )}
 
@@ -163,6 +164,11 @@ export default function HodApplicationReview({ onBack }) {
                     <Calendar size={11} />
                     {new Date(app.created_at).toLocaleDateString()}
                   </span>
+                  {app.project_type && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 tracking-wide">
+                      {getProjectTypeLabel(app.project_type)}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -175,7 +181,7 @@ export default function HodApplicationReview({ onBack }) {
     <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
       <Info size={14} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
       <div>
-        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Team Size Justification</span>
+        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">مبرر حجم الفريق</span>
         <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">{app.team_size_reason}</p>
       </div>
     </div>
@@ -260,7 +266,7 @@ export default function HodApplicationReview({ onBack }) {
                 {reviewing.action === 'approve' ? <CheckCircle2 size={22} /> : <XCircle size={22} />}
               </div>
               <h3 className="text-lg font-bold text-gray-900 dark:text-white m-0">
-                {reviewing.action === 'approve' ? 'Register Project' : 'Reject Application'}
+                {reviewing.action === 'approve' ? 'تسجيل المشروع' : 'رفض الطلب'}
               </h3>
             </div>
 
@@ -283,7 +289,7 @@ export default function HodApplicationReview({ onBack }) {
                   rows={3}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Explain why this application is being rejected…"
+                  placeholder="اشرح سبب رفض هذا الطلب…"
                 />
               </div>
             )}
@@ -314,7 +320,7 @@ export default function HodApplicationReview({ onBack }) {
                 disabled={confirming}
               >
                 {confirming && <Loader2 size={14} className="animate-spin" />}
-                {confirming ? 'Processing…' : 'Confirm'}
+                {confirming ? 'Processing…' : 'تأكيد'}
               </button>
             </div>
           </div>

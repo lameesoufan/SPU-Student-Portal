@@ -24,7 +24,12 @@ class EncryptedCharField(models.CharField):
             try:
                 return _get_fernet().decrypt(value.encode()).decode()
             except Exception:
-                return value
+              
+                import logging
+                logging.getLogger(__name__).error(
+                    'Failed to decrypt EncryptedCharField value — SECRET_KEY may have changed'
+                )
+                return None
         return value
 
 class GitLabUser(models.Model):

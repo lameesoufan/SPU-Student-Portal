@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>رمز التحقق - Syrian Private University</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            direction: rtl;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .header p {
+            margin: 5px 0 0 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .greeting {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .message {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .otp-code {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 42px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            padding: 20px 40px;
+            border-radius: 8px;
+            display: inline-block;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .expiry {
+            font-size: 14px;
+            color: #e74c3c;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: right;
+        }
+        .warning-title {
+            font-weight: bold;
+            color: #856404;
+            margin-bottom: 8px;
+        }
+        .warning-text {
+            color: #856404;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #e9ecef;
+        }
+        .footer p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 الجامعة السورية الخاصة</h1>
+            <p>Syrian Private University - Student Portal</p>
+        </div>
+        
+        <div class="content">
+            <p class="greeting">مرحباً <strong>{{ full_name }}</strong>،</p>
+            
+            <p class="message">
+                تم طلب تسجيل الدخول إلى حسابك في بوابة الطلاب.<br>
+                استخدم رمز التحقق التالي لإكمال عملية تسجيل الدخول:
+            </p>
+            
+            <div class="otp-code">{{ otp_code }}</div>
+            
+            <p class="expiry">⏰ هذا الرمز صالح لمدة <strong>10 دقائق</strong> فقط</p>
+            
+            <div class="warning">
+                <div class="warning-title">⚠️ تحذير أمني:</div>
+                <div class="warning-text">
+                    • لا تشارك هذا الرمز مع أي شخص، حتى موظفي الجامعة<br>
+                    • إذا لم تطلب هذا الرمز، يرجى تجاهل هذه الرسالة<br>
+                    • تأكد من أنك تقوم بتسجيل الدخول من الموقع الرسمي للجامعة فقط
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Syrian Private University</strong></p>
+            <p>الجامعة السورية الخاصة</p>
+            <p style="margin-top: 10px; color: #999;">
+                هذا بريد إلكتروني تلقائي، يرجى عدم الرد عليه
+            </p>
+        </div>
+    </div>
+</body>
+</html>

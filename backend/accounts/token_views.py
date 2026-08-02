@@ -8,7 +8,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 from django.conf import settings
 
-# ← استخدم CustomTokenObtainPairView بدل الـ default
 from .serializers import CustomTokenObtainPairView
 
 
@@ -27,8 +26,8 @@ def _clear_cookie(response, key):
     response.delete_cookie(key, path='/', samesite=settings.JWT_COOKIE_SAMESITE)
 
 
-class CookieTokenObtainPairView(CustomTokenObtainPairView):  # ← غيّرنا الـ parent
-    """Login — returns tokens as HttpOnly cookies + user info in body."""
+class CookieTokenObtainPairView(CustomTokenObtainPairView):
+    """Login — returns tokens as HttpOnly cookies + access token + user info in body."""
 
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
@@ -53,17 +52,42 @@ class CookieTokenObtainPairView(CustomTokenObtainPairView):  # ← غيّرنا 
 
             response.data = {
                 'message': 'Login successful',
+                'access': access,
                 'username': payload.get('username', request.data.get('username', '')),
                 'role': payload.get('role', ''),
                 'must_change_password': payload.get('must_change_password', False),
+                'must_change_username': payload.get('must_change_username', False),
                 'department': payload.get('department', ''),
             }
 
         return response
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def current_user(request):
+    """Return the current authenticated user's info.
+
+    Used by the front-end on app mount to restore the session after a page
+    refresh, so the user is not bounced back to the login screen when the
+    HttpOnly JWT cookies are still valid.
+    """
+    user = request.user
+    return Response({
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'role': user.role,
+        'department': user.department,
+        'must_change_password': getattr(user, 'must_change_password', False),
+        'must_change_username': getattr(user, 'must_change_username', False),
+    })
+
+
 class CookieTokenRefreshView(TokenRefreshView):
-    """Refresh — reads refresh token from cookie, sets new cookies."""
+    """Refresh — reads refresh token from cookie, sets new cookies + returns access in body."""
 
     def post(self, request, *args, **kwargs):
         refresh_token = request.COOKIES.get('refresh_token')
@@ -81,7 +105,10 @@ class CookieTokenRefreshView(TokenRefreshView):
             if refresh:
                 _set_cookie(response, 'refresh_token', refresh, settings.JWT_COOKIE_REFRESH_MAX_AGE)
 
-            response.data = {'message': 'Token refreshed'}
+            response.data = {
+                'message': 'Token refreshed',
+                'access': access,
+            }
 
         return response
 

@@ -27,6 +27,8 @@ class WorkflowStageCreateSerializer(serializers.Serializer):
     trigger_days = serializers.IntegerField(required=False, allow_null=True)
     trigger_date = serializers.DateField(required=False, allow_null=True)
     notify_before_days = serializers.IntegerField(default=3)
+    end_date = serializers.DateField(required=False, allow_null=True, default=None)
+    close_notify_before_days = serializers.IntegerField(required=False, allow_null=True, default=1, min_value=0)
     is_required = serializers.BooleanField(default=True)
     is_recurring = serializers.BooleanField(default=False)
     recurrence_unit = serializers.ChoiceField(
@@ -53,6 +55,8 @@ class WorkflowStageCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError({'trigger_days': 'This field is required when trigger type is after_days.'})
         if trigger_type == 'date' and data.get('trigger_date') is None:
             raise serializers.ValidationError({'trigger_date': 'This field is required when trigger type is date.'})
+        if data.get('end_date') and data.get('trigger_date') and data['end_date'] < data['trigger_date']:
+            raise serializers.ValidationError({'end_date': 'End date cannot be before the stage opening date.'})
         
         # تحقق من التكرار
         if data.get('is_recurring'):
@@ -84,7 +88,7 @@ class WorkflowStageSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'order',
             'trigger_type', 'trigger_days', 'trigger_date',
-            'fields', 'notify_before_days', 'is_required',
+            'fields', 'notify_before_days', 'end_date', 'close_notify_before_days', 'is_required',
             'is_recurring', 'recurrence_unit', 'recurrence_day_of_week',
             'recurrence_interval', 'recurrence_end_date', 'max_occurrences',
             'created_at', 'updated_at'
@@ -108,10 +112,27 @@ class WorkflowTemplateSerializer(serializers.ModelSerializer):
 class WorkflowFieldResponseSerializer(serializers.ModelSerializer):
     field_label = serializers.CharField(source='field.label', read_only=True)
     field_type = serializers.CharField(source='field.field_type', read_only=True)
+    file_url = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
+
+    def get_file_url(self, obj):
+        if not obj.file:
+            return None
+        url = obj.file.url
+        request = self.context.get('request')
+        return request.build_absolute_uri(url) if request else url
+
+    def get_file_name(self, obj):
+        if not obj.file:
+            return None
+        return obj.file.name.rsplit('/', 1)[-1]
     
     class Meta:
         model = WorkflowFieldResponse
-        fields = ['id', 'field', 'field_label', 'field_type', 'value']
+        fields = [
+            'id', 'field', 'field_label', 'field_type',
+            'value', 'file_url', 'file_name',
+        ]
 
 
 class WorkflowStageInstanceSerializer(serializers.ModelSerializer):
@@ -133,12 +154,22 @@ class WorkflowStageInstanceSerializer(serializers.ModelSerializer):
 
 
 class ProjectWorkflowSerializer(serializers.ModelSerializer):
+    assigned_by_name = serializers.SerializerMethodField()
+    assigned_by_role = serializers.CharField(source='assigned_by.role', read_only=True)
     template_details = WorkflowTemplateSerializer(source='template', read_only=True)
     stage_instances = WorkflowStageInstanceSerializer(many=True, read_only=True)
     
+    def get_assigned_by_name(self, obj):
+        user = obj.assigned_by or obj.template.created_by
+        if not user:
+            return ''
+        full_name = user.get_full_name().strip()
+        return full_name or user.username
+
     class Meta:
         model = ProjectWorkflow
         fields = [
     'id', 'project_board', 'template', 'template_details',
-    'stage_instances', 'started_at', 'completed_at', 'is_active'
+    'stage_instances', 'assigned_by', 'assigned_by_name', 'assigned_by_role',
+    'started_at', 'completed_at', 'is_active'
         ]  

@@ -2,6 +2,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import (
@@ -117,6 +118,68 @@ class WorkflowTemplateAPITests(TestCase):
         self.assertEqual(response.data['name'], 'Sprint Template')
         self.assertEqual(len(response.data['stages']), 2)
         self.assertEqual(response.data['stages'][0]['fields'][0]['label'], 'Sprint Goals')
+
+    def test_cleanup_duplicate_stages_preserves_instance_metadata(self):
+        self.client.force_authenticate(user=self.hod)
+
+        template = WorkflowTemplate.objects.create(
+            name='Duplicate Template', department='software_engineering', created_by=self.hod
+        )
+        original_stage = WorkflowStage.objects.create(
+            template=template, name='Repeated Stage', order=1, trigger_type='manual'
+        )
+        duplicate_stage = WorkflowStage.objects.create(
+            template=template, name='Repeated Stage', order=2, trigger_type='manual'
+        )
+
+        original_field = WorkflowStageField.objects.create(
+            stage=original_stage, label='Status', field_type='text', required=True, order=0
+        )
+        duplicate_field = WorkflowStageField.objects.create(
+            stage=duplicate_stage, label='Status', field_type='text', required=True, order=0
+        )
+
+        proposal, board = _create_full_proposal_board(
+            User.objects.create_user(username='cleanup_stu', password='Pass123', role='student'),
+            User.objects.create_user(username='cleanup_doc', password='Pass123', role='doctor'),
+            self.hod,
+        )
+        workflow = ProjectWorkflow.objects.create(project_board=board, template=template, is_active=True)
+        original_instance = WorkflowStageInstance.objects.create(
+            project_workflow=workflow,
+            stage=original_stage,
+            status='pending',
+            occurrence_number=1,
+        )
+        duplicate_instance = WorkflowStageInstance.objects.create(
+            project_workflow=workflow,
+            stage=duplicate_stage,
+            status='approved',
+            submitted_at=timezone.now(),
+            reviewed_at=timezone.now(),
+            reviewed_by=self.hod,
+            feedback='Looks good',
+            occurrence_number=1,
+        )
+        WorkflowFieldResponse.objects.create(
+            stage_instance=duplicate_instance,
+            field=duplicate_field,
+            value='Complete',
+        )
+
+        response = self.client.post('/api/workflow/cleanup-duplicates/')
+        self.assertEqual(response.status_code, 200)
+
+        original_instance.refresh_from_db()
+        self.assertEqual(WorkflowStage.objects.filter(template=template, name='Repeated Stage').count(), 1)
+        self.assertEqual(WorkflowStageInstance.objects.filter(project_workflow=workflow).count(), 1)
+        self.assertEqual(original_instance.status, 'approved')
+        self.assertIsNotNone(original_instance.submitted_at)
+        self.assertIsNotNone(original_instance.reviewed_at)
+        self.assertEqual(original_instance.reviewed_by, self.hod)
+        self.assertEqual(original_instance.feedback, 'Looks good')
+        self.assertEqual(original_instance.field_responses.count(), 1)
+        self.assertEqual(original_instance.field_responses.first().field, original_field)
 
     def test_list_templates(self):
         WorkflowTemplate.objects.create(name='T1', department='software_engineering', created_by=self.hod)

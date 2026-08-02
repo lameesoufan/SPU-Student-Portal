@@ -1,0 +1,89 @@
+.dcs-wrap { padding: 24px; max-width: 900px; margin: 0 auto; }
+
+.dcs-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.dcs-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary, #1a1a2e); }
+.dcs-subtitle { font-size: 0.85rem; color: var(--text-secondary, #666); margin-top: 2px; }
+
+.dcs-empty { text-align: center; padding: 60px 24px; color: var(--text-secondary, #888); }
+.dcs-empty svg { opacity: 0.35; margin-bottom: 12px; }
+.dcs-empty p { font-size: 0.95rem; }
+
+.dcs-committee-card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.dcs-committee-head {
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dcs-committee-name { color: #fff; font-weight: 700; font-size: 1rem; flex: 1; }
+.dcs-badge {
+  font-size: 0.72rem; font-weight: 600; padding: 2px 9px; border-radius: 20px;
+  background: rgba(255,255,255,0.2); color: #fff;
+}
+.dcs-badge.is-chair { background: rgba(255,220,80,0.35); color: #ffe96a; }
+.dcs-badge.is-scheduled { background: rgba(100,255,180,0.25); color: #86efca; }
+
+.dcs-meta {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  display: flex; gap: 18px; flex-wrap: wrap;
+  font-size: 0.82rem; color: var(--text-secondary, #666);
+}
+.dcs-meta-item { display: flex; align-items: center; gap: 5px; }
+
+.dcs-members {
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  font-size: 0.82rem;
+  color: var(--text-secondary, #555);
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+}
+.dcs-members-label { font-weight: 600; color: var(--text-primary, #333); margin-left: 4px; }
+.dcs-member-chip {
+  padding: 2px 8px; border-radius: 20px;
+  background: var(--chip-bg, #f0f0ff); color: #5b5fc7;
+  font-size: 0.78rem;
+}
+.dcs-member-chip.is-chair { background: #fef9e7; color: #b7880d; }
+
+.dcs-projects { padding: 0; }
+.dcs-projects-title {
+  padding: 8px 18px; font-size: 0.8rem; font-weight: 700;
+  color: var(--text-secondary, #888); text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.dcs-project-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border-light, #f3f4f6);
+  font-size: 0.85rem;
+}
+.dcs-project-row:last-child { border-bottom: none; }
+.dcs-project-idx {
+  min-width: 24px; height: 24px; border-radius: 50%;
+  background: #667eea; color: #fff;
+  font-size: 0.72rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 1px; flex-shrink: 0;
+}
+.dcs-project-info { flex: 1; }
+.dcs-project-title { font-weight: 600; color: var(--text-primary, #1a1a2e); margin-bottom: 3px; }
+.dcs-project-students { color: var(--text-secondary, #555); font-size: 0.8rem; }
+.dcs-project-supervisors { color: #888; font-size: 0.78rem; margin-top: 1px; }
+.dcs-project-time {
+  font-size: 0.78rem; font-weight: 600; color: #667eea;
+  white-space: nowrap; padding-top: 2px;
+}
+
+.dcs-loading { text-align: center; padding: 60px; color: var(--text-secondary, #888); }
+.dcs-error { padding: 16px; background: #fff5f5; color: #c0392b; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; }

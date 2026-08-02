@@ -14,6 +14,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['role']                 = user.role
         token['username']             = user.username
         token['must_change_password'] = user.must_change_password
+        token['must_change_username'] = user.must_change_username
         token['department']           = user.department
         return token
 

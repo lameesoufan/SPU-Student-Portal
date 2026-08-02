@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ChangeEmail from './ChangeEmail';
 import {
   LayoutGrid,
   Search,
@@ -30,6 +31,9 @@ import SupervisorProjects from './SupervisorProjects';
 import WorkflowBuilder from './WorkflowBuilder';
 import ApplyWorkflow from './ApplyWorkflow';
 import WorkflowReview from './WorkflowReview';
+import DoctorCommitteeSchedule from './committees/DoctorCommitteeSchedule';
+import GradeEntry from './committees/GradeEntry';
+import MyAvailabilityPage from './committees/MyAvailabilityPage';
 import { useTheme } from '../ThemeContext';
 import {
   fetchUnreadCount,
@@ -62,23 +66,28 @@ const Icon = {
 
 
 const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Overview', IconComp: Icon.Overview },
-  { id: 'my-ideas', label: 'My Ideas', IconComp: Icon.Lightbulb },
-  { id: 'supervisor-review', label: 'Proposals', IconComp: Icon.FileText },
-  { id: 'app-review', label: 'Applications', IconComp: Icon.Inbox },
-  { id: 'supervised-projects', label: 'Projects', IconComp: Icon.Kanban },
-  { id: 'workflow', label: 'Workflows', IconComp: Icon.BarChart },
-  { id: 'applyworkflow', label: 'Apply Workflow', IconComp: Icon.ClipboardList },
-  { id: 'reviewworkflow', label: 'Review Submissions', IconComp: Icon.CheckCircle },
+  { id: 'dashboard', label: 'نظرة عامة', IconComp: Icon.Overview },
+  { id: 'my-ideas', label: 'أفكاري', IconComp: Icon.Lightbulb },
+  { id: 'supervisor-review', label: 'المقترحات', IconComp: Icon.FileText },
+  { id: 'app-review', label: 'الطلبات', IconComp: Icon.Inbox },
+  { id: 'supervised-projects', label: 'المشاريع', IconComp: Icon.Kanban },
+  { id: 'workflow', label: 'سير العمل', IconComp: Icon.BarChart },
+  { id: 'applyworkflow', label: 'تطبيق سير العمل', IconComp: Icon.ClipboardList },
+  { id: 'reviewworkflow', label: 'مراجعة الطلبات', IconComp: Icon.CheckCircle },
+  { id: 'committee-schedule', label: 'جدول المناقشات', IconComp: Icon.Calendar },
+  { id: 'my-availability', label: 'توفري الأسبوعي', IconComp: Icon.Calendar },
+  { id: 'grade-entry', label: 'إدخال العلامات', IconComp: Icon.CheckCircle },
 ];
 
 const MODULE_CARDS = [
-  { IconComp: Icon.Lightbulb, label: 'My Ideas', desc: 'Submit and manage your project ideas for student teams', page: 'my-ideas', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' },
-  { IconComp: Icon.FileText, label: 'Student Proposals', desc: 'Review and approve student project proposals assigned to you', page: 'supervisor-review', gradient: 'linear-gradient(135deg, #6366f1, #818cf8)' },
-  { IconComp: Icon.Inbox, label: 'Idea Applications', desc: 'Review student applications on your project ideas', page: 'app-review', gradient: 'linear-gradient(135deg, #06b6d4, #22d3ee)' },
-  { IconComp: Icon.Kanban, label: 'Supervised Projects', desc: 'Track and monitor progress of your registered student projects', page: 'supervised-projects', gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' },
-  { IconComp: Icon.BarChart, label: 'Workflow Builder', desc: 'Create dynamic project workflow templates with stages and fields', page: 'workflow', gradient: 'linear-gradient(135deg, #ec4899, #f472b6)' },
-  { IconComp: Icon.ClipboardList, label: 'Apply Workflow', desc: 'Apply workflow templates to student projects', page: 'applyworkflow', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
+  { IconComp: Icon.Lightbulb, label: 'أفكاري', desc: 'تقديم وإدارة أفكار مشاريعك لفرق الطلاب', page: 'my-ideas', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' },
+  { IconComp: Icon.FileText, label: 'مقترحات الطلاب', desc: 'مراجعة والموافقة على مقترحات المشاريع الطلابية المسندة إليك', page: 'supervisor-review', gradient: 'linear-gradient(135deg, #6366f1, #818cf8)' },
+  { IconComp: Icon.Inbox, label: 'طلبات الأفكار', desc: 'مراجعة طلبات الطلاب على أفكار مشاريعك', page: 'app-review', gradient: 'linear-gradient(135deg, #06b6d4, #22d3ee)' },
+  { IconComp: Icon.Kanban, label: 'المشاريع المشرف عليها', desc: 'متابعة ومراقبة تقدم مشاريع الطلاب المسجلة لديك', page: 'supervised-projects', gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' },
+  { IconComp: Icon.BarChart, label: 'منشئ سير العمل', desc: 'إنشاء قوالب سير عمل ديناميكية للمشاريع بمراحل وحقول', page: 'workflow', gradient: 'linear-gradient(135deg, #ec4899, #f472b6)' },
+  { IconComp: Icon.ClipboardList, label: 'تطبيق سير العمل', desc: 'تطبيق قوالب سير العمل على مشاريع الطلاب', page: 'applyworkflow', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
+  { IconComp: Icon.Calendar, label: 'جدول المناقشات', desc: 'اعرض اللجان المسندة إليك ومناقشاتها وأوقاتها', page: 'committee-schedule', gradient: 'linear-gradient(135deg, #667eea, #764ba2)' },
+  { IconComp: Icon.CheckCircle, label: 'إدخال العلامات', desc: 'أدخل علامات المشاريع للجان التي أنت رئيسها', page: 'grade-entry', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
 ];
 
 
@@ -135,31 +144,35 @@ usePolling(async () => {
     if (page === 'workflow') return <div className="std-page-wrapper"><WorkflowBuilder onBack={goBack} /></div>;
     if (page === 'applyworkflow') return <div className="std-page-wrapper"><ApplyWorkflow onBack={goBack} /></div>;
     if (page === 'reviewworkflow') return <div className="std-page-wrapper"><WorkflowReview onBack={goBack} /></div>;
-    if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword onBack={goBack} /></div>;
+    if (page === 'change-password') return <div className="std-page-wrapper"><ChangePassword user={user} onBack={goBack} /></div>;
+    if (page === 'change-email') return <div className="std-page-wrapper"><ChangeEmail user={user} onBack={goBack} /></div>;
+    if (page === 'committee-schedule') return <div className="std-page-wrapper"><DoctorCommitteeSchedule onBack={goBack} /></div>;
+    if (page === 'grade-entry') return <div className="std-page-wrapper"><GradeEntry onBack={goBack} /></div>;
+    if (page === 'my-availability') return <div className="std-page-wrapper"><MyAvailabilityPage user={user} onBack={goBack} /></div>;
     return (
       <div className="std-content">
         <div className={`std-hero ${mounted ? 'std-animate-in' : ''}`}>
           <div className="std-hero-bg-orbs"><div className="std-orb std-orb-1"/><div className="std-orb std-orb-2"/><div className="std-orb std-orb-3"/></div>
           <div className="std-hero-content">
             <div className="std-hero-text">
-              <h1 className="std-hero-title">Welcome back, <span className="std-gradient-text">Dr. {user.username}</span></h1>
-              <p className="std-hero-sub">Manage your project ideas, review student proposals, and track supervised projects.</p>
+              <h1 className="std-hero-title">مرحباً بعودتك، <span className="std-gradient-text">د. {user.username}</span></h1>
+              <p className="std-hero-sub">إدارة أفكار مشاريعك، مراجعة مقترحات الطلاب، ومتابعة المشاريع المشرف عليها.</p>
             </div>
             <div className="std-hero-right">
-              <div className="std-hero-empty-ring"><Icon.GradCap size={28}/><span>Faculty Portal</span></div>
+              <div className="std-hero-empty-ring"><Icon.GradCap size={28}/><span>بوابة هيئة التدريس</span></div>
             </div>
           </div>
         </div>
 
         <div className={`std-stats ${mounted ? 'std-animate-in std-delay-1' : ''}`}>
-          <div className="std-stat-card"><div className="std-stat-icon std-stat-blue"><Icon.Calendar size={20}/></div><div className="std-stat-info"><span className="std-stat-title">Semester</span><span className="std-stat-value">Spring</span></div></div>
-          <div className="std-stat-card"><div className="std-stat-icon std-stat-green"><Icon.GradCap size={20}/></div><div className="std-stat-info"><span className="std-stat-title">Role</span><span className="std-stat-value std-text-green">Faculty</span></div></div>
-          <div className="std-stat-card"><div className="std-stat-icon std-stat-purple"><Icon.Book size={20}/></div><div className="std-stat-info"><span className="std-stat-title">Department</span><span className="std-stat-value std-text-purple">{user.department || '—'}</span></div></div>
-          <div className="std-stat-card"><div className="std-stat-icon std-stat-amber"><Icon.Bell size={20}/></div><div className="std-stat-info"><span className="std-stat-title">Notifications</span><span className="std-stat-value std-text-amber">{loading ? '—' : unreadCount}</span></div></div>
+          <div className="std-stat-card"><div className="std-stat-icon std-stat-blue"><Icon.Calendar size={20}/></div><div className="std-stat-info"><span className="std-stat-title">الفصل</span><span className="std-stat-value">ربيعي</span></div></div>
+          <div className="std-stat-card"><div className="std-stat-icon std-stat-green"><Icon.GradCap size={20}/></div><div className="std-stat-info"><span className="std-stat-title">الدور</span><span className="std-stat-value std-text-green">عضو هيئة تدريسية</span></div></div>
+          <div className="std-stat-card"><div className="std-stat-icon std-stat-purple"><Icon.Book size={20}/></div><div className="std-stat-info"><span className="std-stat-title">القسم</span><span className="std-stat-value std-text-purple">{user.department || '—'}</span></div></div>
+          <div className="std-stat-card"><div className="std-stat-icon std-stat-amber"><Icon.Bell size={20}/></div><div className="std-stat-info"><span className="std-stat-title">الإشعارات</span><span className="std-stat-value std-text-amber">{loading ? '—' : unreadCount}</span></div></div>
         </div>
 
         <div className={`std-modules ${mounted ? 'std-animate-in std-delay-2' : ''}`}>
-          <h2 className="std-section-title">Faculty Modules</h2>
+          <h2 className="std-section-title">وحدات هيئة التدريس</h2>
           <div className="std-modules-grid">
             {MODULE_CARDS.map((m, i) => (
               <div key={m.label} className={`std-module-card ${mounted ? `std-card-in std-card-delay-${i}` : ''}`} onClick={() => setPage(m.page)} tabIndex={0} role="button" onKeyDown={(e) => e.key === 'Enter' && setPage(m.page)}>
@@ -172,10 +185,10 @@ usePolling(async () => {
         </div>
 
         <div className={`std-activity ${mounted ? 'std-animate-in std-delay-3' : ''}`}>
-          <h2 className="std-section-title">Recent Notifications</h2>
+          <h2 className="std-section-title">آخر الإشعارات</h2>
           <div className="std-activity-list">
             {notifications.length === 0 ? (
-              <div className="std-empty-state"><Icon.Bell size={32}/><p>No notifications yet</p></div>
+              <div className="std-empty-state"><Icon.Bell size={32}/><p>لا توجد إشعارات بعد</p></div>
             ) : (
               notifications.slice(0, 4).map((n, i) => (
                 <div key={n.id} className={`std-activity-item ${mounted ? `std-activity-in std-activity-delay-${i}` : ''} ${!n.is_read ? 'std-activity-unread' : ''}`} onClick={() => !n.is_read && handleMarkRead(n.id)} role="button" tabIndex={0}>
@@ -192,7 +205,7 @@ usePolling(async () => {
   };
 
  
-  const currentPageLabel = NAV_ITEMS.find((n) => n.id === page)?.label || 'Overview';
+  const currentPageLabel = NAV_ITEMS.find((n) => n.id === page)?.label || 'نظرة عامة';
     const initial = user.username ? user.username.charAt(0).toUpperCase() : 'D';
   return (
     <DashboardLayout
@@ -200,7 +213,7 @@ usePolling(async () => {
       activePage={page}
       onNavigate={handleNavClick}
       unreadCount={unreadCount}
-      logoSubtitle="Faculty Dashboard"
+      logoSubtitle="لوحة التحكم"
       pageTitle={currentPageLabel}
       theme={theme}
       onToggleTheme={toggleTheme}

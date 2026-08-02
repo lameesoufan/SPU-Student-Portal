@@ -74,6 +74,38 @@ def _can_access_response(user, response):
     return False
 
 
+def _student_can_submit_linked_project_form(user, validated_data):
+    from project_management.models import ProjectBoard
+    from projects.models import IdeaApplication, StudentIdeaProposal
+    from projects.participation_services import get_project_participations
+
+    project = None
+    proposal_id = validated_data.get('proposal_id')
+    application_id = validated_data.get('application_id')
+    project_board_id = validated_data.get('project_board_id')
+
+    if proposal_id:
+        project = StudentIdeaProposal.objects.filter(pk=proposal_id).first()
+    elif application_id:
+        project = IdeaApplication.objects.filter(pk=application_id).first()
+    elif project_board_id:
+        board = ProjectBoard.objects.filter(pk=project_board_id).select_related('proposal', 'application').first()
+        if board:
+            project = board.proposal or board.application
+
+    if isinstance(project, StudentIdeaProposal) and project.status != 'assigned':
+        return True
+    if isinstance(project, IdeaApplication) and project.status != 'registered':
+        return True
+    if project is None:
+        return True
+
+    participations = list(get_project_participations(project))
+    if not participations:
+        return True
+    return any(participation.student_id == user.id and participation.status == 'active' for participation in participations)
+
+
 # ── HoD: save/update form for their department ───────────────────────────────
 
 @api_view(['GET'])
@@ -180,6 +212,8 @@ def submit_form_response(request):
     serializer = FormResponseSerializer(data=data, context={'request': request})
     if not serializer.is_valid():
         return _validation_error(serializer.errors)
+    if not _student_can_submit_linked_project_form(request.user, serializer.validated_data):
+        return Response({'error': 'You are not an active participant in this project.'}, status=403)
     response = serializer.save(student=request.user)
     return Response(FormResponseSerializer(response, context={'request': request}).data, status=201)
 

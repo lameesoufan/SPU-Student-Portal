@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchHodPendingDoctorIdeas, hodReviewDoctorIdea } from '../api';
+import { getProjectTypeLabel } from '../lib/constants';
 import { FileCheck2, Loader2, ClipboardCheck, CheckCircle2, XCircle, User, Users, ChevronDown, GraduationCap, Calendar, Stethoscope, Info, Lightbulb, Wrench } from 'lucide-react';
 
 export default function HodIdeaReview({ onBack }) {
@@ -53,8 +54,8 @@ export default function HodIdeaReview({ onBack }) {
           <Lightbulb size={20} />
         </div>
         <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">Doctor Project Ideas</h1>
-          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">Review and approve ideas submitted by doctors in your department</p>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white m-0">أفكار مشاريع الدكاترة</h1>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 m-0">مراجعة والموافقة على الأفكار المقدمة من الدكاترة في قسمك</p>
         </div>
         {ideas.length > 0 && (
           <div className="ml-auto flex items-center justify-center min-w-[36px] h-9 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-lg text-sm font-bold px-3">
@@ -84,8 +85,8 @@ export default function HodIdeaReview({ onBack }) {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-500">
             <ClipboardCheck size={32} />
           </div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white">All caught up</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">No pending doctor ideas at the moment. New submissions will appear here for your review.</p>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">تمت المراجعة</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">لا توجد أفكار دكاترة معلقة حالياً. الطلبات الجديدة ستظهر هنا للمراجعة.</p>
         </div>
       )}
 
@@ -112,6 +113,11 @@ export default function HodIdeaReview({ onBack }) {
                   <Users size={11} />
                   {idea.max_team_size} students
                 </span>
+                {idea.project_type && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 tracking-wide">
+                    {getProjectTypeLabel(idea.project_type)}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -170,14 +176,14 @@ export default function HodIdeaReview({ onBack }) {
                 {reviewing.action === 'approve' ? <CheckCircle2 size={22} /> : <XCircle size={22} />}
               </div>
               <h3 className="text-lg font-bold text-gray-900 dark:text-white m-0">
-                {reviewing.action === 'approve' ? 'Approve Idea' : 'Reject Idea'}
+                {reviewing.action === 'approve' ? 'الموافقة على الفكرة' : 'رفض الفكرة'}
               </h3>
             </div>
 
             {/* Approve Note */}
             {reviewing.action === 'approve' && (
               <p className="text-sm leading-relaxed mt-3 p-3 px-4 bg-sky-500/10 rounded-lg border border-sky-500/20 text-sky-700 dark:text-sky-400">
-                This idea will be marked as <strong>Approved</strong> and become available for student applications.
+                This idea will be marked as <strong>مقبول</strong> and become available for student applications.
               </p>
             )}
 
@@ -193,7 +199,7 @@ export default function HodIdeaReview({ onBack }) {
                   rows={3}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Explain why this idea is being rejected…"
+                  placeholder="اشرح سبب رفض هذه الفكرة…"
                 />
               </div>
             )}
@@ -224,7 +230,7 @@ export default function HodIdeaReview({ onBack }) {
                 disabled={confirming}
               >
                 {confirming && <Loader2 size={14} className="animate-spin" />}
-                {confirming ? 'Processing…' : 'Confirm'}
+                {confirming ? 'Processing…' : 'تأكيد'}
               </button>
             </div>
           </div>

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { login } from '../api';
+import { login, setAccessToken, studentLoginRequest, studentLoginVerify } from '../api';
 import { useTheme } from '../ThemeContext';
 import campusBg from '../assets/campus-bg.png';
-import { GraduationCap, Eye, EyeOff, ArrowRight, Sun, Moon, User, Lock, XCircle, LayoutGrid, Settings, GitBranch } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, ArrowRight, User, Lock, XCircle, LayoutGrid, Settings, GitBranch } from 'lucide-react';
+import OTPVerification from './OTPVerification';
 
 const PARTICLES = [
   { size: 120, bg: 'radial-gradient(circle, var(--primary-light), transparent 70%)', top: '10%', left: '5%', delay: '0s' },
@@ -13,8 +14,8 @@ const PARTICLES = [
   { size: 140, bg: 'radial-gradient(circle, var(--primary-lighter), transparent 70%)', top: '5%', right: '5%', delay: '10s' },
 ];
 
-export default function Login({ onLogin, onRegister }) {
-  const { theme, toggleTheme } = useTheme();
+export default function Login({ onLogin, onRegister, onForgotPassword }) {
+  const { theme } = useTheme();
   const [form, setForm] = useState({ username: '', password: '' });
   const [errors, setErrors] = useState({ username: '', password: '' });
   const [serverError, setServerError] = useState('');
@@ -23,10 +24,24 @@ export default function Login({ onLogin, onRegister }) {
   const [mounted, setMounted] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [shaking, setShaking] = useState(false);
+  
+  // OTP state
+  const [showOTP, setShowOTP] = useState(false);
+  const [otpData, setOtpData] = useState(null);
 
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 100);
     return () => clearTimeout(t);
+  }, []);
+
+  // Force dark theme on the login page (regardless of app theme).
+  // Restores the user's chosen theme when leaving the login page.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    return () => {
+      document.documentElement.setAttribute('data-theme', theme);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async (e) => {
@@ -52,19 +67,60 @@ export default function Login({ onLogin, onRegister }) {
     }
 
     setLoading(true);
-  try {
-      const res = await login(form.username, form.password);
-      const data = res.data;
-      // Tokens now in HttpOnly cookies — no localStorage needed
-      onLogin({
-        username: data.username || form.username,
-        role: data.role,
-        must_change_password: data.must_change_password,
-       department: data.department,
-      });
-    }
-    catch (err) {
-      setServerError(err.response?.data?.detail || 'Invalid credentials. Please try again.');
+    try {
+      // Check if username is numeric (student) or not (doctor/admin/hod)
+      const isStudent = /^\d+$/.test(form.username.trim());
+      
+      if (isStudent) {
+        // Student login - use OTP flow
+        const res = await studentLoginRequest(form.username, form.password);
+        const data = res.data;
+
+        // First login still uses OTP. Later logins can return a direct JWT response.
+        if (data.session_token) {
+          setOtpData({
+            sessionToken: data.session_token,
+            emailHint: data.email_hint,
+            expiresIn: data.expires_in_seconds,
+            universityId: form.username,
+          });
+          setShowOTP(true);
+          return;
+        }
+
+        if (data.access) {
+          setAccessToken(data.access);
+          onLogin({
+            username: data.username || form.username,
+            role: data.role,
+            must_change_password: data.must_change_password,
+            must_change_username: data.must_change_username ?? true,
+            department: data.department,
+          });
+          return;
+        }
+
+        throw new Error('Unexpected student login response.');
+      } else {
+        // Doctor/Admin/HOD login - use regular login
+        const res = await login(form.username, form.password);
+        const data = res.data;
+
+        // حفظ الـ access token بالإضافة للكوكيز
+        if (data.access) {
+          setAccessToken(data.access);
+        }
+
+        onLogin({
+          username: data.username || form.username,
+          role: data.role,
+          must_change_password: data.must_change_password,
+          must_change_username: data.must_change_username ?? true,
+          department: data.department,
+        });
+      }
+    } catch (err) {
+      setServerError(err.response?.data?.error || err.response?.data?.detail || 'Invalid credentials. Please try again.');
       setShaking(true);
       setTimeout(() => setShaking(false), 400);
     } finally {
@@ -72,7 +128,115 @@ export default function Login({ onLogin, onRegister }) {
     }
   };
 
-  const isDark = theme === 'dark';
+  const handleOTPVerify = async (sessionToken, code) => {
+    const res = await studentLoginVerify(sessionToken, code);
+    const data = res.data;
+
+    // حفظ الـ access token بالإضافة للكوكيز
+    if (data.access) {
+      setAccessToken(data.access);
+    }
+
+    onLogin({
+      username: data.username || form.username,
+      role: data.role,
+      must_change_password: data.must_change_password,
+      must_change_username: data.must_change_username ?? true,
+      department: data.department,
+    });
+  };
+
+  const handleOTPBack = () => {
+    setShowOTP(false);
+    setOtpData(null);
+    setForm({ username: '', password: '' });
+  };
+
+  const handleOTPResend = async () => {
+    const res = await studentLoginRequest(otpData.universityId, form.password);
+    const data = res.data;
+    
+    // Update OTP data with new session token and expiry
+    setOtpData({
+      sessionToken: data.session_token,
+      emailHint: data.email_hint,
+      expiresIn: data.expires_in_seconds,
+      universityId: otpData.universityId,
+    });
+  };
+
+  const isDark = true;
+
+  // Show OTP verification screen if needed
+  if (showOTP && otpData) {
+    return (
+      <>
+        <style>{`
+          @keyframes lp-float {
+            0%, 100% { opacity: 0; transform: translateY(0) scale(0.8); }
+            25% { opacity: 0.6; }
+            50% { opacity: 0.4; transform: translateY(-40px) scale(1.1); }
+            75% { opacity: 0.5; }
+          }
+        `}</style>
+
+        <div className="group relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[var(--bg-primary)]">
+          {/* University campus background image */}
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat scale-105 transition-transform duration-[8000ms] ease-linear group-hover:scale-[1.08]"
+            style={{
+              backgroundImage: `url(${campusBg})`,
+              filter: isDark ? 'blur(1px) brightness(0.7)' : 'blur(1px) brightness(0.85)',
+            }}
+            aria-hidden="true"
+          />
+
+          {/* Animated background particles */}
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none" aria-hidden="true">
+            {PARTICLES.map((p, i) => (
+              <div
+                key={i}
+                className="absolute rounded-full opacity-0"
+                style={{
+                  width: p.size,
+                  height: p.size,
+                  background: p.bg,
+                  ...(p.top ? { top: p.top } : {}),
+                  ...(p.bottom ? { bottom: p.bottom } : {}),
+                  ...(p.left ? { left: p.left } : {}),
+                  ...(p.right ? { right: p.right } : {}),
+                  animation: 'lp-float 12s infinite ease-in-out',
+                  animationDelay: p.delay,
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Gradient overlay */}
+          <div
+            className="absolute inset-0 z-[1] pointer-events-none"
+            style={{
+              background: isDark
+                ? 'linear-gradient(135deg, rgba(15,17,23,0.55) 0%, rgba(30,32,48,0.45) 50%, rgba(15,17,23,0.60) 100%)'
+                : 'linear-gradient(135deg, rgba(248,249,253,0.70) 0%, rgba(241,243,249,0.60) 50%, rgba(248,249,253,0.72) 100%)'
+            }}
+          />
+
+          {/* OTP Verification Component */}
+          <div className="relative z-[2] flex items-center justify-center w-full max-w-[1080px] px-6 py-10">
+            <OTPVerification
+              emailHint={otpData.emailHint}
+              sessionToken={otpData.sessionToken}
+              expiresIn={otpData.expiresIn}
+              onVerify={handleOTPVerify}
+              onBack={handleOTPBack}
+              onResend={handleOTPResend}
+            />
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -93,19 +257,6 @@ export default function Login({ onLogin, onRegister }) {
       `}</style>
 
       <div className="group relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[var(--bg-primary)]">
-        {/* Theme toggle button */}
-        <button
-          className={`fixed top-5 right-5 z-10 flex items-center justify-center w-[42px] h-[42px] rounded-full border-[1.5px] backdrop-blur-[12px] cursor-pointer transition-all duration-250 ${
-            isDark
-              ? 'border-white/15 bg-white/[0.08] text-white/80 hover:bg-white/15 hover:border-white/30 hover:text-white'
-              : 'border-black/12 bg-white/70 text-[#4A5568] hover:bg-white/90 hover:border-[rgba(122,82,148,0.3)] hover:text-[#7A5294]'
-          } hover:rotate-[15deg] hover:scale-105 active:rotate-0 active:scale-95`}
-          onClick={toggleTheme}
-          aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-          title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-        >
-          {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-        </button>
 
         {/* University campus background image */}
         <div
@@ -304,6 +455,7 @@ export default function Login({ onLogin, onRegister }) {
                     </button>
                   </div>
                   {errors.password && <span className="block text-[#ef4444] text-xs mt-1 px-1">{errors.password}</span>}
+                  {onForgotPassword && <button type="button" onClick={onForgotPassword} className="mt-1 self-start bg-transparent border-none p-0 text-sm font-bold text-[var(--primary)] hover:underline">هل نسيت كلمة المرور؟</button>}
                 </div>
 
                 <button

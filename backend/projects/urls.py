@@ -11,7 +11,14 @@ from .views import (
     hod_pending_applications, hod_review_app,
     my_invitations, respond_invitation,
     my_proposal_invitations, respond_proposal_invitation,
-    replace_proposal_member_view, replace_application_member_view,
+    replace_proposal_member_view, remove_rejected_proposal_member_view,
+    replace_rejected_supervisor_view, continue_with_approved_supervisor_view,
+    revise_student_proposal_view,
+    replace_application_member_view,
+    student_status_management, student_status_management_stats,
+    mark_participation_failed, mark_participation_withdrawn,
+    reverse_participation_to_active, designate_student_status,
+    participation_history, student_participation_history,
 )
 
 urlpatterns = [
@@ -61,5 +68,19 @@ urlpatterns = [
 
     # Replace rejected members
     path('api/projects/proposals/<int:proposal_id>/replace-member/', replace_proposal_member_view,   name='replace_proposal_member'),
+    path('api/projects/proposals/<int:proposal_id>/remove-rejected-member/', remove_rejected_proposal_member_view, name='remove_rejected_proposal_member'),
+    path('api/projects/proposals/<int:proposal_id>/replace-supervisor/', replace_rejected_supervisor_view, name='replace_rejected_supervisor'),
+    path('api/projects/proposals/<int:proposal_id>/continue-with-supervisor/', continue_with_approved_supervisor_view, name='continue_with_approved_supervisor'),
+    path('api/projects/proposals/<int:proposal_id>/revise/', revise_student_proposal_view, name='revise_student_proposal'),
     path('api/projects/applications/<int:app_id>/replace-member/',   replace_application_member_view, name='replace_application_member'),
+
+    # Dean student project participation status management
+    path('api/projects/participations/status-management/', student_status_management, name='student_status_management'),
+    path('api/projects/participations/status-management/stats/', student_status_management_stats, name='student_status_management_stats'),
+    path('api/projects/participations/<int:participation_id>/mark-failed/', mark_participation_failed, name='mark_participation_failed'),
+    path('api/projects/participations/<int:participation_id>/mark-withdrawn/', mark_participation_withdrawn, name='mark_participation_withdrawn'),
+    path('api/projects/participations/<int:participation_id>/reverse-to-active/', reverse_participation_to_active, name='reverse_participation_to_active'),
+    path('api/projects/participations/<int:participation_id>/history/', participation_history, name='participation_history'),
+    path('api/projects/students/<int:student_id>/designate-status/', designate_student_status, name='designate_student_status'),
+    path('api/projects/students/<int:student_id>/participation-history/', student_participation_history, name='student_participation_history'),
 ]
