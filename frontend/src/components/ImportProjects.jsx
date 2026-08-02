@@ -196,6 +196,7 @@ export default function ImportProjects({ onBack }) {
     if (!exportData?.rows?.length) return;
     const columns = exportData.columns || [
       'university_id',
+      'email',
       'project_title',
       'department',
       'full_name',
@@ -286,7 +287,7 @@ export default function ImportProjects({ onBack }) {
             </span>
             {!file && (
               <span className="mt-3 max-w-xl text-xs leading-5 text-[var(--text-secondary,#64748b)]">
-                Headers may use Arabic labels, English keys, or both together. project_type must be one of: seasonal, graduation_1, graduation_2.
+                يجب أن يحتوي كل طالب على بريد إلكتروني صالح لإرسال رمز التحقق عند أول تسجيل دخول. Headers may use Arabic labels, English keys, or both together. project_type must be one of: seasonal, graduation_1, graduation_2.
               </span>
             )}
             <input

@@ -79,6 +79,12 @@ function AppInner() {
   if (user.must_change_password)
     return <ChangePassword user={user} onSuccess={handlePasswordChanged} />;
 
+  // Imported doctors choose a permanent username after completing the
+  // mandatory first-login password change. HoDs are included because an
+  // imported doctor may be promoted before their first login.
+  if (user.must_change_username && ['doctor', 'hod'].includes(user.role))
+    return <ChangeUsername user={user} onSuccess={handleUsernameChanged} />;
+
   if (user.role === 'student') return <StudentDashboard user={user} onLogout={handleLogout} />;
   if (user.role === 'doctor')  return <DoctorDashboard  user={user} onLogout={handleLogout} />;
   if (user.role === 'hod')     return <HodDashboard     user={user} onLogout={handleLogout} />;

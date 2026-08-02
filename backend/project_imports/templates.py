@@ -26,6 +26,7 @@ class TemplateGenerator:
         worksheet.append([
             'محمد أحمد',
             '20250001',
+            'student1@example.com',
             'نظام إدارة مشاريع التخرج',
             'software_engineering',
             'dr_ali',
@@ -35,6 +36,7 @@ class TemplateGenerator:
         worksheet.append([
             'سارة خالد',
             '20250002',
+            'student2@example.com',
             'تحليل ذكي للبيانات الجامعية',
             'artificial_intelligence',
             'dr_sara',
@@ -61,6 +63,7 @@ class TemplateGenerator:
             ['Arabic Header', 'English Header', 'Description'],
             [FIELD_HEADERS['student_name'], 'student_name', 'Full student name. It will be split into first and last name.'],
             [FIELD_HEADERS['university_id'], 'university_id', 'Student university ID. This becomes the student username.'],
+            [FIELD_HEADERS['email'], 'email', 'Required student email. The first-login verification code is sent to this address.'],
             [FIELD_HEADERS['title'], 'title', 'Project title. Maximum 255 characters.'],
             [FIELD_HEADERS['department'], 'department', f"One of: {', '.join(VALID_DEPARTMENTS)}"],
             [FIELD_HEADERS['supervisor_name'], 'supervisor_name', 'Doctor username or unique full/partial doctor name.'],

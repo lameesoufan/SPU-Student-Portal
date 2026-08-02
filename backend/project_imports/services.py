@@ -183,12 +183,18 @@ class UserMapper:
         # ── Student resolution ──
         for row in rows:
             university_id = row['university_id']
+            email = row.get('email', '').strip().lower()
             if university_id in students:
+                student = students[university_id]
+                if email and not student.email:
+                    student.email = email
+                    student.save(update_fields=['email'])
                 continue
             first_name, last_name = parse_person_name(row.get('student_name', ''))
             password = self.generate_password(university_id)
             student = User.objects.create_user(
                 username=university_id,
+                email=email,
                 password=password,
                 first_name=first_name,
                 last_name=last_name,
@@ -201,6 +207,7 @@ class UserMapper:
             created_students.append(student)
             credentials[student.id] = {
                 'username': university_id,
+                'email': email,
                 'password': password,
                 'full_name': f'{first_name} {last_name}'.strip(),
                 'department': row.get('department', ''),
@@ -929,6 +936,7 @@ class ImportService:
 
             rows_data.append({
                 'university_id': university_id,
+                'email': student.email or row.get('email', ''),
                 'project_title': '; '.join(student_projects),
                 'department': row.get('department', ''),
                 'full_name': student.get_full_name() or cred.get('full_name', ''),
@@ -947,6 +955,7 @@ class ImportService:
             'filename': 'student_credentials.csv',
             'columns': [
                 'university_id',
+                'email',
                 'project_title',
                 'department',
                 'full_name',

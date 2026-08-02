@@ -7,6 +7,10 @@ from io import BytesIO
 from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
+from django.db.models import Q
+from django.db.models.functions import Lower
 from openpyxl import load_workbook
 
 from projects.models import (
@@ -181,6 +185,7 @@ class FileValidator:
                     'is_project_leader': bool(is_project_start or not current_project),
                     'student_name': mapped_values.get('student_name', ''),
                     'university_id': mapped_values.get('university_id', ''),
+                    'email': mapped_values.get('email', '').strip().lower(),
                 }
                 for field in ('title', 'department', 'supervisor_name', 'project_type', 'github_repo'):
                     row_data[field] = current_project.get(field, mapped_values.get(field, ''))
@@ -242,6 +247,7 @@ class RowValidator:
         row_num = row['row_number']
 
         university_id = row.get('university_id', '').strip()
+        email = row.get('email', '').strip().lower()
         title = row.get('title', '').strip()
         raw_department = row.get('department', '').strip()
         raw_project_type = row.get('project_type', '').strip()
@@ -252,9 +258,22 @@ class RowValidator:
         row['department'] = department
         row['project_type'] = project_type
         row['github_repo'] = github_repo
+        row['email'] = email
 
         if not university_id:
             issues.append(self._error(row_num, 'university_id', 'University ID is required', row))
+        if not email:
+            issues.append(self._error(
+                row_num,
+                'email',
+                'Student email is required because first login verification is sent by email',
+                row,
+            ))
+        else:
+            try:
+                validate_email(email)
+            except DjangoValidationError:
+                issues.append(self._error(row_num, 'email', 'Invalid student email address', row, error_type='invalid_value'))
         if not title or len(title) > 255:
             issues.append(self._error(row_num, 'title', 'Project title is required and must not exceed 255 characters', row))
         if department not in VALID_DEPARTMENTS:
@@ -283,13 +302,17 @@ class RowValidator:
     def check_duplicates_in_file(self, rows):
         issues = []
         by_university_id = defaultdict(list)
+        by_email = defaultdict(list)
         by_title = defaultdict(list)
 
         for row in rows:
             university_id = row.get('university_id', '').strip()
+            email = row.get('email', '').strip().lower()
             title = row.get('title', '').strip().lower()
             if university_id:
                 by_university_id[university_id].append(row)
+            if email:
+                by_email[email].append(row)
             if title:
                 by_title[(row.get('project_row_number') or row.get('row_number'), title)].append(row)
 
@@ -301,6 +324,18 @@ class RowValidator:
                         row['row_number'],
                         'university_id',
                         f'Rows {row_numbers}: Duplicate university ID {university_id} found within file',
+                        row,
+                        error_type='duplicate',
+                    ))
+
+        for email, duplicate_rows in by_email.items():
+            if len(duplicate_rows) > 1:
+                row_numbers = ', '.join(str(row['row_number']) for row in duplicate_rows)
+                for row in duplicate_rows:
+                    issues.append(self._error(
+                        row['row_number'],
+                        'email',
+                        f'Rows {row_numbers}: Email {email} is assigned to more than one student in the file',
                         row,
                         error_type='duplicate',
                     ))
@@ -327,18 +362,44 @@ class RowValidator:
     def check_duplicates_in_db(self, rows):
         issues = []
         university_ids = [row.get('university_id', '').strip() for row in rows if row.get('university_id', '').strip()]
-        existing_users = {
-            user.username: user
-            for user in User.objects.filter(username__in=university_ids)
-        }
+        emails = [row.get('email', '').strip().lower() for row in rows if row.get('email', '').strip()]
+        users = list(User.objects.filter(username__in=university_ids))
+        if emails:
+            known_ids = {user.pk for user in users}
+            users.extend(
+                User.objects.exclude(email='')
+                .annotate(email_lower=Lower('email'))
+                .filter(email_lower__in=emails)
+                .exclude(pk__in=known_ids)
+            )
+        existing_users = {user.username: user for user in users if user.username in university_ids}
+        users_by_email = {user.email.strip().lower(): user for user in users if user.email}
 
         for row in rows:
             university_id = row.get('university_id', '').strip()
+            email = row.get('email', '').strip().lower()
             title = row.get('title', '').strip()
             if not university_id:
                 continue
 
             user = existing_users.get(university_id)
+            email_owner = users_by_email.get(email) if email else None
+            if email_owner and (not user or email_owner.pk != user.pk):
+                issues.append(self._error(
+                    row['row_number'],
+                    'email',
+                    f'Email {email} is already used by another account',
+                    row,
+                    error_type='duplicate',
+                ))
+            if user and user.email and email and user.email.strip().lower() != email:
+                issues.append(self._error(
+                    row['row_number'],
+                    'email',
+                    f'Student {university_id} already has a different email configured; update it from account administration instead',
+                    row,
+                    error_type='email_mismatch',
+                ))
             if user and user.role != 'student':
                 issues.append(self._error(
                     row['row_number'],

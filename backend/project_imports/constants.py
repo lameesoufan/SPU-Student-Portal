@@ -10,6 +10,7 @@ DEFAULT_TEMP_PASSWORD_FORMAT = 'SPU{identifier}@2025-2026'
 
 HEADER_STUDENT_NAME = 'اسم الطالب'
 HEADER_UNIVERSITY_ID = 'الرقم الجامعي'
+HEADER_STUDENT_EMAIL = 'البريد الإلكتروني'
 HEADER_PROJECT_TITLE = 'اسم المشروع'
 HEADER_DEPARTMENT = 'مجال المشروع'
 HEADER_SUPERVISOR_NAME = 'اسم المشرف'
@@ -19,6 +20,7 @@ HEADER_GIT_REPO = 'رابط الـ Git'
 FIELD_HEADERS = {
     'student_name': HEADER_STUDENT_NAME,
     'university_id': HEADER_UNIVERSITY_ID,
+    'email': HEADER_STUDENT_EMAIL,
     'title': HEADER_PROJECT_TITLE,
     'department': HEADER_DEPARTMENT,
     'supervisor_name': HEADER_SUPERVISOR_NAME,
@@ -55,6 +57,21 @@ HEADER_ALIASES = {
         'student full name',
     ),
     'university_id': (HEADER_UNIVERSITY_ID, 'university_id', 'university id', 'student_id', 'student id'),
+    'email': (
+        HEADER_STUDENT_EMAIL,
+        'البريد الالكتروني',
+        'البريد الجامعي',
+        'بريد الطالب',
+        'ايميل الطالب',
+        'إيميل الطالب',
+        'الايميل',
+        'الإيميل',
+        'email',
+        'student_email',
+        'student email',
+        'email_address',
+        'email address',
+    ),
     'title': (HEADER_PROJECT_TITLE, 'title', 'project_title', 'project title'),
     'department': (HEADER_DEPARTMENT, 'department', 'project_department', 'project department'),
     'supervisor_name': (
