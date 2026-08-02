@@ -212,6 +212,8 @@ def create_template(user, data):
                 trigger_days=stage_data.get('trigger_days'),
                 trigger_date=stage_data.get('trigger_date'),
                 notify_before_days=stage_data.get('notify_before_days', 3),
+                end_date=stage_data.get('end_date'),
+                close_notify_before_days=stage_data.get('close_notify_before_days', 1),
                 is_required=stage_data.get('is_required', True),
                 is_recurring=stage_data.get('is_recurring', False),
                 recurrence_unit=stage_data.get('recurrence_unit'),
@@ -313,6 +315,8 @@ def update_template(user, template_id, data):
                 stage.trigger_days = stage_data.get('trigger_days')
                 stage.trigger_date = stage_data.get('trigger_date')
                 stage.notify_before_days = stage_data.get('notify_before_days', 3)
+                stage.end_date = stage_data.get('end_date')
+                stage.close_notify_before_days = stage_data.get('close_notify_before_days', 1)
                 stage.is_required = stage_data.get('is_required', True)
                 stage.is_recurring = stage_data.get('is_recurring', False)
                 stage.recurrence_unit = stage_data.get('recurrence_unit') if stage_data.get('is_recurring') else None
@@ -412,6 +416,8 @@ def update_template(user, template_id, data):
                     trigger_days=stage_data.get('trigger_days'),
                     trigger_date=stage_data.get('trigger_date'),
                     notify_before_days=stage_data.get('notify_before_days', 3),
+                    end_date=stage_data.get('end_date'),
+                    close_notify_before_days=stage_data.get('close_notify_before_days', 1),
                     is_required=stage_data.get('is_required', True),
                     is_recurring=stage_data.get('is_recurring', False),
                     recurrence_unit=stage_data.get('recurrence_unit') if stage_data.get('is_recurring') else None,

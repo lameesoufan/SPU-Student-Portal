@@ -386,11 +386,20 @@ class SchedulePreviewView(APIView):
             settings_obj.discussion_duration = int(inline_params['discussion_duration'] or 15)
         elif settings_id:
             try:
-                settings_obj = SolverSettings.objects.get(pk=settings_id)
+                settings_obj = SolverSettings.objects.get(
+                    pk=settings_id,
+                    committee_type=committee_type,
+                    semester=semester,
+                )
             except SolverSettings.DoesNotExist:
                 return Response(
-                    {'detail': f'SolverSettings #{settings_id} not found.'},
-                    status=status.HTTP_404_NOT_FOUND,
+                    {
+                        'detail': (
+                            f'إعدادات Solver #{settings_id} غير موجودة أو لا تتبع '
+                            f'نوع اللجنة والفصل الدراسي المطلوبين.'
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
         else:
             settings_obj = (

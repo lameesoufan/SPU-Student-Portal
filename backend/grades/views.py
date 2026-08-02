@@ -25,13 +25,17 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from committees.models import Committee, COMMITTEE_TYPE_AR
+from committees.models import Committee, COMMITTEE_TYPE_AR, DEPARTMENT_AR
 from .models import (
     ProjectGrade, ProjectReport, GradeAuditLog, COMMITTEE_MAX_SCORES,
     CommitteeGradingMode, DoctorGradeDraft,
 )
 from .serializers import (
     ProjectGradeSerializer, ProjectReportSerializer, EnterGradeSerializer,
+)
+from .services import (
+    get_doctor_drafts as get_doctor_drafts_service,
+    submit_doctor_drafts as submit_doctor_drafts_service,
 )
 
 
@@ -258,13 +262,6 @@ class EnterGradeView(APIView):
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
-        if ctype == 'final_discussion':
-            if not ProjectReport.objects.filter(project_source=source, project_id=pid).exists():
-                return Response(
-                    {'detail': 'لا يمكن إدخال علامة المناقشة النهائية قبل رفع تقرير المشروع.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
         from django.contrib.auth import get_user_model
         User = get_user_model()
         try:
@@ -353,13 +350,6 @@ class EnterBulkGradesView(APIView):
                         {'detail': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.'},
                         status=status.HTTP_403_FORBIDDEN,
                     )
-
-        if ctype == 'final_discussion':
-            if not ProjectReport.objects.filter(project_source=source, project_id=pid).exists():
-                return Response(
-                    {'detail': 'لا يمكن إدخال علامة المناقشة النهائية قبل رفع تقرير المشروع.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
 
         # التحقق من وجود علامات سابقة - إذا كان هناك أي علامة موجودة ولم يؤكد المستخدم
         if not confirm_update:
@@ -562,8 +552,16 @@ class MyCommitteeGradesView(APIView):
                     'report_uploaded': report is not None,
                     'report': ProjectReportSerializer(report, context={'request': request}).data if report else None,
                     'all_graded': (
-                        len(students_with_grades) > 0 and
-                        all(sw['grade'] is not None for sw in students_with_grades)
+                        len(students_with_grades) > 0
+                        and all(
+                            sw['grade'] is not None
+                            and sw['grade'].get('score_main') is not None
+                            and (
+                                not is_final
+                                or sw['grade'].get('score_report') is not None
+                            )
+                            for sw in students_with_grades
+                        )
                     ),
                 })
 
@@ -571,7 +569,8 @@ class MyCommitteeGradesView(APIView):
                 'committee_id':      c.id,
                 'committee_type':    c.committee_type,
                 'committee_type_ar': COMMITTEE_TYPE_AR.get(c.committee_type, c.committee_type),
-                'department_ar':     c.department,
+                'department':        c.department,
+                'department_ar':     DEPARTMENT_AR.get(c.department, c.department),
                 'semester':          c.semester,
                 'date':              c.date.strftime('%Y-%m-%d') if c.date else None,
                 'max_score':         COMMITTEE_MAX_SCORES.get(c.committee_type, 0),
@@ -721,10 +720,12 @@ class MyGradesView(APIView):
                 source = 'IdeaApplication'
                 pid    = part.idea_application_id
                 title  = part.idea_application.idea.title
+                department = part.idea_application.idea.department
             elif part.project_source == 'student_proposal' and part.student_proposal_id:
                 source = 'StudentIdeaProposal'
                 pid    = part.student_proposal_id
                 title  = part.student_proposal.title
+                department = part.student_proposal.department
             else:
                 continue
 
@@ -782,6 +783,8 @@ class MyGradesView(APIView):
                     'committee_type_ar': COMMITTEE_TYPE_AR.get(
                         committee.committee_type, committee.committee_type
                     ),
+                    'department': committee.department,
+                    'department_ar': DEPARTMENT_AR.get(committee.department, committee.department),
                     'chair': chair,
                     'members': members,
                     'date': committee.date.isoformat() if committee.date else None,
@@ -801,6 +804,8 @@ class MyGradesView(APIView):
                 'project_source':  source,
                 'project_id':      pid,
                 'project_title':   title,
+                'department':      department,
+                'department_ar':   DEPARTMENT_AR.get(department, department),
                 'role':            part.role,
                 'grades':          grades_by_type,
                 'committees':      committees_by_type,
@@ -1242,209 +1247,41 @@ class CommitteeGradingModeView(APIView):
 # ── Doctor — Submit Draft Grade (Collective Mode) ─────────────────────────────
 
 class DoctorGradeDraftView(APIView):
-    """
-    الطبيب (رئيس أو عضو) يُدخل علامته المؤقتة في وضع التقييم الجماعي.
-
-    POST /api/grades/draft/
-    {
-      committee_id,
-      project_source, project_id,
-      committee_type,
-      semester,
-      grades: [{ student_id, score_main, score_report?, notes? }, ...]
-    }
-    """
+    """Read and submit per-doctor grades for collective committee grading."""
     permission_classes = [permissions.IsAuthenticated]
-    parser_classes     = [JSONParser]
+    parser_classes = [JSONParser]
+
+    @staticmethod
+    def _response(result):
+        if result.get('ok'):
+            payload = {key: value for key, value in result.items() if key != 'ok'}
+            return Response(payload)
+        return Response(
+            {'detail': result.get('error', 'تعذر تنفيذ الطلب.')},
+            status=result.get('status', status.HTTP_400_BAD_REQUEST),
+        )
 
     def post(self, request):
-        user = request.user
-        if not _is_doctor(user):
-            return Response({'detail': 'مسموح للدكاترة فقط.'}, status=status.HTTP_403_FORBIDDEN)
-
-        committee_id = request.data.get('committee_id')
-        source       = request.data.get('project_source')
-        pid          = request.data.get('project_id')
-        ctype        = request.data.get('committee_type')
-        semester     = request.data.get('semester', '')
-        grades_data  = request.data.get('grades', [])
-
-        if not (committee_id and source and pid and ctype and grades_data):
-            return Response(
-                {'detail': 'committee_id, project_source, project_id, committee_type, grades مطلوبة.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            committee = Committee.objects.get(pk=committee_id)
-        except Committee.DoesNotExist:
-            return Response({'detail': 'اللجنة غير موجودة.'}, status=status.HTTP_404_NOT_FOUND)
-
-        # تحقق أن الوضع الجماعي مُفعَّل
-        mode = CommitteeGradingMode.objects.filter(committee=committee).first()
-        if not mode or not mode.collective:
-            return Response(
-                {'detail': 'وضع التقييم الجماعي غير مُفعَّل لهذه اللجنة.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # تحقق أن الطبيب رئيس أو عضو في هذه اللجنة
-        from django.db.models import Q
-        if not _is_dean(user):
-            is_member = (
-                committee.chair_id == user.id or
-                committee.members.filter(pk=user.id).exists()
-            )
-            if not is_member:
-                return Response(
-                    {'detail': 'لست عضواً في هذه اللجنة.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-        # للمناقشة النهائية: التحقق من التقرير
-        if ctype == 'final_discussion':
-            if not ProjectReport.objects.filter(project_source=source, project_id=pid).exists():
-                return Response(
-                    {'detail': 'لا يمكن إدخال علامة المناقشة النهائية قبل رفع تقرير المشروع.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        max_m    = COMMITTEE_MAX_SCORES.get(ctype, 0)
-        is_final = ctype == 'final_discussion'
-        saved    = []
-
-        for item in grades_data:
-            s_id  = item.get('student_id')
-            score = item.get('score_main')
-            if s_id is None or score is None:
-                continue
-
-            try:
-                student = User.objects.get(pk=s_id, role='student')
-            except User.DoesNotExist:
-                continue
-
-            draft, _ = DoctorGradeDraft.objects.get_or_create(
-                committee=committee,
-                project_source=source,
-                project_id=pid,
-                student=student,
-                committee_type=ctype,
-                doctor=user,
-            )
-            draft.score_main   = min(int(score), max_m)
-            draft.score_report = min(int(item['score_report']), 30) if is_final and item.get('score_report') is not None else None
-            draft.notes        = item.get('notes', '')
-            draft.save()
-            saved.append(s_id)
-
-            # إعادة حساب المتوسط وتحديث ProjectGrade
-            _recalculate_average(committee, source, int(pid), student, ctype, semester, user)
-
-        return Response({'saved_students': saved, 'count': len(saved)})
+        result = submit_doctor_drafts_service(
+            user=request.user,
+            committee_id=request.data.get('committee_id'),
+            source=request.data.get('project_source'),
+            pid=request.data.get('project_id'),
+            ctype=request.data.get('committee_type'),
+            semester=request.data.get('semester', ''),
+            grades_data=request.data.get('grades', []),
+        )
+        return self._response(result)
 
     def get(self, request):
-        """جلب كل المسودات لمشروع معين (رئيس اللجنة أو HoD)."""
-        user         = request.user
-        committee_id = request.query_params.get('committee_id')
-        source       = request.query_params.get('project_source')
-        pid          = request.query_params.get('project_id')
-        ctype        = request.query_params.get('committee_type')
-
-        if not (committee_id and source and pid and ctype):
-            return Response(
-                {'detail': 'committee_id, project_source, project_id, committee_type مطلوبة.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        drafts = DoctorGradeDraft.objects.filter(
-            committee_id=committee_id,
-            project_source=source,
-            project_id=int(pid),
-            committee_type=ctype,
-        ).select_related('doctor', 'student')
-
-        data = []
-        for d in drafts:
-            data.append({
-                'doctor_id':       d.doctor_id,
-                'doctor_name':     d.doctor.get_full_name() or d.doctor.username,
-                'student_id':      d.student_id,
-                'student_name':    d.student.get_full_name() or d.student.username,
-                'score_main':      d.score_main,
-                'score_report':    d.score_report,
-                'notes':           d.notes,
-                'submitted_at':    d.submitted_at.isoformat(),
-            })
-
-        return Response({'drafts': data})
-
-
-# ── Helper: Recalculate Average ───────────────────────────────────────────────
-
-def _recalculate_average(committee, source, pid, student, ctype, semester, triggered_by):
-    """
-    يحسب متوسط كل الـ drafts لـ (committee, project, student, ctype)
-    ويحدّث ProjectGrade المقابل.
-    """
-    from math import ceil
-    drafts = DoctorGradeDraft.objects.filter(
-        committee=committee,
-        project_source=source,
-        project_id=pid,
-        student=student,
-        committee_type=ctype,
-    )
-
-    if not drafts.exists():
-        return
-
-    mains   = [d.score_main   for d in drafts if d.score_main   is not None]
-    reports = [d.score_report for d in drafts if d.score_report is not None]
-
-    avg_main   = round(sum(mains)   / len(mains))   if mains   else None
-    avg_report = round(sum(reports) / len(reports)) if reports else None
-
-    grade, _ = ProjectGrade.objects.get_or_create(
-        project_source=source,
-        project_id=pid,
-        committee_type=ctype,
-        student=student,
-        defaults={
-            'semester':     semester,
-            'committee':    committee,
-            'entered_by':   triggered_by,
-        },
-    )
-
-    old_main   = grade.score_main
-    old_report = grade.score_report
-
-    grade.score_main   = avg_main
-    grade.score_report = avg_report
-    grade.entered_by   = triggered_by
-    if not grade.semester:
-        grade.semester = semester
-    grade.committee = committee
-    grade.notes = f'متوسط {len(mains)} تقييم' if mains else ''
-    grade.save()
-
-    if old_main != avg_main:
-        GradeAuditLog.objects.create(
-            grade=grade, changed_by=triggered_by,
-            field_changed='score_main (avg)',
-            old_value=str(old_main) if old_main is not None else None,
-            new_value=str(avg_main),
+        result = get_doctor_drafts_service(
+            user=request.user,
+            committee_id=request.query_params.get('committee_id'),
+            source=request.query_params.get('project_source'),
+            pid=request.query_params.get('project_id'),
+            ctype=request.query_params.get('committee_type'),
         )
-    if ctype == 'final_discussion' and old_report != avg_report:
-        GradeAuditLog.objects.create(
-            grade=grade, changed_by=triggered_by,
-            field_changed='score_report (avg)',
-            old_value=str(old_report) if old_report is not None else None,
-            new_value=str(avg_report),
-        )
+        return self._response(result)
 
 
 def _build_word_grades(semester, department, project_type_filter, committee_type_filter=None):

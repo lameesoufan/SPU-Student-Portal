@@ -186,8 +186,8 @@ class ProposalSupervisorDecision(models.Model):
             ),
         ]
         indexes = [
-            models.Index(fields=['supervisor', 'status', 'is_active']),
-            models.Index(fields=['proposal', 'is_active', 'status']),
+            models.Index(fields=['supervisor', 'status', 'is_active'], name='projects_pr_supervi_bf029d_idx'),
+            models.Index(fields=['proposal', 'is_active', 'status'], name='projects_pr_proposa_6b151a_idx'),
         ]
 
     def __str__(self):

@@ -4,6 +4,7 @@ from django.contrib import admin
 from .models import (
     CommitteeTemplate,
     Committee,
+    CommitteeDistributionAudit,
     Room,
     DoctorWeeklyAvailability,
     DoctorDateException,
@@ -238,3 +239,53 @@ class SchedulingRunAdmin(admin.ModelAdmin):
         'summary_stats',
     )
     list_select_related = ('requested_by',)
+
+
+@admin.register(CommitteeDistributionAudit)
+class CommitteeDistributionAuditAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'created_at',
+        'actor',
+        'outcome',
+        'scheduling_mode',
+        'semester',
+        'committees_before',
+        'committees_after',
+        'draft_count',
+        'final_grade_count',
+        'draft_loss_confirmed',
+    )
+    list_filter = (
+        'outcome',
+        'scheduling_mode',
+        'semester',
+        'draft_loss_confirmed',
+        'created_at',
+    )
+    search_fields = ('actor__username', 'message')
+    readonly_fields = (
+        'actor',
+        'created_at',
+        'outcome',
+        'scheduling_mode',
+        'semester',
+        'template_ids',
+        'affected_scopes',
+        'committees_before',
+        'committees_after',
+        'draft_count',
+        'final_grade_count',
+        'draft_loss_confirmed',
+        'result_summary',
+        'message',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

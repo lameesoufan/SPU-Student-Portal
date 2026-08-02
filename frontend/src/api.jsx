@@ -553,13 +553,14 @@ export const fetchHodGradesSummary = (semester, projectType, committeeType) =>
     }
   });
 
-export const exportGrades = (semester, department, projectType, committeeType) =>
+export const exportGrades = (semester, department, projectType, committeeType, exportDate) =>
   api.get('/api/grades/export/', {
-    params: { 
+    params: {
       ...(semester ? { semester } : {}),
       ...(department ? { department } : {}),
       ...(projectType ? { project_type: projectType } : {}),
       ...(committeeType ? { committee_type: committeeType } : {}),
+      ...(exportDate ? { export_date: exportDate } : {}),
     },
     responseType: 'blob',
   });

@@ -111,7 +111,6 @@ class CommitteeTemplateSerializer(serializers.ModelSerializer):
             'members', 'members_detail',  # members for write, members_detail for read
             'is_approved',
             'scheduling_mode',  # single | multi
-            'discussion_duration',  # minutes — required for solver
             'created_by', 'created_at', 'updated_at',
             # computed
             'committees_total', 'total_projects_assigned',
@@ -393,6 +392,10 @@ class DistributeRequestSerializer(serializers.Serializer):
     scheduling_mode = serializers.ChoiceField(
         choices=[('single', 'single'), ('multi', 'multi')], default='multi',
         help_text='single: same committee for all 4 types. multi: 4 independent committees per project.')
+    confirm_draft_loss = serializers.BooleanField(
+        default=False,
+        help_text='Explicit dean confirmation that collective grade drafts may be deleted.',
+    )
 
 
 # ── Doctor workload ───────────────────────────────────────────────────────────

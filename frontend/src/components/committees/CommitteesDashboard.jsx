@@ -55,6 +55,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
   const [busy, setBusy]       = useState(false);
   const [toast, setToast]     = useState(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [draftLossWarning, setDraftLossWarning] = useState(null);
   const [showModeDialog, setShowModeDialog] = useState(false);
   const [selectedMode, setSelectedMode] = useState('multi');  // 'single' | 'multi'
   const [selectedDepartment, setSelectedDepartment] = useState(null);
@@ -127,11 +128,16 @@ export default function CommitteesDashboard({ onNavigate, user }) {
     setShowModeDialog(true);  // first ask the dean for scheduling mode
   };
 
-  const confirmDistribute = async () => {
+  const executeDistribution = async (confirmDraftLoss = false) => {
     setShowConfirmDialog(false);
+    if (confirmDraftLoss) setDraftLossWarning(null);
     setBusy(true);
     try {
-      const res = await distributeProjects({ dry_run: false, scheduling_mode: selectedMode });
+      const res = await distributeProjects({
+        dry_run: false,
+        scheduling_mode: selectedMode,
+        confirm_draft_loss: confirmDraftLoss,
+      });
       const distributed    = res.data?.distributed_projects    ?? 0;
       const undistributed  = res.data?.undistributed_projects  ?? 0;
       const processed      = res.data?.processed_templates     ?? 0;
@@ -142,14 +148,22 @@ export default function CommitteesDashboard({ onNavigate, user }) {
         ? `تم توزيع ${distributed} مشروع على ${processed} تركيب (${modeLabel}). (${undistributed} مشروع بدون لجنة مناسبة)`
         : `تم توزيع ${distributed} مشروع بنجاح (${modeLabel})${singleCreated ? ' · ' + singleCreated + ' لجنة منشأة للوضع الموحّد' : ''}`;
       setToast({ type: 'success', msg: [msg, exclusionMsg].filter(Boolean).join(' ') });
+      setDraftLossWarning(null);
       await load();
     } catch (err) {
+      const response = err.response?.data;
+      if (response?.code === 'redistribution_confirmation_required') {
+        setDraftLossWarning(response.safety || {});
+        return;
+      }
       setToast({
         type: 'error',
-        msg: err.response?.data?.detail || 'فشل التوزيع. حاول مرة أخرى لاحقًا.',
+        msg: response?.detail || 'فشل التوزيع. حاول مرة أخرى لاحقًا.',
       });
     } finally { setBusy(false); }
   };
+
+  const confirmDistribute = async () => executeDistribution(false);
 
   if (loading) {
     return (
@@ -886,6 +900,95 @@ export default function CommitteesDashboard({ onNavigate, user }) {
               }
             `}
           </style>
+        </div>
+      )}
+
+      {/* ── Draft-loss confirmation ───────────────────────────────────── */}
+      {draftLossWarning && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 10020,
+          background: 'rgba(15, 23, 42, 0.64)', backdropFilter: 'blur(5px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        }}>
+          <div dir="rtl" style={{
+            width: 'min(560px, 100%)', background: '#fff', borderRadius: 18,
+            boxShadow: '0 24px 70px rgba(15, 23, 42, 0.35)', overflow: 'hidden',
+          }}>
+            <div style={{ padding: '24px 26px 18px', borderBottom: '1px solid #fee2e2' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                <div style={{
+                  width: 46, height: 46, borderRadius: 13, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: '#fff1f2', color: '#e11d48',
+                }}>
+                  <AlertTriangle size={23} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, color: '#881337', fontSize: 19, fontWeight: 800 }}>
+                    توجد مسودات علامات ستُحذف
+                  </h3>
+                  <p style={{ margin: '7px 0 0', color: '#64748b', fontSize: 14, lineHeight: 1.8 }}>
+                    إعادة التوزيع ستنشئ لجانًا جديدة، ولذلك ستُحذف مسودات العلامات المرتبطة
+                    باللجان الحالية. العلامات النهائية غير موجودة، لذا يمكنك المتابعة فقط بعد تأكيد صريح.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '18px 26px' }}>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: 10, marginBottom: 16,
+              }}>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 13 }}>
+                  <div style={{ color: '#64748b', fontSize: 12 }}>اللجان المتأثرة</div>
+                  <div style={{ color: '#0f172a', fontSize: 21, fontWeight: 800, marginTop: 3 }}>
+                    {draftLossWarning.committees_count || 0}
+                  </div>
+                </div>
+                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: 13 }}>
+                  <div style={{ color: '#9a3412', fontSize: 12 }}>مسودات العلامات</div>
+                  <div style={{ color: '#c2410c', fontSize: 21, fontWeight: 800, marginTop: 3 }}>
+                    {draftLossWarning.draft_count || 0}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{
+                background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 12,
+                padding: 13, color: '#9f1239', fontSize: 13, lineHeight: 1.7, marginBottom: 20,
+              }}>
+                لن يمكن استرجاع المسودات بعد تنفيذ التوزيع. سيتم تسجيل العملية باسم حساب العميد في سجل التدقيق.
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setDraftLossWarning(null)}
+                  style={{
+                    border: '1px solid #cbd5e1', background: '#fff', color: '#475569',
+                    borderRadius: 10, padding: '10px 18px', fontWeight: 700, cursor: 'pointer',
+                  }}
+                >
+                  إلغاء وحماية المسودات
+                </button>
+                <button
+                  type="button"
+                  onClick={() => executeDistribution(true)}
+                  disabled={busy}
+                  style={{
+                    border: 0, background: '#be123c', color: '#fff', borderRadius: 10,
+                    padding: '10px 19px', fontWeight: 800,
+                    cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.65 : 1,
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                  }}
+                >
+                  {busy ? <RefreshCw size={15} className="animate-spin" /> : <AlertTriangle size={15} />}
+                  حذف المسودات وإعادة التوزيع
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

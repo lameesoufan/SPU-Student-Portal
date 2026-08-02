@@ -200,20 +200,22 @@ def _build_infeasibility_report(
     report: list[dict] = []
     committee_type_ar = COMMITTEE_TYPE_AR.get(settings.committee_type, settings.committee_type)
 
-    # 1) Committees without discussion_duration — NOT an error anymore
-    # The Solver will default to 15 minutes if missing.
+    # 1) Discussion duration is supplied by the scheduling screen.
+    # Only warn when neither the scheduling request nor legacy committee data
+    # provides a value; the solver then falls back to 15 minutes defensively.
+    scheduling_duration = getattr(settings, 'discussion_duration', None)
     missing_duration = [c for c in committees if not c.discussion_duration]
-    if missing_duration:
+    if not scheduling_duration and missing_duration:
         report.append({
             'code': 'defaulting_discussion_duration',
-            'level': 'info',  # info — not blocking
+            'level': 'info',
             'message_ar': (
-                f'{len(missing_duration)} لجنة من نوع "{committee_type_ar}" ليس لها مدة مناقشة محددة. '
+                f'لم تُحدد مدة المناقشة أثناء الجدولة لنوع "{committee_type_ar}". '
                 f'سيتم استخدام المدة الافتراضية (15 دقيقة).'
             ),
             'committee_ids': [c.id for c in missing_duration],
             'suggestions_ar': [
-                'يمكنك تحديد مدة مختلفة من صفحة التشكيلات',
+                'حدد مدة المناقشة من صفحة الجدولة قبل إنشاء المعاينة.',
             ],
         })
 
@@ -330,6 +332,7 @@ def run_solver(
     semester: str,
     settings: SolverSettings,
     requested_by=None,
+    rooms: Optional[list[Room]] = None,
 ) -> dict:
     """Run CP-SAT solver for the given committee_type × semester.
 
@@ -347,10 +350,37 @@ def run_solver(
             infeasibility_report: [...],
         }
     """
-    # ── 1. Collect data ────────────────────────────────────────────────────
+    # ── 1. Validate and collect the exact scheduling scope ────────────────
+    # SolverSettings are defined per (committee_type × semester). Refuse a
+    # mismatched object so a settings override from another semester cannot
+    # accidentally drive this run.
+    if (
+        settings.committee_type != committee_type
+        or settings.semester != semester
+    ):
+        return {
+            'success': False,
+            'infeasibility_report': [{
+                'code': 'solver_settings_scope_mismatch',
+                'level': 'error',
+                'message_ar': (
+                    'إعدادات الجدولة لا تطابق نوع اللجنة أو الفصل الدراسي المطلوب. '
+                    'اختر إعدادات تابعة لنفس النوع والفصل ثم أعد المحاولة.'
+                ),
+                'requested_scope': {
+                    'committee_type': committee_type,
+                    'semester': semester,
+                },
+                'settings_scope': {
+                    'committee_type': settings.committee_type,
+                    'semester': settings.semester,
+                },
+            }],
+        }
+
     committees = list(
         Committee.objects
-        .filter(committee_type=committee_type)
+        .filter(committee_type=committee_type, semester=semester)
         .select_related('chair', 'template')
         .prefetch_related('members', 'applications', 'proposals')
     )
@@ -365,7 +395,7 @@ def run_solver(
                 'level': 'error',
                 'message_ar': (
                     f'لا توجد لجان من نوع "{COMMITTEE_TYPE_AR.get(committee_type, committee_type)}" '
-                    'تأكد من تشغيل التوزيع (Distribute) أولاً لكل المشاريع الحالية.'
+                    f'في الفصل "{semester}". تأكد من تشغيل التوزيع (Distribute) أولاً لهذا الفصل.'
                 ),
                 'suggestions_ar': [
                     'اذهب إلى صفحة Committees Dashboard واضغط Distribute Projects',
@@ -374,7 +404,13 @@ def run_solver(
             }],
         }
 
-    rooms = list(Room.objects.filter(is_active=True))
+    # Use only the rooms explicitly selected by the caller when provided.
+    # Falling back to all active rooms preserves the existing standalone
+    # scheduling API behaviour for callers that do not pass a room list.
+    if rooms is None:
+        rooms = list(Room.objects.filter(is_active=True).order_by('id'))
+    else:
+        rooms = list(rooms)
 
     workday_ints = set(settings.workdays or [])
     dates = [
@@ -873,6 +909,8 @@ def run_solver(
         'rooms_used': len(used_rooms_set),
         'total_days_available': len(dates),
         'total_rooms_available': len(rooms),
+        'available_room_ids': [room.id for room in rooms],
+        'available_room_names': [room.name for room in rooms],
         'doctor_workload': doctor_workload,
         'max_load': max(doctor_scheduled_count.values()) if doctor_scheduled_count else 0,
         'min_load': min(doctor_scheduled_count.values()) if doctor_scheduled_count else 0,
@@ -913,6 +951,18 @@ def apply_scheduling_run(run: SchedulingRun) -> dict:
         )
 
     plan = run.plan_json or {}
+
+    # A run must only apply the exact scope it was previewed for. This also
+    # blocks manually edited or legacy plans from touching another semester.
+    if (
+        plan.get('committee_type') != run.committee_type
+        or plan.get('semester') != run.semester
+    ):
+        raise ValueError(
+            'نطاق خطة الجدولة لا يطابق نطاق عملية الجدولة. '
+            'أعد إنشاء Preview جديد لنفس نوع اللجنة والفصل الدراسي.'
+        )
+
     assignments = plan.get('assignments', [])
     if not assignments:
         raise ValueError('الخطة لا تحتوي على أي لجان قابلة للتطبيق.')
@@ -926,14 +976,17 @@ def apply_scheduling_run(run: SchedulingRun) -> dict:
     # Lock the whole scheduling scope so it cannot change during validation/apply.
     scope_qs = (
         Committee.objects.select_for_update()
-        .filter(committee_type=run.committee_type)
+        .filter(
+            committee_type=run.committee_type,
+            semester=run.semester,
+        )
         .prefetch_related('members', 'applications', 'proposals')
     )
     scope_committees = list(scope_qs)
     current_ids = {committee.id for committee in scope_committees}
     planned_ids = set(assignment_ids)
 
-    # The solver previews every committee in this committee-type scope. A changed
+    # The solver previews every committee in this type/semester scope. A changed
     # count means a committee was added, removed, or moved after Preview.
     if current_ids != planned_ids:
         missing = sorted(planned_ids - current_ids)
@@ -990,7 +1043,11 @@ def apply_scheduling_run(run: SchedulingRun) -> dict:
         )
 
     # Clear every legacy and CP-SAT scheduling field in the validated scope.
-    cleared = Committee.objects.filter(id__in=planned_ids).update(
+    cleared = Committee.objects.filter(
+        id__in=planned_ids,
+        committee_type=run.committee_type,
+        semester=run.semester,
+    ).update(
         room=None,
         scheduled_start=None,
         scheduled_end=None,
@@ -1014,6 +1071,7 @@ def apply_scheduling_run(run: SchedulingRun) -> dict:
         affected = Committee.objects.filter(
             id=assignment['committee_id'],
             committee_type=run.committee_type,
+            semester=run.semester,
         ).update(
             room_id=assignment['room_id'],
             scheduled_start=assignment['scheduled_start'],
@@ -1040,6 +1098,8 @@ def apply_scheduling_run(run: SchedulingRun) -> dict:
     scheduled_ids = set(
         Committee.objects.filter(
             id__in=planned_ids,
+            committee_type=run.committee_type,
+            semester=run.semester,
             status='scheduled',
             room__isnull=False,
             scheduled_start__isnull=False,

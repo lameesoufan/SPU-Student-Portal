@@ -99,14 +99,9 @@ class EnterGradeSerializer(serializers.Serializer):
             )
 
         if ctype == 'final_discussion':
-            if data.get('score_report') is None:
-                raise serializers.ValidationError(
-                    {'score_report': 'درجة التقرير مطلوبة للمناقشة النهائية.'}
-                )
-            if data['score_report'] > 30:
-                raise serializers.ValidationError(
-                    {'score_report': 'الحد الأقصى لدرجة التقرير هو 30.'}
-                )
+            # علامة التقرير مستقلة عن رفع الملف؛ يمكن إدخالها حتى إن لم يُرفع
+            # التقرير إلكترونيًا، كما يمكن حفظ علامة المناقشة ثم استكمالها لاحقًا.
+            pass
         else:
             data['score_report'] = None
 
@@ -146,12 +141,8 @@ class EnterBulkGradesSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {'grades': f'الحد الأقصى للدرجة الرئيسية في {ctype} هو {max_m}.'}
                 )
-            if is_final:
-                if item.get('score_report') is None:
-                    raise serializers.ValidationError(
-                        {'grades': 'درجة التقرير مطلوبة للمناقشة النهائية لكل طالب.'}
-                    )
-            else:
+            if not is_final:
                 item['score_report'] = None
+            # في المناقشة النهائية تُقبل علامة التقرير عند إدخالها بغض النظر عن رفع الملف.
 
         return data

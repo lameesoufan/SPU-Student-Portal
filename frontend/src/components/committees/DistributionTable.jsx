@@ -131,7 +131,25 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
     if (!confirm('هل تريد تشغيل خوارزمية توزيع المشاريع على جميع اللجان؟')) return;
     setBusy(true);
     try {
-      const res = await distributeProjects({ dry_run: false });
+      let res;
+      try {
+        res = await distributeProjects({ dry_run: false });
+      } catch (err) {
+        const response = err.response?.data;
+        if (response?.code !== 'redistribution_confirmation_required') throw err;
+
+        const drafts = response.safety?.draft_count || 0;
+        const committeesCount = response.safety?.committees_count || 0;
+        const confirmed = confirm(
+          `تحذير: توجد ${drafts} مسودة علامات ضمن ${committeesCount} لجنة.\n\n`
+          + 'إعادة التوزيع ستحذف هذه المسودات نهائيًا. هل تريد المتابعة؟'
+        );
+        if (!confirmed) {
+          setToast({ type: 'info', msg: 'تم إلغاء إعادة التوزيع وحماية مسودات العلامات.' });
+          return;
+        }
+        res = await distributeProjects({ dry_run: false, confirm_draft_loss: true });
+      }
       const distributed    = res.data?.distributed_projects    ?? 0;
       const undistributed  = res.data?.undistributed_projects  ?? 0;
       const processed      = res.data?.processed_templates     ?? 0;
@@ -142,7 +160,7 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
       setToast({ type: 'success', msg: [msg, exclusionMsg].filter(Boolean).join(' ') });
       await load();
     } catch (err) {
-      setToast({ type: 'error', msg: 'فشل التوزيع.' });
+      setToast({ type: 'error', msg: err.response?.data?.detail || 'فشل التوزيع.' });
     } finally { setBusy(false); }
   };
 

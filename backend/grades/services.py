@@ -16,6 +16,7 @@ from collections import defaultdict
 from math import ceil
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -39,6 +40,98 @@ def is_student(user): return getattr(user, 'role', None) == 'student'
 def is_doctor(user):  return getattr(user, 'role', None) in ('doctor', 'dean', 'hod')
 def is_dean(user):    return getattr(user, 'role', None) == 'dean'
 def is_hod(user):     return getattr(user, 'role', None) in ('hod', 'dean')
+
+
+VALID_GRADE_PROJECT_SOURCES = {'IdeaApplication', 'StudentIdeaProposal'}
+
+
+def committee_grader_ids(committee):
+    """Return the current committee chair/member user IDs, without duplicates."""
+    ids = set(committee.members.values_list('id', flat=True))
+    if committee.chair_id:
+        ids.add(committee.chair_id)
+    return ids
+
+
+def user_is_committee_grader(user, committee):
+    """Only actual committee graders may read or submit individual drafts."""
+    return bool(getattr(user, 'is_authenticated', False) and user.id in committee_grader_ids(committee))
+
+
+def committee_contains_project(committee, source, pid):
+    if source == 'IdeaApplication':
+        return committee.applications.filter(pk=pid).exists()
+    if source == 'StudentIdeaProposal':
+        return committee.proposals.filter(pk=pid).exists()
+    return False
+
+
+def active_project_student_ids(source, pid):
+    """Return active team members, with a legacy fallback for older project rows."""
+    from projects.models import IdeaApplication, ProjectParticipation, StudentIdeaProposal
+
+    participations = ProjectParticipation.objects.filter(status='active')
+    if source == 'IdeaApplication':
+        ids = set(
+            participations.filter(idea_application_id=pid)
+            .values_list('student_id', flat=True)
+        )
+        if ids:
+            return ids
+        project = (
+            IdeaApplication.objects.filter(pk=pid)
+            .select_related('student')
+            .prefetch_related('invitations')
+            .first()
+        )
+        if not project:
+            return set()
+        ids = {project.student_id} if project.student_id else set()
+        ids.update(
+            project.invitations.filter(status='accepted')
+            .values_list('invitee_id', flat=True)
+        )
+        return ids
+
+    if source == 'StudentIdeaProposal':
+        ids = set(
+            participations.filter(student_proposal_id=pid)
+            .values_list('student_id', flat=True)
+        )
+        if ids:
+            return ids
+        project = (
+            StudentIdeaProposal.objects.filter(pk=pid)
+            .select_related('student')
+            .prefetch_related('invitations')
+            .first()
+        )
+        if not project:
+            return set()
+        ids = {project.student_id} if project.student_id else set()
+        ids.update(
+            project.invitations.filter(status='accepted')
+            .values_list('invitee_id', flat=True)
+        )
+        return ids
+
+    return set()
+
+
+def _normalise_grade_request(committee, source, pid, ctype, semester):
+    if source not in VALID_GRADE_PROJECT_SOURCES:
+        return None, 'مصدر المشروع غير صالح.'
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return None, 'project_id يجب أن يكون رقماً.'
+    if ctype != committee.committee_type:
+        return None, 'نوع اللجنة المرسل لا يطابق نوع اللجنة المحددة.'
+    if semester and committee.semester and semester != committee.semester:
+        return None, 'الفصل الدراسي المرسل لا يطابق فصل اللجنة.'
+    if not committee_contains_project(committee, source, pid):
+        return None, 'المشروع لا يتبع اللجنة المحددة.'
+    return (pid, committee.semester or semester or ''), None
 
 
 def get_project(source, pid):
@@ -205,11 +298,6 @@ def enter_grade(*, user, validated_data):
         return {'ok': False, 'error': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.',
                 'status': status.HTTP_403_FORBIDDEN}
 
-    if ctype == 'final_discussion':
-        if not ProjectReport.objects.filter(project_source=source, project_id=pid).exists():
-            return {'ok': False, 'error': 'لا يمكن إدخال علامة المناقشة النهائية قبل رفع تقرير المشروع.',
-                    'status': status.HTTP_400_BAD_REQUEST}
-
     try:
         student = User.objects.get(pk=student_id, role='student')
     except User.DoesNotExist:
@@ -277,11 +365,6 @@ def enter_bulk_grades(*, user, validated_data):
     if not _check_grader_permission(user, source, pid, ctype):
         return {'ok': False, 'error': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.',
                 'status': status.HTTP_403_FORBIDDEN}
-
-    if ctype == 'final_discussion':
-        if not ProjectReport.objects.filter(project_source=source, project_id=pid).exists():
-            return {'ok': False, 'error': 'لا يمكن إدخال علامة المناقشة النهائية قبل رفع تقرير المشروع.',
-                    'status': status.HTTP_400_BAD_REQUEST}
 
     if not confirm_update:
         existing = ProjectGrade.objects.filter(
@@ -440,7 +523,15 @@ def _build_committee_grades_entry(c, user, is_chair, collective):
             'report': ProjectReportSerializer(report).data if report else None,
             'all_graded': (
                 len(students_with_grades) > 0
-                and all(sw['grade'] is not None for sw in students_with_grades)
+                and all(
+                    sw['grade'] is not None
+                    and sw['grade'].get('score_main') is not None
+                    and (
+                        not is_final
+                        or sw['grade'].get('score_report') is not None
+                    )
+                    for sw in students_with_grades
+                )
             ),
         })
 
@@ -448,7 +539,8 @@ def _build_committee_grades_entry(c, user, is_chair, collective):
         'committee_id': c.id,
         'committee_type': c.committee_type,
         'committee_type_ar': COMMITTEE_TYPE_AR.get(c.committee_type, c.committee_type),
-        'department_ar': c.department,
+        'department': c.department,
+        'department_ar': DEPARTMENT_AR.get(c.department, c.department),
         'semester': c.semester,
         'date': c.date.strftime('%Y-%m-%d') if c.date else None,
         'max_score': COMMITTEE_MAX_SCORES.get(c.committee_type, 0),
@@ -473,8 +565,10 @@ def get_my_grades(*, user):
     for part in parts:
         if part.project_source == 'idea_application' and part.idea_application_id:
             source, pid, title = 'IdeaApplication', part.idea_application_id, part.idea_application.idea.title
+            department = part.idea_application.idea.department
         elif part.project_source == 'student_proposal' and part.student_proposal_id:
             source, pid, title = 'StudentIdeaProposal', part.student_proposal_id, part.student_proposal.title
+            department = part.student_proposal.department
         else:
             continue
 
@@ -486,6 +580,7 @@ def get_my_grades(*, user):
 
         result.append({
             'project_source': source, 'project_id': pid, 'project_title': title,
+            'department': department, 'department_ar': DEPARTMENT_AR.get(department, department),
             'role': part.role, 'grades': grades_by_type, 'total_score': total,
             'max_total': 100, 'report_uploaded': report is not None,
             'report': ProjectReportSerializer(report).data if report else None,
@@ -878,67 +973,213 @@ def submit_doctor_drafts(*, user, committee_id, source, pid, ctype, semester, gr
         return {'ok': False, 'error': 'مسموح للدكاترة فقط.', 'status': status.HTTP_403_FORBIDDEN}
 
     if not (committee_id and source and pid and ctype and grades_data):
-        return {'ok': False,
-                'error': 'committee_id, project_source, project_id, committee_type, grades مطلوبة.',
-                'status': status.HTTP_400_BAD_REQUEST}
+        return {
+            'ok': False,
+            'error': 'committee_id, project_source, project_id, committee_type, grades مطلوبة.',
+            'status': status.HTTP_400_BAD_REQUEST,
+        }
+    if not isinstance(grades_data, list):
+        return {'ok': False, 'error': 'grades يجب أن تكون قائمة.', 'status': status.HTTP_400_BAD_REQUEST}
 
     try:
-        committee = Committee.objects.get(pk=committee_id)
-    except Committee.DoesNotExist:
+        committee = Committee.objects.prefetch_related('members').get(pk=committee_id)
+    except (Committee.DoesNotExist, TypeError, ValueError):
         return {'ok': False, 'error': 'اللجنة غير موجودة.', 'status': status.HTTP_404_NOT_FOUND}
 
     mode = CommitteeGradingMode.objects.filter(committee=committee).first()
     if not mode or not mode.collective:
-        return {'ok': False, 'error': 'وضع التقييم الجماعي غير مُفعَّل لهذه اللجنة.',
-                'status': status.HTTP_400_BAD_REQUEST}
+        return {
+            'ok': False,
+            'error': 'وضع التقييم الجماعي غير مُفعَّل لهذه اللجنة.',
+            'status': status.HTTP_400_BAD_REQUEST,
+        }
 
-    if not is_dean(user):
-        is_member = committee.chair_id == user.id or committee.members.filter(pk=user.id).exists()
-        if not is_member:
-            return {'ok': False, 'error': 'لست عضواً في هذه اللجنة.', 'status': status.HTTP_403_FORBIDDEN}
+    if not user_is_committee_grader(user, committee):
+        return {'ok': False, 'error': 'لست عضواً في هذه اللجنة.', 'status': status.HTTP_403_FORBIDDEN}
 
-    if ctype == 'final_discussion':
-        if not ProjectReport.objects.filter(project_source=source, project_id=pid).exists():
-            return {'ok': False, 'error': 'لا يمكن إدخال علامة المناقشة النهائية قبل رفع تقرير المشروع.',
-                    'status': status.HTTP_400_BAD_REQUEST}
+    normalised, error = _normalise_grade_request(committee, source, pid, ctype, semester)
+    if error:
+        return {'ok': False, 'error': error, 'status': status.HTTP_400_BAD_REQUEST}
+    pid, semester = normalised
 
-    max_m = COMMITTEE_MAX_SCORES.get(ctype, 0)
+    project_student_ids = active_project_student_ids(source, pid)
+    if not project_student_ids:
+        return {
+            'ok': False,
+            'error': 'لا يوجد طلاب نشطون مرتبطون بهذا المشروع.',
+            'status': status.HTTP_400_BAD_REQUEST,
+        }
+
+    max_main = COMMITTEE_MAX_SCORES.get(ctype)
+    if max_main is None:
+        return {'ok': False, 'error': 'نوع اللجنة غير صالح.', 'status': status.HTTP_400_BAD_REQUEST}
+
     is_final = ctype == 'final_discussion'
-    saved = []
+    validated = []
+    seen_students = set()
 
-    for item in grades_data:
-        s_id, score = item.get('student_id'), item.get('score_main')
-        if s_id is None or score is None:
-            continue
+    for index, item in enumerate(grades_data, start=1):
+        if not isinstance(item, dict):
+            return {
+                'ok': False,
+                'error': f'بيانات العلامة في السطر {index} غير صالحة.',
+                'status': status.HTTP_400_BAD_REQUEST,
+            }
+
         try:
-            student = User.objects.get(pk=s_id, role='student')
-        except User.DoesNotExist:
-            continue
+            student_id = int(item.get('student_id'))
+        except (TypeError, ValueError):
+            return {
+                'ok': False,
+                'error': f'رقم الطالب في السطر {index} غير صالح.',
+                'status': status.HTTP_400_BAD_REQUEST,
+            }
 
-        draft, _ = DoctorGradeDraft.objects.get_or_create(
-            committee=committee, project_source=source, project_id=pid,
-            student=student, committee_type=ctype, doctor=user,
-        )
-        draft.score_main   = min(int(score), max_m)
-        draft.score_report = min(int(item['score_report']), 30) if is_final and item.get('score_report') is not None else None
-        draft.notes = item.get('notes', '')
-        draft.save()
-        saved.append(s_id)
+        if student_id in seen_students:
+            return {
+                'ok': False,
+                'error': 'لا يجوز إرسال أكثر من علامة للطالب نفسه في الطلب الواحد.',
+                'status': status.HTTP_400_BAD_REQUEST,
+            }
+        seen_students.add(student_id)
 
-        recalculate_average(committee, source, int(pid), student, ctype, semester, user)
+        if student_id not in project_student_ids:
+            return {
+                'ok': False,
+                'error': f'الطالب رقم {student_id} ليس عضواً نشطاً في المشروع المحدد.',
+                'status': status.HTTP_400_BAD_REQUEST,
+            }
 
-    return {'ok': True, 'saved_students': saved}
+        try:
+            score_main = int(item.get('score_main'))
+        except (TypeError, ValueError):
+            return {
+                'ok': False,
+                'error': f'العلامة الرئيسية للطالب رقم {student_id} غير صالحة.',
+                'status': status.HTTP_400_BAD_REQUEST,
+            }
+        if score_main < 0 or score_main > max_main:
+            return {
+                'ok': False,
+                'error': f'علامة الطالب رقم {student_id} يجب أن تكون بين 0 و {max_main}.',
+                'status': status.HTTP_400_BAD_REQUEST,
+            }
+
+        score_report = None
+        raw_report = item.get('score_report')
+        if is_final and raw_report not in (None, ''):
+            try:
+                score_report = int(raw_report)
+            except (TypeError, ValueError):
+                return {
+                    'ok': False,
+                    'error': f'علامة التقرير للطالب رقم {student_id} يجب أن تكون رقماً.',
+                    'status': status.HTTP_400_BAD_REQUEST,
+                }
+            if score_report < 0 or score_report > 30:
+                return {
+                    'ok': False,
+                    'error': f'علامة التقرير للطالب رقم {student_id} يجب أن تكون بين 0 و 30.',
+                    'status': status.HTTP_400_BAD_REQUEST,
+                }
+
+        validated.append({
+            'student_id': student_id,
+            'score_main': score_main,
+            'score_report': score_report,
+            'notes': str(item.get('notes') or ''),
+        })
+
+    students = User.objects.filter(pk__in=seen_students, role='student').in_bulk()
+    missing_users = seen_students.difference(students.keys())
+    if missing_users:
+        return {
+            'ok': False,
+            'error': f'تعذر العثور على الطلاب: {", ".join(map(str, sorted(missing_users)))}.',
+            'status': status.HTTP_400_BAD_REQUEST,
+        }
+
+    saved = []
+    finalized = []
+    pending = []
+    with transaction.atomic():
+        for item in validated:
+            student = students[item['student_id']]
+            DoctorGradeDraft.objects.update_or_create(
+                committee=committee,
+                project_source=source,
+                project_id=pid,
+                student=student,
+                committee_type=ctype,
+                doctor=user,
+                defaults={
+                    'score_main': item['score_main'],
+                    'score_report': item['score_report'],
+                    'notes': item['notes'],
+                },
+            )
+            saved.append(student.id)
+
+            progress = recalculate_average(
+                committee, source, pid, student, ctype, semester, user
+            )
+            if progress['finalized']:
+                finalized.append(student.id)
+            else:
+                pending.append({
+                    'student_id': student.id,
+                    'submitted_count': progress['submitted_count'],
+                    'required_count': progress['required_count'],
+                })
+
+    return {
+        'ok': True,
+        'saved_students': saved,
+        'count': len(saved),
+        'finalized_students': finalized,
+        'pending_students': pending,
+    }
 
 
-def get_doctor_drafts(*, committee_id, source, pid, ctype):
+def get_doctor_drafts(*, user, committee_id, source, pid, ctype):
+    if not is_doctor(user):
+        return {'ok': False, 'error': 'مسموح للدكاترة فقط.', 'status': status.HTTP_403_FORBIDDEN}
+
     if not (committee_id and source and pid and ctype):
-        return {'ok': False,
-                'error': 'committee_id, project_source, project_id, committee_type مطلوبة.',
-                'status': status.HTTP_400_BAD_REQUEST}
+        return {
+            'ok': False,
+            'error': 'committee_id, project_source, project_id, committee_type مطلوبة.',
+            'status': status.HTTP_400_BAD_REQUEST,
+        }
 
+    try:
+        committee = Committee.objects.prefetch_related('members').get(pk=committee_id)
+    except (Committee.DoesNotExist, TypeError, ValueError):
+        return {'ok': False, 'error': 'اللجنة غير موجودة.', 'status': status.HTTP_404_NOT_FOUND}
+
+    mode = CommitteeGradingMode.objects.filter(committee=committee).first()
+    if not mode or not mode.collective:
+        return {
+            'ok': False,
+            'error': 'وضع التقييم الجماعي غير مُفعَّل لهذه اللجنة.',
+            'status': status.HTTP_400_BAD_REQUEST,
+        }
+
+    if not user_is_committee_grader(user, committee):
+        return {'ok': False, 'error': 'لست عضواً في هذه اللجنة.', 'status': status.HTTP_403_FORBIDDEN}
+
+    normalised, error = _normalise_grade_request(committee, source, pid, ctype, '')
+    if error:
+        return {'ok': False, 'error': error, 'status': status.HTTP_400_BAD_REQUEST}
+    pid, _ = normalised
+
+    grader_ids = committee_grader_ids(committee)
     drafts = DoctorGradeDraft.objects.filter(
-        committee_id=committee_id, project_source=source,
-        project_id=int(pid), committee_type=ctype,
+        committee=committee,
+        project_source=source,
+        project_id=pid,
+        committee_type=ctype,
+        doctor_id__in=grader_ids,
     ).select_related('doctor', 'student')
 
     data = [{
@@ -952,46 +1193,171 @@ def get_doctor_drafts(*, committee_id, source, pid, ctype):
         'submitted_at': d.submitted_at.isoformat(),
     } for d in drafts]
 
-    return {'ok': True, 'drafts': data}
+    return {
+        'ok': True,
+        'drafts': data,
+        'required_graders_count': len(grader_ids),
+    }
+
+
+def _mark_collective_grade_pending(
+    committee, source, pid, student, ctype, submitted_count, required_count, triggered_by
+):
+    """Hide an old partial collective average while the current committee is incomplete."""
+    grade = ProjectGrade.objects.filter(
+        project_source=source,
+        project_id=pid,
+        committee_type=ctype,
+        student=student,
+        committee=committee,
+    ).first()
+    if not grade:
+        return
+
+    # Only reset grades that were generated by the collective averaging workflow.
+    notes = grade.notes or ''
+    if not (notes.startswith('متوسط ') or notes.startswith('بانتظار اكتمال التقييم الجماعي')):
+        return
+
+    old_main = grade.score_main
+    old_report = grade.score_report
+    grade.score_main = None
+    grade.score_report = None
+    grade.entered_by = triggered_by
+    grade.notes = f'بانتظار اكتمال التقييم الجماعي ({submitted_count}/{required_count})'
+    grade.save(update_fields=['score_main', 'score_report', 'entered_by', 'notes', 'updated_at'])
+
+    if old_main is not None:
+        GradeAuditLog.objects.create(
+            grade=grade,
+            changed_by=triggered_by,
+            field_changed='score_main (avg)',
+            old_value=str(old_main),
+            new_value=None,
+        )
+    if old_report is not None:
+        GradeAuditLog.objects.create(
+            grade=grade,
+            changed_by=triggered_by,
+            field_changed='score_report (avg)',
+            old_value=str(old_report),
+            new_value=None,
+        )
 
 
 def recalculate_average(committee, source, pid, student, ctype, semester, triggered_by):
-    """يحسب متوسط كل الـ drafts لـ (committee, project, student, ctype) ويحدّث ProjectGrade."""
-    drafts = DoctorGradeDraft.objects.filter(
-        committee=committee, project_source=source, project_id=pid,
-        student=student, committee_type=ctype,
-    )
-    if not drafts.exists():
-        return
+    """
+    يحسب متوسط التقييم الجماعي بعد اكتمال تقييم جميع أعضاء اللجنة.
+    في المناقشة النهائية تُحسب علامة التقرير بصورة مستقلة عن رفع ملف التقرير.
+    """
+    required_grader_ids = committee_grader_ids(committee)
+    if not required_grader_ids:
+        return {'finalized': False, 'submitted_count': 0, 'required_count': 0}
 
-    mains   = [d.score_main for d in drafts if d.score_main is not None]
-    reports = [d.score_report for d in drafts if d.score_report is not None]
+    drafts = list(DoctorGradeDraft.objects.filter(
+        committee=committee,
+        project_source=source,
+        project_id=pid,
+        student=student,
+        committee_type=ctype,
+        doctor_id__in=required_grader_ids,
+    ))
 
-    avg_main   = round(sum(mains) / len(mains)) if mains else None
-    avg_report = round(sum(reports) / len(reports)) if reports else None
+    drafts_by_doctor = {draft.doctor_id: draft for draft in drafts}
+    main_completed_ids = {
+        doctor_id for doctor_id, draft in drafts_by_doctor.items()
+        if draft.score_main is not None
+    }
+    required_count = len(required_grader_ids)
+
+    if main_completed_ids != required_grader_ids:
+        _mark_collective_grade_pending(
+            committee, source, pid, student, ctype,
+            len(main_completed_ids), required_count, triggered_by,
+        )
+        return {
+            'finalized': False,
+            'submitted_count': len(main_completed_ids),
+            'required_count': required_count,
+        }
+
+    complete_drafts = [drafts_by_doctor[doctor_id] for doctor_id in required_grader_ids]
+    avg_main = round(sum(d.score_main for d in complete_drafts) / required_count)
+
+    is_final = ctype == 'final_discussion'
+    report_uploaded = is_final and ProjectReport.objects.filter(
+        project_source=source, project_id=pid
+    ).exists()
+    report_completed_ids = {
+        doctor_id for doctor_id, draft in drafts_by_doctor.items()
+        if draft.score_report is not None
+    } if is_final else set()
+
+    avg_report = None
+    report_complete = (not is_final) or report_completed_ids == required_grader_ids
+    if is_final and report_complete:
+        avg_report = round(
+            sum(drafts_by_doctor[doctor_id].score_report for doctor_id in required_grader_ids)
+            / required_count
+        )
 
     grade, _ = ProjectGrade.objects.get_or_create(
-        project_source=source, project_id=pid, committee_type=ctype, student=student,
-        defaults={'semester': semester, 'committee': committee, 'entered_by': triggered_by},
+        project_source=source,
+        project_id=pid,
+        committee_type=ctype,
+        student=student,
+        defaults={
+            'semester': semester,
+            'committee': committee,
+            'entered_by': triggered_by,
+        },
     )
     old_main, old_report = grade.score_main, grade.score_report
 
-    grade.score_main   = avg_main
+    grade.score_main = avg_main
     grade.score_report = avg_report
-    grade.entered_by   = triggered_by
-    if not grade.semester:
-        grade.semester = semester
+    grade.entered_by = triggered_by
+    grade.semester = committee.semester or semester or grade.semester
     grade.committee = committee
-    grade.notes = f'متوسط {len(mains)} تقييم' if mains else ''
+
+    if is_final and not report_complete:
+        grade.notes = (
+            f'متوسط {required_count} تقييمات للمناقشة؛ '
+            f'بانتظار اكتمال تقييم التقرير ({len(report_completed_ids)}/{required_count})'
+        )
+    else:
+        grade.notes = f'متوسط {required_count} تقييمات مكتملة'
     grade.save()
 
     if old_main != avg_main:
         GradeAuditLog.objects.create(
-            grade=grade, changed_by=triggered_by, field_changed='score_main (avg)',
-            old_value=str(old_main) if old_main is not None else None, new_value=str(avg_main),
+            grade=grade,
+            changed_by=triggered_by,
+            field_changed='score_main (avg)',
+            old_value=str(old_main) if old_main is not None else None,
+            new_value=str(avg_main),
         )
-    if ctype == 'final_discussion' and old_report != avg_report:
+    if is_final and old_report != avg_report:
         GradeAuditLog.objects.create(
-            grade=grade, changed_by=triggered_by, field_changed='score_report (avg)',
-            old_value=str(old_report) if old_report is not None else None, new_value=str(avg_report),
+            grade=grade,
+            changed_by=triggered_by,
+            field_changed='score_report (avg)',
+            old_value=str(old_report) if old_report is not None else None,
+            new_value=str(avg_report) if avg_report is not None else None,
         )
+
+    finalized = (not is_final) or report_complete
+    pending_count = (
+        len(report_completed_ids)
+        if is_final and not report_complete
+        else required_count
+    )
+    return {
+        'finalized': finalized,
+        'submitted_count': pending_count,
+        'required_count': required_count,
+        'score_main': avg_main,
+        'score_report': avg_report,
+        'report_uploaded': report_uploaded,
+        'report_complete': report_complete,
+    }

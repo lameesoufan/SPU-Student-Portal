@@ -801,3 +801,56 @@ class SchedulingRun(models.Model):
 
     def __str__(self):
         return f"Run#{self.id} — {self.committee_type} — {self.semester} [{self.status}]"
+
+
+# ── 6. Distribution audit log ────────────────────────────────────────────────
+
+DISTRIBUTION_AUDIT_OUTCOMES = [
+    ('executed', 'Executed'),
+    ('blocked', 'Blocked'),
+]
+
+
+class CommitteeDistributionAudit(models.Model):
+    """Immutable audit trail for committee redistribution operations.
+
+    The record deliberately stores snapshots/counts instead of foreign keys to
+    committees because redistribution can delete and recreate those rows.
+    """
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='committee_distribution_audits',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    outcome = models.CharField(
+        max_length=20,
+        choices=DISTRIBUTION_AUDIT_OUTCOMES,
+        default='executed',
+    )
+    scheduling_mode = models.CharField(max_length=10, choices=SCHEDULING_MODE_CHOICES)
+    semester = models.CharField(max_length=50, blank=True, default='')
+    template_ids = models.JSONField(default=list, blank=True)
+    affected_scopes = models.JSONField(default=list, blank=True)
+    committees_before = models.PositiveIntegerField(default=0)
+    committees_after = models.PositiveIntegerField(default=0)
+    draft_count = models.PositiveIntegerField(default=0)
+    final_grade_count = models.PositiveIntegerField(default=0)
+    draft_loss_confirmed = models.BooleanField(default=False)
+    result_summary = models.JSONField(default=dict, blank=True)
+    message = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['created_at', 'outcome'], name='committees_created_139c6d_idx'),
+            models.Index(fields=['semester', 'scheduling_mode'], name='committees_semeste_75b17e_idx'),
+        ]
+        verbose_name = 'Committee Distribution Audit'
+        verbose_name_plural = 'Committee Distribution Audits'
+
+    def __str__(self):
+        actor = getattr(self.actor, 'username', None) or 'system'
+        return f'Distribution#{self.pk} by {actor} [{self.outcome}]'

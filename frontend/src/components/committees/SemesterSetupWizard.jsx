@@ -112,7 +112,29 @@ export default function SemesterSetupWizard({ onBack }) {
   const handleSetup = async () => {
     setBusy(true);
     try {
-      const res = await semesterSetup({ ...form, scheduling_mode: form.scheduling_mode });
+      let res;
+      try {
+        res = await semesterSetup({ ...form, scheduling_mode: form.scheduling_mode });
+      } catch (err) {
+        const response = err.response?.data;
+        if (response?.code !== 'redistribution_confirmation_required') throw err;
+
+        const drafts = response.safety?.draft_count || 0;
+        const committeesCount = response.safety?.committees_count || 0;
+        const confirmed = confirm(
+          `توجد ${drafts} مسودة علامات ضمن ${committeesCount} لجنة.\n\n`
+          + 'تشغيل الإعداد وإعادة التوزيع سيحذف هذه المسودات. هل تريد المتابعة؟'
+        );
+        if (!confirmed) {
+          setToast({ type: 'info', msg: 'تم إلغاء العملية وحماية مسودات العلامات.' });
+          return;
+        }
+        res = await semesterSetup({
+          ...form,
+          scheduling_mode: form.scheduling_mode,
+          confirm_draft_loss: true,
+        });
+      }
       setSetupResult(res.data);
       if (res.data.ready_for_scheduling) {
         setToast({ type: 'success', msg: `تم إعداد الفصل بنجاح! ${res.data.committees_total} لجنة جاهزة للجدولة` });
@@ -133,6 +155,7 @@ export default function SemesterSetupWizard({ onBack }) {
       const res = await scheduleAll({
         semester: form.semester,
         committee_types: COMMITTEE_TYPES.map((c) => c.value),
+        room_ids: form.room_ids,
       });
       setScheduleResult(res.data);
       setStep(5);

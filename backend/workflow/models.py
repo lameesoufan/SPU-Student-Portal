@@ -72,6 +72,8 @@ class WorkflowStage(models.Model):
     trigger_days = models.PositiveIntegerField(null=True, blank=True, help_text='Days after project start')
     trigger_date = models.DateField(null=True, blank=True, help_text='Specific date')
     notify_before_days = models.PositiveIntegerField(default=3, help_text='Notify students X days before due')
+    end_date = models.DateField(null=True, blank=True, help_text='Optional date when the stage closes automatically')
+    close_notify_before_days = models.PositiveIntegerField(null=True, blank=True, default=1, help_text='Notify before automatic closing')
     is_required = models.BooleanField(default=True)
     is_recurring = models.BooleanField(default=False)
     recurrence_unit = models.CharField(max_length=20, choices=RECURRENCE_UNITS, null=True, blank=True)
@@ -162,6 +164,7 @@ class WorkflowStageInstance(models.Model):
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
         ('overdue', 'Overdue'),
+        ('closed', 'Closed'),
     ]
     project_workflow = models.ForeignKey(ProjectWorkflow, on_delete=models.CASCADE, related_name='stage_instances')
     stage = models.ForeignKey(WorkflowStage, on_delete=models.CASCADE, related_name='instances')

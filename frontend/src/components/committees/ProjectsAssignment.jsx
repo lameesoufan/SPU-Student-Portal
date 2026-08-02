@@ -103,7 +103,10 @@ export default function ProjectsAssignment({ onBack }) {
       setSwapModal(null);
       await loadData(); // Reload data
     } catch (err) {
-      setError('فشل نقل المشروع. حاول مرة أخرى.');
+      setError(
+        err.response?.data?.detail
+        || 'فشل نقل المشروع. حاول مرة أخرى.'
+      );
     } finally {
       setSwapping(false);
     }

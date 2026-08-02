@@ -22,11 +22,12 @@ from typing import Iterable
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import DEPARTMENTS
 from .models import (
-    CommitteeTemplate, Committee,
+    CommitteeTemplate, Committee, CommitteeDistributionAudit,
     COMMITTEE_TYPE_CHOICES, PROJECT_TYPE_CHOICES,
     ALL_COMMITTEE_TYPES,
 )
@@ -34,6 +35,74 @@ from projects.participation_services import get_project_participations, user_dis
 
 
 User = get_user_model()
+
+
+class RedistributionSafetyError(Exception):
+    """Raised when redistribution would destroy grading data."""
+
+    def __init__(self, *, code: str, detail: str, safety: dict):
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
+        self.safety = safety
+
+
+def _redistribution_scope_query(target_scopes: set[tuple[str, str]]) -> Q:
+    query = Q(pk__in=[])
+    for department, project_type in target_scopes:
+        query |= Q(department=department, project_type=project_type)
+    return query
+
+
+def get_redistribution_safety(target_scopes: set[tuple[str, str]]) -> dict:
+    """Return grading-data impact for the committees that will be rebuilt.
+
+    The scope intentionally mirrors the current distribution implementation:
+    every committee in the selected ``department × project_type`` scopes is
+    rebuilt. This makes the warning/blocking decision match the rows that will
+    actually be deleted.
+    """
+    scopes = [
+        {'department': department, 'project_type': project_type}
+        for department, project_type in sorted(target_scopes)
+    ]
+    if not target_scopes:
+        return {
+            'affected_scopes': scopes,
+            'affected_committee_ids': [],
+            'committees_count': 0,
+            'draft_count': 0,
+            'final_grade_count': 0,
+            'has_drafts': False,
+            'has_final_grades': False,
+        }
+
+    committee_ids = list(
+        Committee.objects.filter(_redistribution_scope_query(target_scopes))
+        .order_by('id')
+        .values_list('id', flat=True)
+    )
+
+    from grades.models import DoctorGradeDraft, ProjectGrade
+
+    draft_count = DoctorGradeDraft.objects.filter(
+        committee_id__in=committee_ids,
+    ).count()
+    final_grade_count = ProjectGrade.objects.filter(
+        committee_id__in=committee_ids,
+    ).filter(
+        Q(score_main__isnull=False) | Q(score_report__isnull=False)
+    ).count()
+
+    return {
+        'affected_scopes': scopes,
+        'affected_committee_ids': committee_ids,
+        'committees_count': len(committee_ids),
+        'draft_count': draft_count,
+        'final_grade_count': final_grade_count,
+        'has_drafts': draft_count > 0,
+        'has_final_grades': final_grade_count > 0,
+    }
 
 # ── Arabic font + text shaping helpers ────────────────────────────────────────
 # ReportLab does NOT do Arabic shaping or RTL flipping out of the box.
@@ -575,6 +644,8 @@ def distribute_projects_to_committees(template_ids: list[int] | None = None,
                                        semester: str | None = None,
                                        dry_run: bool = False,
                                        scheduling_mode: str = 'multi',
+                                       actor=None,
+                                       confirm_draft_loss: bool = False,
                                        ) -> dict:
     """Distribute projects without deleting unrelated committees.
 
@@ -598,6 +669,27 @@ def distribute_projects_to_committees(template_ids: list[int] | None = None,
         (tmpl.department, tmpl.project_type)
         for tmpl in selected_templates
     }
+
+    safety = get_redistribution_safety(target_scopes)
+    if not dry_run:
+        if safety['has_final_grades']:
+            raise RedistributionSafetyError(
+                code='redistribution_blocked_final_grades',
+                detail=(
+                    'لا يمكن إعادة توزيع هذه اللجان لأن علامات نهائية محفوظة '
+                    'مرتبطة بها. يجب معالجة العلامات رسميًا قبل تغيير التوزيع.'
+                ),
+                safety=safety,
+            )
+        if safety['has_drafts'] and not confirm_draft_loss:
+            raise RedistributionSafetyError(
+                code='redistribution_confirmation_required',
+                detail=(
+                    'توجد مسودات علامات مرتبطة باللجان الحالية. إعادة التوزيع '
+                    'ستحذف هذه المسودات، ويلزم تأكيد صريح من العميد للمتابعة.'
+                ),
+                safety=safety,
+            )
 
     deleted_count = 0
     single_results = []
@@ -659,7 +751,6 @@ def distribute_projects_to_committees(template_ids: list[int] | None = None,
                         semester=tmpl.semester,
                         chair=tmpl.chair,
                         status='draft',
-                        discussion_duration=getattr(tmpl, 'discussion_duration', None) or 15,
                     )
                     if members_qs:
                         c.members.set(members_qs)
@@ -691,7 +782,7 @@ def distribute_projects_to_committees(template_ids: list[int] | None = None,
         r.get('projects_count', 0) for r in single_results
     )
 
-    return {
+    result = {
         'processed_templates': len(selected_templates),
         'processed_scopes': len(target_scopes),
         'previous_committees_deleted': deleted_count,
@@ -702,8 +793,43 @@ def distribute_projects_to_committees(template_ids: list[int] | None = None,
         'single_mode_results': single_results,
         'single_mode_committees_created': single_committees_created,
         'dry_run': dry_run,
+        'safety': safety,
         'executed_at': timezone.now().isoformat(),
     }
+
+    if not dry_run:
+        committees_after = Committee.objects.filter(
+            _redistribution_scope_query(target_scopes)
+        ).count() if target_scopes else 0
+        audit = CommitteeDistributionAudit.objects.create(
+            actor=actor if getattr(actor, 'is_authenticated', False) else None,
+            outcome='executed',
+            scheduling_mode=scheduling_mode,
+            semester=semester or '',
+            template_ids=[template.id for template in selected_templates],
+            affected_scopes=safety['affected_scopes'],
+            committees_before=safety['committees_count'],
+            committees_after=committees_after,
+            draft_count=safety['draft_count'],
+            final_grade_count=safety['final_grade_count'],
+            draft_loss_confirmed=bool(confirm_draft_loss and safety['has_drafts']),
+            result_summary={
+                'processed_templates': result['processed_templates'],
+                'processed_scopes': result['processed_scopes'],
+                'previous_committees_deleted': result['previous_committees_deleted'],
+                'distributed_projects': result['distributed_projects'],
+                'undistributed_projects': result['undistributed_projects'],
+                'single_mode_committees_created': result['single_mode_committees_created'],
+            },
+            message=(
+                'تم تنفيذ إعادة التوزيع بعد تأكيد حذف مسودات العلامات.'
+                if safety['has_drafts']
+                else 'تم تنفيذ إعادة التوزيع دون وجود مسودات أو علامات نهائية.'
+            ),
+        )
+        result['audit_id'] = audit.id
+
+    return result
 
 
 def _project_to_dict(p: CollectedProject) -> dict:
@@ -1377,7 +1503,6 @@ def distribute_single_mode_projects(
                 chair=template.chair,
                 status='draft',
                 scheduling_group=group_uuid,
-                discussion_duration=getattr(template, 'discussion_duration', None),
             )
             # Set members
             member_ids = [m.id for m in template.members.all()]

@@ -37,7 +37,7 @@ from .models import (
     COMMITTEE_TYPE_AR, ALL_COMMITTEE_TYPES,
 )
 from .serializers import SolverSettingsSerializer
-from .services import distribute_projects_to_committees
+from .services import distribute_projects_to_committees, RedistributionSafetyError
 from .solver import run_solver, apply_scheduling_run, reject_scheduling_run
 from .scheduler_views import IsDean
 
@@ -79,6 +79,7 @@ class SemesterSetupView(APIView):
         room_ids       = request.data.get('room_ids', [])
         run_distribution = request.data.get('run_distribution', True)
         scheduling_mode  = request.data.get('scheduling_mode', 'multi')
+        confirm_draft_loss = request.data.get('confirm_draft_loss', False)
 
         # ── Validation ──
         errors = []
@@ -99,11 +100,65 @@ class SemesterSetupView(APIView):
 
         # ── Validate rooms ──
         rooms = []
-        if room_ids:
-            rooms = list(Room.objects.filter(id__in=room_ids, is_active=True))
-            if len(rooms) != len(room_ids):
-                missing = set(room_ids) - {r.id for r in rooms}
-                errors.append(f'بعض القاعات غير موجودة أو غير فعّالة: {missing}')
+        if not isinstance(room_ids, list) or not room_ids:
+            errors.append('يجب اختيار قاعة فعّالة واحدة على الأقل')
+        else:
+            try:
+                normalized_room_ids = list(dict.fromkeys(int(room_id) for room_id in room_ids))
+            except (TypeError, ValueError):
+                normalized_room_ids = []
+                errors.append('room_ids يجب أن تكون قائمة من أرقام القاعات')
+
+            if normalized_room_ids:
+                rooms = list(
+                    Room.objects.filter(id__in=normalized_room_ids, is_active=True).order_by('id')
+                )
+                found_ids = {room.id for room in rooms}
+                missing = [room_id for room_id in normalized_room_ids if room_id not in found_ids]
+                if missing:
+                    errors.append(f'بعض القاعات غير موجودة أو غير فعّالة: {missing}')
+
+        if errors:
+            return Response(
+                {'detail': 'أخطاء في التحقق', 'errors': errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Run a non-writing preflight before creating/updating SolverSettings.
+        # This prevents a partially-applied wizard when redistribution is
+        # blocked by final grades or requires explicit draft-loss confirmation.
+        if run_distribution:
+            try:
+                preview = distribute_projects_to_committees(
+                    semester=semester,
+                    dry_run=True,
+                    scheduling_mode=scheduling_mode,
+                    actor=request.user,
+                )
+                safety = preview.get('safety', {})
+                if safety.get('has_final_grades'):
+                    raise RedistributionSafetyError(
+                        code='redistribution_blocked_final_grades',
+                        detail=(
+                            'لا يمكن إعادة توزيع هذه اللجان لأن علامات نهائية محفوظة '
+                            'مرتبطة بها. يجب معالجة العلامات رسميًا قبل تغيير التوزيع.'
+                        ),
+                        safety=safety,
+                    )
+                if safety.get('has_drafts') and not confirm_draft_loss:
+                    raise RedistributionSafetyError(
+                        code='redistribution_confirmation_required',
+                        detail=(
+                            'توجد مسودات علامات مرتبطة باللجان الحالية. إعادة التوزيع '
+                            'ستحذف هذه المسودات، ويلزم تأكيد صريح من العميد للمتابعة.'
+                        ),
+                        safety=safety,
+                    )
+            except RedistributionSafetyError as exc:
+                return Response(
+                    {'detail': exc.detail, 'code': exc.code, 'safety': exc.safety},
+                    status=status.HTTP_409_CONFLICT,
+                )
 
         # ── 1. Create 4 SolverSettings with consecutive weeks ──
         created_settings = []
@@ -163,6 +218,13 @@ class SemesterSetupView(APIView):
                     semester=semester,
                     dry_run=False,
                     scheduling_mode=scheduling_mode,
+                    actor=request.user,
+                    confirm_draft_loss=confirm_draft_loss,
+                )
+            except RedistributionSafetyError as exc:
+                return Response(
+                    {'detail': exc.detail, 'code': exc.code, 'safety': exc.safety},
+                    status=status.HTTP_409_CONFLICT,
                 )
             except Exception as e:
                 distribution_error = str(e)
@@ -211,7 +273,8 @@ class ScheduleAllView(APIView):
             "settings_overrides": {  # optional per-type overrides
                 "seminar_1": {"settings_id": 1},
                 ...
-            }
+            },
+            "room_ids": [1, 2, 3]  # optional; only these active rooms are used
         }
 
     Runs CP-SAT for each committee_type in sequence, creates a SchedulingRun
@@ -225,6 +288,7 @@ class ScheduleAllView(APIView):
         semester = request.data.get('semester')
         committee_types = request.data.get('committee_types', ALL_COMMITTEE_TYPES)
         settings_overrides = request.data.get('settings_overrides', {})
+        requested_room_ids = request.data.get('room_ids')
 
         if not semester:
             return Response({'detail': 'semester مطلوب'},
@@ -233,6 +297,40 @@ class ScheduleAllView(APIView):
         if not committee_types:
             committee_types = list(ALL_COMMITTEE_TYPES)
 
+        # The semester setup wizard lets the dean choose the exact rooms to
+        # use. Validate that selection here and pass it to every solver run.
+        # If room_ids is omitted entirely, keep the legacy behaviour and let
+        # run_solver use all active rooms.
+        selected_rooms = None
+        if requested_room_ids is not None:
+            if not isinstance(requested_room_ids, list) or not requested_room_ids:
+                return Response(
+                    {'detail': 'يجب اختيار قاعة فعّالة واحدة على الأقل للجدولة'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                normalized_room_ids = list(dict.fromkeys(int(room_id) for room_id in requested_room_ids))
+            except (TypeError, ValueError):
+                return Response(
+                    {'detail': 'room_ids يجب أن تكون قائمة من أرقام القاعات'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            selected_rooms = list(
+                Room.objects.filter(id__in=normalized_room_ids, is_active=True).order_by('id')
+            )
+            found_ids = {room.id for room in selected_rooms}
+            missing_ids = [room_id for room_id in normalized_room_ids if room_id not in found_ids]
+            if missing_ids:
+                return Response(
+                    {
+                        'detail': 'بعض القاعات المختارة غير موجودة أو غير فعّالة',
+                        'invalid_room_ids': missing_ids,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         results = []
         unified_assignments = []
         unified_warnings = []
@@ -240,13 +338,29 @@ class ScheduleAllView(APIView):
         any_success = False
 
         for ctype in committee_types:
-            # Pick settings: override or active for this type × semester
+            # Pick settings only from the exact (committee_type × semester)
+            # scope. A settings override from another semester must never be
+            # accepted silently.
             settings_obj = None
-            if ctype in settings_overrides and settings_overrides[ctype].get('settings_id'):
+            override_id = (settings_overrides.get(ctype) or {}).get('settings_id')
+            if override_id:
                 settings_obj = SolverSettings.objects.filter(
-                    id=settings_overrides[ctype]['settings_id'],
+                    id=override_id,
+                    committee_type=ctype,
+                    semester=semester,
                 ).first()
-            if not settings_obj:
+                if not settings_obj:
+                    results.append({
+                        'committee_type': ctype,
+                        'committee_type_ar': COMMITTEE_TYPE_AR.get(ctype, ctype),
+                        'success': False,
+                        'error': (
+                            'إعدادات Solver المختارة لا تتبع نوع اللجنة '
+                            'والفصل الدراسي المطلوبين'
+                        ),
+                    })
+                    continue
+            else:
                 settings_obj = SolverSettings.objects.filter(
                     committee_type=ctype, semester=semester, is_active=True,
                 ).first()
@@ -289,6 +403,7 @@ class ScheduleAllView(APIView):
                 semester=semester,
                 settings=settings_obj,
                 requested_by=request.user,
+                rooms=selected_rooms,
             )
 
             if not solver_result.get('success'):
@@ -363,6 +478,11 @@ class ScheduleAllView(APIView):
             'unified_summary': unified_summary,
             'warnings': unified_warnings,
             'runs_for_apply': [r['run_id'] for r in results if r.get('success')],
+            'selected_rooms': (
+                [{'id': room.id, 'name': room.name} for room in selected_rooms]
+                if selected_rooms is not None
+                else None
+            ),
             'executed_at': timezone.now().isoformat(),
         }, status=status.HTTP_200_OK)
 

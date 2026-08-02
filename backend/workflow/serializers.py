@@ -27,6 +27,8 @@ class WorkflowStageCreateSerializer(serializers.Serializer):
     trigger_days = serializers.IntegerField(required=False, allow_null=True)
     trigger_date = serializers.DateField(required=False, allow_null=True)
     notify_before_days = serializers.IntegerField(default=3)
+    end_date = serializers.DateField(required=False, allow_null=True, default=None)
+    close_notify_before_days = serializers.IntegerField(required=False, allow_null=True, default=1, min_value=0)
     is_required = serializers.BooleanField(default=True)
     is_recurring = serializers.BooleanField(default=False)
     recurrence_unit = serializers.ChoiceField(
@@ -53,6 +55,8 @@ class WorkflowStageCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError({'trigger_days': 'This field is required when trigger type is after_days.'})
         if trigger_type == 'date' and data.get('trigger_date') is None:
             raise serializers.ValidationError({'trigger_date': 'This field is required when trigger type is date.'})
+        if data.get('end_date') and data.get('trigger_date') and data['end_date'] < data['trigger_date']:
+            raise serializers.ValidationError({'end_date': 'End date cannot be before the stage opening date.'})
         
         # تحقق من التكرار
         if data.get('is_recurring'):
@@ -84,7 +88,7 @@ class WorkflowStageSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'order',
             'trigger_type', 'trigger_days', 'trigger_date',
-            'fields', 'notify_before_days', 'is_required',
+            'fields', 'notify_before_days', 'end_date', 'close_notify_before_days', 'is_required',
             'is_recurring', 'recurrence_unit', 'recurrence_day_of_week',
             'recurrence_interval', 'recurrence_end_date', 'max_occurrences',
             'created_at', 'updated_at'

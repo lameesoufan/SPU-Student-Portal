@@ -51,6 +51,7 @@ from .services import (
     spawn_committee_for_template,
     spawn_committees_for_template,  # backward-compat alias
     distribute_projects_to_committees,
+    RedistributionSafetyError,
     build_distribution_plan,
     _plan_to_dict,
     copy_template,
@@ -192,60 +193,193 @@ class CommitteeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='swap_project')
     def swap_project(self, request, pk=None):
-        """Move a project from this committee to another.
+        """Move one project between compatible committees atomically.
+
+        The source and target committees must belong to the exact same scope:
+        committee type, department, project type, and semester.  Both committee
+        rows and the project row are locked while the move is performed so two
+        concurrent requests cannot partially or inconsistently move the same
+        project.
 
         Payload:
             { source: 'IdeaApplication'|'StudentIdeaProposal',
               project_id: int, to_committee_id: int }
         """
-        c = self.get_object()
-        source = request.data.get('source')
-        pid    = request.data.get('project_id')
-        to_id  = request.data.get('to_committee_id')
-        if not (source and pid and to_id):
-            return Response({'detail': 'source, project_id, to_committee_id are required.'},
-                            status=status.HTTP_400_BAD_REQUEST)
-        try:
-            target = Committee.objects.get(id=to_id)
-        except Committee.DoesNotExist:
-            return Response({'detail': 'Target committee not found.'},
-                            status=status.HTTP_404_NOT_FOUND)
+        current_committee = self.get_object()
+        project_source = request.data.get('source')
 
+        if project_source not in ('IdeaApplication', 'StudentIdeaProposal'):
+            return Response(
+                {'detail': 'مصدر المشروع غير صالح.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            project_id = int(request.data.get('project_id'))
+            target_id = int(request.data.get('to_committee_id'))
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'يجب إرسال رقم المشروع ورقم اللجنة الهدف بشكل صحيح.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if target_id == current_committee.id:
+            return Response(
+                {'detail': 'المشروع موجود أصلًا في هذه اللجنة.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from django.db import DatabaseError
         from projects.models import IdeaApplication, StudentIdeaProposal
 
-        if source == 'IdeaApplication':
-            project = IdeaApplication.objects.filter(pk=pid).first()
-            if not project:
-                return Response({'detail': 'Project not found.'}, status=status.HTTP_404_NOT_FOUND)
-            if project.operational_status in ('fully_withdrawn', 'fully_failed', 'inactive'):
-                return Response({'detail': 'Inactive projects cannot be moved into active committee assignments.'}, status=status.HTTP_400_BAD_REQUEST)
-            c.applications.remove(pid)
-            target.applications.add(pid)
-        else:
-            project = StudentIdeaProposal.objects.filter(pk=pid).first()
-            if not project:
-                return Response({'detail': 'Project not found.'}, status=status.HTTP_404_NOT_FOUND)
-            if project.operational_status in ('fully_withdrawn', 'fully_failed', 'inactive'):
-                return Response({'detail': 'Inactive projects cannot be moved into active committee assignments.'}, status=status.HTTP_400_BAD_REQUEST)
-            c.proposals.remove(pid)
-            target.proposals.add(pid)
-        return Response({'moved': True, 'to': target.id})
+        project_model = (
+            IdeaApplication
+            if project_source == 'IdeaApplication'
+            else StudentIdeaProposal
+        )
+        relation_name = (
+            'applications'
+            if project_source == 'IdeaApplication'
+            else 'proposals'
+        )
+
+        try:
+            with transaction.atomic():
+                # Lock in a deterministic order to reduce deadlock risk.
+                committee_ids = sorted([current_committee.id, target_id])
+                locked_committees = {
+                    committee.id: committee
+                    for committee in Committee.objects.select_for_update().filter(
+                        id__in=committee_ids
+                    )
+                }
+
+                source_committee = locked_committees.get(current_committee.id)
+                target_committee = locked_committees.get(target_id)
+                if source_committee is None:
+                    return Response(
+                        {'detail': 'اللجنة المصدر لم تعد موجودة.'},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                if target_committee is None:
+                    return Response(
+                        {'detail': 'اللجنة الهدف غير موجودة.'},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+
+                scope_fields = (
+                    'committee_type',
+                    'department',
+                    'project_type',
+                    'semester',
+                )
+                mismatched_fields = [
+                    field
+                    for field in scope_fields
+                    if getattr(source_committee, field) != getattr(target_committee, field)
+                ]
+                if mismatched_fields:
+                    return Response(
+                        {
+                            'detail': (
+                                'لا يمكن نقل المشروع إلى لجنة من نوع أو قسم أو '
+                                'نوع مشروع أو فصل دراسي مختلف.'
+                            ),
+                            'code': 'committee_scope_mismatch',
+                            'mismatched_fields': mismatched_fields,
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                project = project_model.objects.select_for_update().filter(
+                    pk=project_id
+                ).first()
+                if project is None:
+                    return Response(
+                        {'detail': 'المشروع غير موجود.'},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+
+                if project.operational_status in (
+                    'fully_withdrawn',
+                    'fully_failed',
+                    'inactive',
+                ):
+                    return Response(
+                        {'detail': 'لا يمكن نقل مشروع غير نشط إلى لجنة فعالة.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                source_projects = getattr(source_committee, relation_name)
+                target_projects = getattr(target_committee, relation_name)
+
+                if not source_projects.filter(pk=project_id).exists():
+                    return Response(
+                        {'detail': 'المشروع غير موجود ضمن اللجنة المصدر.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                if target_projects.filter(pk=project_id).exists():
+                    return Response(
+                        {'detail': 'المشروع مضاف مسبقًا إلى اللجنة الهدف.'},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
+                # Add first, then remove. transaction.atomic guarantees that a
+                # failure in either operation rolls the whole move back.
+                target_projects.add(project)
+                source_projects.remove(project)
+
+        except DatabaseError:
+            return Response(
+                {
+                    'detail': (
+                        'تعذر نقل المشروع بسبب تعارض في البيانات، ولم يتم تغيير '
+                        'اللجنة الحالية.'
+                    ),
+                    'code': 'project_move_conflict',
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response({
+            'moved': True,
+            'project_id': project_id,
+            'source_committee_id': current_committee.id,
+            'to_committee_id': target_id,
+        })
 
     @action(detail=True, methods=['get'], url_path='available-for-swap')
     def available_for_swap(self, request, pk=None):
         """Get list of committees available for swapping a project.
         
-        Returns committees of the same type, department, and project_type.
+        Returns committees of the same type, department, project type, and semester.
         Query params: project_source, project_id
         """
         current_committee = self.get_object()
         
-        # Get available committees (same type, dept, project_type, but different ID)
+        # Offer only committees in the exact same classification and semester.
         available = Committee.objects.filter(
             committee_type=current_committee.committee_type,
             department=current_committee.department,
             project_type=current_committee.project_type,
-        ).exclude(id=current_committee.id).order_by('sequence_number')
+            semester=current_committee.semester,
+        ).exclude(id=current_committee.id)
+
+        # Do not offer a committee that already contains the selected project.
+        project_source = request.query_params.get('project_source')
+        project_id = request.query_params.get('project_id')
+        try:
+            project_id = int(project_id) if project_id is not None else None
+        except (TypeError, ValueError):
+            project_id = None
+
+        if project_id and project_source == 'IdeaApplication':
+            available = available.exclude(applications__id=project_id)
+        elif project_id and project_source == 'StudentIdeaProposal':
+            available = available.exclude(proposals__id=project_id)
+
+        available = available.order_by('sequence_number', 'id').distinct()
         
         # Serialize with basic info — chair & members use the SAME
         # DoctorBriefSerializer shape as everywhere else for consistency.
@@ -366,12 +500,24 @@ class DistributeView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        result = distribute_projects_to_committees(
-            template_ids    = d.get('template_ids'),
-            semester        = d.get('semester'),
-            dry_run         = d.get('dry_run', False),
-            scheduling_mode = d.get('scheduling_mode', 'multi'),
-        )
+        try:
+            result = distribute_projects_to_committees(
+                template_ids       = d.get('template_ids'),
+                semester           = d.get('semester'),
+                dry_run            = d.get('dry_run', False),
+                scheduling_mode    = d.get('scheduling_mode', 'multi'),
+                actor              = request.user,
+                confirm_draft_loss = d.get('confirm_draft_loss', False),
+            )
+        except RedistributionSafetyError as exc:
+            return Response(
+                {
+                    'detail': exc.detail,
+                    'code': exc.code,
+                    'safety': exc.safety,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         return Response(result)
 
 

@@ -150,7 +150,10 @@ class PasswordResetCode(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-        indexes = [models.Index(fields=['session_token']), models.Index(fields=['expires_at'])]
+        indexes = [
+            models.Index(fields=['session_token'], name='accounts_pa_session_2e0c28_idx'),
+            models.Index(fields=['expires_at'], name='accounts_pa_expires_3f81d1_idx'),
+        ]
 
     def is_expired(self):
         from django.utils import timezone
@@ -170,7 +173,10 @@ class EmailChangeCode(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-        indexes = [models.Index(fields=['session_token']), models.Index(fields=['expires_at'])]
+        indexes = [
+            models.Index(fields=['session_token'], name='accounts_em_session_6b30b2_idx'),
+            models.Index(fields=['expires_at'], name='accounts_em_expires_958f57_idx'),
+        ]
 
     def is_expired(self):
         from django.utils import timezone
