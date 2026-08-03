@@ -30,7 +30,7 @@ export default function MyIdeas({ onBack, onSubmitNew }) {
     <div className="max-w-[1000px] mx-auto py-8 px-6 flex flex-col gap-6">
       {/* Header */}
       <div className="page-header flex flex-col gap-4">
-        <button className="back-btn" onClick={onBack}>← Back to Dashboard</button>
+        <button className="back-btn" onClick={onBack}>← العودة إلى لوحة التحكم</button>
         <div className="flex items-center justify-between gap-4 flex-wrap max-[600px]:flex-col max-[600px]:items-start">
           <div>
             <h1 className="text-[26px] font-extrabold text-gray-900 dark:text-white m-0">أفكار مشاريعي</h1>
@@ -61,7 +61,7 @@ export default function MyIdeas({ onBack, onSubmitNew }) {
         {loading && (
           <div className="empty-state">
             <div className="spinner-dark" style={{ width: 24, height: 24 }}></div>
-            <p className="text-gray-500 dark:text-gray-400" style={{ marginTop: 12 }}>Loading ideas…</p>
+            <p className="text-gray-500 dark:text-gray-400" style={{ marginTop: 12 }}>جاري تحميل الأفكار...</p>
           </div>
         )}
 

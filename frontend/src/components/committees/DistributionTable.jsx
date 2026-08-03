@@ -26,14 +26,14 @@ function distributionExclusionMessage(exclusions) {
   if (!total && !zeroActiveProjects) return '';
 
   const statusParts = [];
-  if (withdrawn) statusParts.push(`${withdrawn} withdrawn`);
-  if (failed) statusParts.push(`${failed} failed`);
+  if (withdrawn) statusParts.push(`${withdrawn} منسحب`);
+  if (failed) statusParts.push(`${failed} راسب`);
 
   const studentPart = total
-    ? `${total} students excluded from distribution: ${statusParts.join(', ') || 'inactive status'}.`
+    ? `تم استبعاد ${total} طالب من التوزيع: ${statusParts.join('، ') || 'حالة غير فعالة'}.`
     : '';
   const projectPart = zeroActiveProjects
-    ? `${zeroActiveProjects} projects with zero active students skipped.`
+    ? `تم تجاوز ${zeroActiveProjects} مشروع لعدم وجود طلاب فعّالين.`
     : '';
 
   return [studentPart, projectPart].filter(Boolean).join(' ');
@@ -115,7 +115,7 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
   /* ── Actions ─────────────────────────────────────────────────────────── */
   const handleDelete = async (c) => {
     if (busy) return;
-    if (!confirm(`Delete committee #${c.sequence_number} (${c.committee_type_ar} - ${c.department_ar})? Cannot be undone.`)) return;
+    if (!confirm(`حذف اللجنة رقم ${c.sequence_number} (${c.committee_type_ar} - ${c.department_ar})؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
     setBusy(true);
     try {
       await deleteCommittee(c.id);
@@ -155,8 +155,8 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
       const processed      = res.data?.processed_templates     ?? 0;
       const exclusionMsg   = distributionExclusionMessage(res.data?.exclusions);
       const msg = undistributed > 0
-        ? `Distributed ${distributed} projects across ${processed} compositions. (${undistributed} projects without suitable committee — review alerts.)`
-        : `Successfully distributed ${distributed} projects across ${processed} compositions.`;
+        ? `تم توزيع ${distributed} مشروع على ${processed} تشكيلة، وبقي ${undistributed} مشروع دون لجنة مناسبة.`
+        : `تم توزيع ${distributed} مشروع بنجاح على ${processed} تشكيلة.`;
       setToast({ type: 'success', msg: [msg, exclusionMsg].filter(Boolean).join(' ') });
       await load();
     } catch (err) {
@@ -275,7 +275,7 @@ export default function DistributionTable({ onBack, onNavigate, filterTemplateId
             disabled={busy || committees.length === 0}
           >
             {busy ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            Distribute Projects
+            توزيع المشاريع
           </button>
           <button className="cdt-btn" onClick={() => handleExport('xlsx')} disabled={busy}>
             <FileDown size={14} /> إكسل

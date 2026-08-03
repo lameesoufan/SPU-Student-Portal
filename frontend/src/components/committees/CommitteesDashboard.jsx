@@ -11,6 +11,14 @@ import {
   COMMITTEE_TYPE_COLORS, DEPARTMENT_COLORS, WORKLOAD_COLORS,
   WARNING_COLORS, DEPARTMENTS, COMMITTEE_TYPES, getCommitteeTypeLabel, getProjectTypeLabel, getDepartmentLabel,
 } from './constants';
+import {
+  LoadingState,
+  PageAlert,
+  PageHeader,
+  PageShell,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/PagePrimitives';
 import './CommitteesDashboard.css';
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -35,14 +43,14 @@ function distributionExclusionMessage(exclusions) {
   if (!total && !zeroActiveProjects) return '';
 
   const statusParts = [];
-  if (withdrawn) statusParts.push(`${withdrawn} withdrawn`);
-  if (failed) statusParts.push(`${failed} failed`);
+  if (withdrawn) statusParts.push(`${withdrawn} منسحب`);
+  if (failed) statusParts.push(`${failed} راسب`);
 
   const studentPart = total
-    ? `${total} students excluded from distribution: ${statusParts.join(', ') || 'inactive status'}.`
+    ? `تم استبعاد ${total} طالب من التوزيع: ${statusParts.join('، ') || 'حالة غير فعالة'}.`
     : '';
   const projectPart = zeroActiveProjects
-    ? `${zeroActiveProjects} projects with zero active students skipped.`
+    ? `تم تجاوز ${zeroActiveProjects} مشروع لعدم وجود طلاب فعّالين.`
     : '';
 
   return [studentPart, projectPart].filter(Boolean).join(' ');
@@ -165,25 +173,18 @@ export default function CommitteesDashboard({ onNavigate, user }) {
 
   const confirmDistribute = async () => executeDistribution(false);
 
-  if (loading) {
-    return (
-      <div className="cmd-loading">
-        <div className="cmd-spinner" />
-      </div>
-    );
-  }
+  if (loading) return <LoadingState label="جاري تحميل التشكيلات واللجان..." />;
 
   if (error && !data) {
     return (
-      <div className="cmd-page" dir="rtl">
-        <div className="cmd-error">
-          <AlertTriangle size={18} />
-          {error}
+      <PageShell>
+        <PageAlert>{error}</PageAlert>
+        <div className="mt-4">
+          <button type="button" className={primaryButtonClass} onClick={load}>
+            <RefreshCw size={15} /> إعادة المحاولة
+          </button>
         </div>
-        <button className="cmd-btn cmd-btn-primary" onClick={load}>
-          <RefreshCw size={14} /> إعادة المحاولة
-        </button>
-      </div>
+      </PageShell>
     );
   }
 
@@ -193,39 +194,39 @@ export default function CommitteesDashboard({ onNavigate, user }) {
   const workloads  = data?.doctor_workload || [];
 
   return (
-    <div className="cmd-page" dir="rtl">
-      {/* ── Hero ──────────────────────────────────────────────────────────── */}
-      <div className="cmd-hero">
-        <div className="cmd-hero-content">
-          <div>
-            <h1 className="cmd-hero-title">لوحة إدارة اللجان</h1>
-            <p className="cmd-hero-sub">
-              Welcome {user?.username || 'العميد'} — From here you can create compositions, distribute projects,
-              and monitor faculty workload.
-            </p>
-          </div>
-          <div className="cmd-hero-actions">
+    <PageShell>
+      <PageHeader
+        icon={FolderKanban}
+        title="التشكيلات والتوزيع"
+        description={`إدارة تشكيلات اللجان وتوزيع المشاريع ومتابعة العبء التدريسي${user?.username ? ` — ${user.username}` : ''}.`}
+        badge={`${comps.length} تشكيلة`}
+        actions={(
+          <>
             <button
-              className="cmd-hero-btn cmd-hero-btn-primary"
+              type="button"
+              className={primaryButtonClass}
               onClick={() => onNavigate && onNavigate('committees-template-form')}
             >
-              <Plus size={16} /> تشكيلة جديدة
+              <Plus size={15} /> تشكيلة جديدة
             </button>
             <button
-              className="cmd-hero-btn cmd-hero-btn-secondary"
+              type="button"
+              className={secondaryButtonClass}
               onClick={() => onNavigate && onNavigate('committees-list')}
             >
-              <FolderKanban size={16} /> قائمة اللجان
+              <FolderKanban size={15} /> قائمة اللجان
             </button>
             <button
-              className="cmd-hero-btn cmd-hero-btn-secondary"
+              type="button"
+              className={secondaryButtonClass}
               onClick={() => onNavigate && onNavigate('projects-assignment')}
             >
-              <FileText size={16} /> جدول التوزيع
+              <FileText size={15} /> جدول توزيع المشاريع
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        )}
+      />
+      <div className="cmd-page" dir="rtl">
 
       {/* ── Stat Cards ────────────────────────────────────────────────────── */}
       <div className="cmd-stats">
@@ -246,7 +247,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
             title="تشغيل خوارزمية التوزيع"
           >
             {busy ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            Distribute Projects
+            توزيع المشاريع
           </button>
         </div>
         <div className="cmd-toolbar-right">
@@ -532,7 +533,7 @@ export default function CommitteesDashboard({ onNavigate, user }) {
             )}
             {warnings.length > 30 && (
               <div style={{ textAlign: 'center', padding: '8px', fontSize: 12, color: 'var(--text-muted)' }}>
-                and {warnings.length - 30} more warnings…
+                ويوجد {warnings.length - 30} تنبيهًا إضافيًا…
               </div>
             )}
           </div>
@@ -611,387 +612,163 @@ export default function CommitteesDashboard({ onNavigate, user }) {
 
       {/* ── Toast ────────────────────────────────────────────────────────── */}
       {toast && (
-        <div style={{
-          position: 'fixed',
-          bottom: 24,
-          left: 24,
-          right: 24,
-          maxWidth: 480,
-          margin: '0 auto',
-          padding: '14px 18px',
-          borderRadius: 12,
-          background: toast.type === 'success' ? 'rgba(16, 185, 129, 0.95)' : 'rgba(239, 68, 68, 0.95)',
-          color: '#fff',
-          fontSize: 13,
-          fontWeight: 600,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-        }}>
-          {toast.type === 'success'
-            ? <CheckCircle2 size={18} />
-            : <AlertTriangle size={18} />}
-          {toast.msg}
+        <div className={`fixed bottom-6 left-1/2 z-[9999] flex mx-4 w-full max-w-[480px] -translate-x-1/2 items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white shadow-2xl ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+          {toast.type === 'success' ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
+          <span>{toast.msg}</span>
         </div>
       )}
 
       {/* ── Scheduling Mode Selection Dialog ─────────────────────────────── */}
       {showModeDialog && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-          backdropFilter: 'blur(4px)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', zIndex: 10000,
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: 16, padding: 28,
-            maxWidth: 540, width: 'calc(100% - 32px)',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
-            direction: 'rtl',
-          }}>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: 20, fontWeight: 700, color: '#1e293b' }}>
-              اختر طريقة التوزيع
-            </h3>
-            <p style={{ margin: '0 0 20px 0', fontSize: 14, color: '#64748b', lineHeight: 1.6 }}>
-              هل نفس اللجنة تقيّم المشروع في كل الأنواع الأربعة (سيمينار 1، سيمينار 2، فنية، نهائية)،
-              أم لجان مختلفة لكل نوع؟
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+          <section className="w-full max-w-xl rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl sm:p-6" dir="rtl">
+            <h3 className="m-0 text-xl font-black text-[var(--text)]">اختر طريقة التوزيع</h3>
+            <p className="m-0 mt-2 text-sm leading-7 text-[var(--text-muted)]">
+              حدّد هل تعتمد المشاريع لجنة موحّدة للأنواع الأربعة، أم تشكيلات مستقلة لكل نوع لجنة.
             </p>
 
-            {/* Option A: Single */}
-            <div
-              onClick={() => setSelectedMode('single')}
-              style={{
-                padding: 16, borderRadius: 12, cursor: 'pointer', marginBottom: 10,
-                border: `2px solid ${selectedMode === 'single' ? '#667eea' : '#e2e8f0'}`,
-                background: selectedMode === 'single' ? '#ede9fe' : '#fff',
-                transition: 'all 0.2s',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <div style={{
-                  width: 20, height: 20, borderRadius: '50%',
-                  border: `2px solid ${selectedMode === 'single' ? '#667eea' : '#cbd5e1'}`,
-                  background: selectedMode === 'single' ? '#667eea' : '#fff',
-                }} />
-                <strong style={{ fontSize: 15, color: '#1e293b' }}>نفس اللجنة للأنواع الأربعة</strong>
-              </div>
-              <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.5, paddingLeft: 30 }}>
-                نفس الأطباء يقيّمون المشروع في 4 جلسات بأنواع مختلفة.
-                ينشئ النظام 4 لجان تلقائياً لكل مشروع بنفس الأطباء.
-              </p>
+            <div className="mt-5 space-y-3">
+              {[
+                {
+                  value: 'single',
+                  title: 'نفس اللجنة للأنواع الأربعة',
+                  description: 'نفس الأطباء يقيّمون المشروع في سيمينار 1 وسيمينار 2 واللجنة الفنية والمناقشة النهائية.',
+                },
+                {
+                  value: 'multi',
+                  title: 'لجان مختلفة لكل نوع',
+                  description: 'كل نوع لجنة يعتمد تشكيلته الخاصة، ويمكن أن تختلف الهيئة التدريسية بين الأنواع.',
+                },
+              ].map((option) => {
+                const selected = selectedMode === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setSelectedMode(option.value)}
+                    className={`w-full rounded-xl border p-4 text-right transition ${
+                      selected
+                        ? 'border-[var(--primary)] bg-[var(--primary-light)] ring-2 ring-[var(--primary-light)]'
+                        : 'border-[var(--border)] bg-[var(--bg-secondary)] hover:border-[var(--border-dark)] hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    <span className="flex items-start gap-3">
+                      <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${selected ? 'border-[var(--primary)]' : 'border-[var(--border-dark)]'}`}>
+                        {selected && <span className="h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />}
+                      </span>
+                      <span>
+                        <strong className="block text-sm font-black text-[var(--text)]">{option.title}</strong>
+                        <span className="mt-1 block text-xs leading-6 text-[var(--text-muted)]">{option.description}</span>
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Option B: Multi */}
-            <div
-              onClick={() => setSelectedMode('multi')}
-              style={{
-                padding: 16, borderRadius: 12, cursor: 'pointer', marginBottom: 20,
-                border: `2px solid ${selectedMode === 'multi' ? '#667eea' : '#e2e8f0'}`,
-                background: selectedMode === 'multi' ? '#ede9fe' : '#fff',
-                transition: 'all 0.2s',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <div style={{
-                  width: 20, height: 20, borderRadius: '50%',
-                  border: `2px solid ${selectedMode === 'multi' ? '#667eea' : '#cbd5e1'}`,
-                  background: selectedMode === 'multi' ? '#667eea' : '#fff',
-                }} />
-                <strong style={{ fontSize: 15, color: '#1e293b' }}>لجان مختلفة لكل نوع</strong>
-              </div>
-              <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.5, paddingLeft: 30 }}>
-                كل نوع لجنة له تشكيلة منفصلة بأطباء قد يكونون مختلفين.
-                التشكيلة تحدد نوع اللجنة (سيمينار 1، 2، فنية، نهائية).
-              </p>
-            </div>
-
-            {/* Buttons */}
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => setShowModeDialog(false)} className={secondaryButtonClass}>إلغاء</button>
               <button
-                onClick={() => setShowModeDialog(false)}
-                style={{
-                  padding: '11px 24px', borderRadius: 10,
-                  border: '1.5px solid #e2e8f0', background: '#fff',
-                  color: '#64748b', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                }}
-              >إلغاء</button>
-              <button
+                type="button"
+                className={primaryButtonClass}
                 onClick={() => {
                   setShowModeDialog(false);
-                  setShowConfirmDialog(true);  // proceed to confirmation
+                  setShowConfirmDialog(true);
                 }}
-                style={{
-                  padding: '11px 28px', borderRadius: 10, border: 'none',
-                  background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                  color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(102,126,234,0.4)',
-                }}
-              >متابعة</button>
+              >
+                متابعة
+              </button>
             </div>
-          </div>
+          </section>
         </div>
       )}
 
       {/* ── Confirm Dialog ──────────────────────────────────────────────── */}
       {showConfirmDialog && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000,
-          animation: 'fadeIn 0.2s ease',
-        }}>
-          <div style={{
-            background: '#fff',
-            borderRadius: 16,
-            padding: 28,
-            maxWidth: 480,
-            width: 'calc(100% - 32px)',
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.3)',
-            animation: 'scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-          }}>
-            {/* العنوان */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 14,
-              marginBottom: 18,
-            }}>
-              <div style={{
-                width: 48,
-                height: 48,
-                borderRadius: 12,
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}>
-                <RefreshCw size={24} color="#fff" />
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+          <section className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl sm:p-6" dir="rtl">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-light)] text-[var(--primary)]">
+                <RefreshCw size={20} />
               </div>
-              <div style={{ flex: 1 }}>
-                <h3 style={{
-                  margin: 0,
-                  fontSize: 20,
-                  fontWeight: 700,
-                  color: '#1e293b',
-                  marginBottom: 6,
-                }}>
-                  تأكيد توزيع المشاريع
-                </h3>
-                <p style={{
-                  margin: 0,
-                  fontSize: 14,
-                  color: '#64748b',
-                  lineHeight: 1.6,
-                }}>
-                  سيتم تشغيل خوارزمية توزيع المشاريع على اللجان المُعدّة. هل تريد المتابعة؟
+              <div>
+                <h3 className="m-0 text-lg font-black text-[var(--text)]">تأكيد توزيع المشاريع</h3>
+                <p className="m-0 mt-1 text-sm leading-7 text-[var(--text-muted)]">
+                  سيتم تشغيل خوارزمية التوزيع على التشكيلات المعتمدة وفق القسم ونوع المشروع.
                 </p>
               </div>
             </div>
 
-            {/* Additional information */}
-            <div style={{
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0',
-              borderRadius: 10,
-              padding: 14,
-              marginBottom: 20,
-            }}>
-              <div style={{
-                fontSize: 13,
-                color: '#475569',
-                lineHeight: 1.5,
-              }}>
-                <div style={{ marginBottom: 6 }}>
-                  ✓ سيتم توزيع المشاريع تلقائيًا
-                </div>
-                <div style={{ marginBottom: 6 }}>
-                  ✓ سيتم إسناد المشاريع لكل لجنة بناءً على القسم ونوع المشروع
-                </div>
-                <div>
-                  ✓ يمكنك تعديل التوزيع يدويًا لاحقًا
-                </div>
-              </div>
+            <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4 text-sm leading-7 text-[var(--text-secondary)]">
+              <div>• سيتم توزيع المشاريع تلقائيًا على اللجان المناسبة.</div>
+              <div>• ستتمكن من مراجعة النتائج وتعديلها يدويًا لاحقًا.</div>
+              <div>• يحمي النظام العلامات النهائية ويطلب تأكيدًا عند وجود مسودات.</div>
             </div>
 
-            {/* Buttons */}
-            <div style={{
-              display: 'flex',
-              gap: 10,
-              justifyContent: 'flex-end',
-            }}>
-              <button
-                onClick={() => setShowConfirmDialog(false)}
-                style={{
-                  padding: '11px 24px',
-                  borderRadius: 10,
-                  border: '1.5px solid #e2e8f0',
-                  background: '#fff',
-                  color: '#64748b',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = '#f8fafc';
-                  e.target.style.borderColor = '#cbd5e1';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = '#fff';
-                  e.target.style.borderColor = '#e2e8f0';
-                }}
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={confirmDistribute}
-                style={{
-                  padding: '11px 32px',
-                  borderRadius: 10,
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: '#fff',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  transition: 'all 0.2s',
-                  boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.5)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
-                }}
-              >
-                <RefreshCw size={16} />
-                تنفيذ التوزيع
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => setShowConfirmDialog(false)} className={secondaryButtonClass}>إلغاء</button>
+              <button type="button" onClick={confirmDistribute} className={primaryButtonClass}>
+                <RefreshCw size={15} /> تنفيذ التوزيع
               </button>
             </div>
-          </div>
-
-          <style>
-            {`
-              @keyframes fadeIn {
-                from { opacity: 0; }
-                to { opacity: 1; }
-              }
-              @keyframes scaleIn {
-                from {
-                  opacity: 0;
-                  transform: scale(0.9);
-                }
-                to {
-                  opacity: 1;
-                  transform: scale(1);
-                }
-              }
-            `}
-          </style>
+          </section>
         </div>
       )}
 
       {/* ── Draft-loss confirmation ───────────────────────────────────── */}
       {draftLossWarning && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 10020,
-          background: 'rgba(15, 23, 42, 0.64)', backdropFilter: 'blur(5px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-        }}>
-          <div dir="rtl" style={{
-            width: 'min(560px, 100%)', background: '#fff', borderRadius: 18,
-            boxShadow: '0 24px 70px rgba(15, 23, 42, 0.35)', overflow: 'hidden',
-          }}>
-            <div style={{ padding: '24px 26px 18px', borderBottom: '1px solid #fee2e2' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                <div style={{
-                  width: 46, height: 46, borderRadius: 13, flexShrink: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: '#fff1f2', color: '#e11d48',
-                }}>
-                  <AlertTriangle size={23} />
+        <div className="fixed inset-0 z-[10020] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm">
+          <section className="w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--danger-border)] bg-[var(--card)] shadow-2xl" dir="rtl">
+            <div className="border-b border-[var(--danger-border)] p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)]">
+                  <AlertTriangle size={21} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, color: '#881337', fontSize: 19, fontWeight: 800 }}>
-                    توجد مسودات علامات ستُحذف
-                  </h3>
-                  <p style={{ margin: '7px 0 0', color: '#64748b', fontSize: 14, lineHeight: 1.8 }}>
-                    إعادة التوزيع ستنشئ لجانًا جديدة، ولذلك ستُحذف مسودات العلامات المرتبطة
-                    باللجان الحالية. العلامات النهائية غير موجودة، لذا يمكنك المتابعة فقط بعد تأكيد صريح.
+                  <h3 className="m-0 text-lg font-black text-[var(--danger-text)]">توجد مسودات علامات ستُحذف</h3>
+                  <p className="m-0 mt-1 text-sm leading-7 text-[var(--text-muted)]">
+                    إعادة التوزيع تنشئ لجانًا جديدة، ولذلك ستُحذف مسودات العلامات المرتبطة باللجان الحالية.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div style={{ padding: '18px 26px' }}>
-              <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                gap: 10, marginBottom: 16,
-              }}>
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 13 }}>
-                  <div style={{ color: '#64748b', fontSize: 12 }}>اللجان المتأثرة</div>
-                  <div style={{ color: '#0f172a', fontSize: 21, fontWeight: 800, marginTop: 3 }}>
-                    {draftLossWarning.committees_count || 0}
-                  </div>
+            <div className="p-5 sm:p-6">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+                  <div className="text-xs font-medium text-[var(--text-muted)]">اللجان المتأثرة</div>
+                  <div className="mt-1 text-2xl font-black text-[var(--text)]">{draftLossWarning.committees_count || 0}</div>
                 </div>
-                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: 13 }}>
-                  <div style={{ color: '#9a3412', fontSize: 12 }}>مسودات العلامات</div>
-                  <div style={{ color: '#c2410c', fontSize: 21, fontWeight: 800, marginTop: 3 }}>
-                    {draftLossWarning.draft_count || 0}
-                  </div>
+                <div className="rounded-xl border border-[var(--warning-border)] bg-[var(--warning-bg)] p-4">
+                  <div className="text-xs font-medium text-[var(--warning-text)]">مسودات العلامات</div>
+                  <div className="mt-1 text-2xl font-black text-[var(--warning-text)]">{draftLossWarning.draft_count || 0}</div>
                 </div>
               </div>
 
-              <div style={{
-                background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 12,
-                padding: 13, color: '#9f1239', fontSize: 13, lineHeight: 1.7, marginBottom: 20,
-              }}>
-                لن يمكن استرجاع المسودات بعد تنفيذ التوزيع. سيتم تسجيل العملية باسم حساب العميد في سجل التدقيق.
+              <div className="mt-4 rounded-xl border border-[var(--danger-border)] bg-[var(--danger-bg)] p-4 text-sm leading-7 text-[var(--danger-text)]">
+                لن يمكن استرجاع المسودات بعد التنفيذ، وسيُسجل الإجراء في سجل التدقيق باسم حساب العميد.
               </div>
 
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => setDraftLossWarning(null)}
-                  style={{
-                    border: '1px solid #cbd5e1', background: '#fff', color: '#475569',
-                    borderRadius: 10, padding: '10px 18px', fontWeight: 700, cursor: 'pointer',
-                  }}
-                >
+              <div className="mt-6 flex flex-wrap justify-end gap-2">
+                <button type="button" onClick={() => setDraftLossWarning(null)} className={secondaryButtonClass}>
                   إلغاء وحماية المسودات
                 </button>
                 <button
                   type="button"
                   onClick={() => executeDistribution(true)}
                   disabled={busy}
-                  style={{
-                    border: 0, background: '#be123c', color: '#fff', borderRadius: 10,
-                    padding: '10px 19px', fontWeight: 800,
-                    cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.65 : 1,
-                    display: 'inline-flex', alignItems: 'center', gap: 8,
-                  }}
+                  className="btn border-0 bg-[var(--danger)] text-white hover:opacity-90"
                 >
                   {busy ? <RefreshCw size={15} className="animate-spin" /> : <AlertTriangle size={15} />}
                   حذف المسودات وإعادة التوزيع
                 </button>
               </div>
             </div>
-          </div>
+          </section>
         </div>
       )}
-    </div>
+      </div>
+    </PageShell>
   );
 }
 

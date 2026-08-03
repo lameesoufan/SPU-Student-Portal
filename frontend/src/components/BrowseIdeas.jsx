@@ -394,7 +394,7 @@ const handleTeamSizeChange = (size) => {
           <div className="bg-[var(--card)] rounded-[var(--radius-lg)] shadow-[var(--shadow-lg)] p-4 md:p-8 w-full max-w-[520px] max-h-[90vh] overflow-y-auto border border-[var(--border)]">
             <div className="flex items-start justify-between gap-3">
               <h3 className="text-xl font-extrabold text-[var(--text)] flex items-center gap-2 m-0">
-                <Send size={16} /> Apply: {applyModal.title}
+                <Send size={16} /> التقديم على: {applyModal.title}
               </h3>
               <button
                 className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] transition-colors"
@@ -462,7 +462,7 @@ const handleTeamSizeChange = (size) => {
 
 {applyForm.member_ids.map((val, idx) => (
   <div className="mb-4" key={idx}>
-    <label htmlFor={`member-${idx}`} className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">Team Member {idx + 2}</label>
+    <label htmlFor={`member-${idx}`} className="block text-sm font-semibold text-[var(--text-muted)] mb-1.5">عضو الفريق {idx + 2}</label>
     <StudentSearch
       id={`member-${idx}`}
       value={val}

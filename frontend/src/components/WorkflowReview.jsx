@@ -415,7 +415,7 @@ export default function WorkflowReview({ onBack }) {
               className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors duration-200"
               onClick={() => { setWorkflow(null); setWorkflows([]); setSelectedProject(null); setActiveStageIdx(null); }}
             >
-              {Icons.ArrowLeft} Back to Projects
+              {Icons.ArrowLeft} العودة إلى المشاريع
             </button>
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">

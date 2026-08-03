@@ -2,26 +2,28 @@
  * HodGradesSummary — رئيس القسم يرى علامات مشاريع قسمه مع إمكانية الفلترة
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { BarChart3, Download, Filter } from 'lucide-react';
 import { fetchHodGradesSummary, exportHodGrades } from '../api';
+import { EmptyState, LoadingState, PageAlert, PageHeader, PageShell } from './ui/PagePrimitives';
 
 const S = {
-  wrap:       { padding: 24, direction: 'rtl' },
-  toolbar:    { display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' },
-  title:      { fontSize: '1.3rem', fontWeight: 700, flex: 1 },
-  btn:        { padding: '8px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: '0.87rem', fontWeight: 600 },
-  btnFilter:  { background: '#f0f0ff', color: '#5b5fc7', border: '1.5px solid #c0c7ff' },
-  btnExport:  { background: '#10b981', color: '#fff' },
-  semInput:   { padding: '7px 12px', borderRadius: 8, border: '1.5px solid #c0c7ff', fontSize: '0.87rem', width: 160 },
-  table:      { width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' },
-  th:         { background: '#4F46E5', color: '#fff', padding: '9px 12px', textAlign: 'center', fontWeight: 600, whiteSpace: 'nowrap' },
-  td:         { padding: '8px 12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle' },
-  tdTitle:    { textAlign: 'right', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  scoreCell:  { fontWeight: 600, color: '#4F46E5' },
-  nullCell:   { color: '#bbb' },
-  totalCell:  { fontWeight: 800, color: '#059669' },
-  evenRow:    { background: '#f8f7ff' },
-  error:      { padding: '10px 14px', background: '#fff5f5', color: '#c0392b', borderRadius: 8, marginBottom: 12, fontSize: '0.85rem' },
-  empty:      { textAlign: 'center', padding: 60, color: '#888' },
+  wrap:       { direction: 'rtl' },
+  toolbar:    { display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', padding: 16, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--shadow-sm)' },
+  title:      { fontSize: '1rem', fontWeight: 800, color: 'var(--text)', marginLeft: 'auto' },
+  btn:        { padding: '9px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 },
+  btnFilter:  { background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid var(--primary-border)' },
+  btnExport:  { background: 'var(--success)', color: '#fff' },
+  semInput:   { padding: '9px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: '0.84rem', minWidth: 150, background: 'var(--bg-input)', color: 'var(--text)', outline: 'none' },
+  table:      { width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem', background: 'var(--card)' },
+  th:         { background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', padding: '11px 12px', textAlign: 'center', fontWeight: 800, whiteSpace: 'nowrap', borderBottom: '1px solid var(--border)' },
+  td:         { padding: '10px 12px', borderBottom: '1px solid var(--border-light)', textAlign: 'center', verticalAlign: 'middle', color: 'var(--text-secondary)' },
+  tdTitle:    { textAlign: 'right', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' },
+  scoreCell:  { fontWeight: 800, color: 'var(--primary)' },
+  nullCell:   { color: 'var(--text-faint)' },
+  totalCell:  { fontWeight: 900, color: 'var(--success-text)' },
+  evenRow:    { background: 'var(--primary-lighter)' },
+  error:      { padding: '10px 14px', background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)', borderRadius: 10, marginBottom: 12, fontSize: '0.85rem' },
+  empty:      { textAlign: 'center', padding: 60, color: 'var(--text-muted)' },
 };
 
 const PROJECT_TYPE_AR = {
@@ -192,9 +194,15 @@ export default function HodGradesSummary() {
       ];
 
   return (
-    <div style={S.wrap}>
+    <PageShell>
+      <PageHeader
+        icon={BarChart3}
+        title="علامات مشاريع القسم"
+        description="راجع علامات مشاريع القسم وصفِّ النتائج حسب الفصل ونوع المشروع واللجنة."
+        badge={`${data?.count ?? 0} سجل`}
+      />
+      <div style={S.wrap}>
       <div style={S.toolbar}>
-        <div style={S.title}>علامات مشاريع القسم ({data?.count ?? '…'})</div>
         <input
           style={S.semInput}
           placeholder="الفصل الدراسي (اختياري)"
@@ -228,7 +236,7 @@ export default function HodGradesSummary() {
             setCommitteeType(draftCommittee);
           }}
         >
-          تصفية
+          <Filter size={14} /> تصفية
         </button>
         <button
           style={{ ...S.btn, ...S.btnExport }}
@@ -239,16 +247,16 @@ export default function HodGradesSummary() {
           }}
           disabled={exporting || loading}
         >
-          {exporting ? 'جاري التصدير...' : '⬇ تصدير Excel'}
+          {exporting ? 'جاري التصدير...' : <><Download size={14} /> تصدير الوثيقة</>}
         </button>
       </div>
 
-      {error && <div style={S.error}>{error}</div>}
+      {error && <PageAlert className="mb-4">{error}</PageAlert>}
 
-      {loading && <div style={S.empty}>جاري التحميل...</div>}
+      {loading && <LoadingState label="جاري تحميل العلامات..." />}
 
       {!loading && projects.length === 0 && (
-        <div style={S.empty}>لا توجد علامات مدخلة بعد.</div>
+        <EmptyState title="لا توجد علامات مدخلة" description="ستظهر العلامات هنا بعد أن تبدأ اللجان بإدخال نتائج التقييم." />
       )}
 
       {showExportDialog && (
@@ -257,11 +265,11 @@ export default function HodGradesSummary() {
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         }}>
           <div style={{
-            width: 'min(520px, 100%)', background: '#fff', borderRadius: 14,
+            width: 'min(520px, 100%)', background: 'var(--card)', borderRadius: 14,
             padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,.22)', direction: 'rtl',
           }}>
             <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>إعداد وثيقة العلامات</div>
-            <div style={{ color: '#64748b', fontSize: 14, marginBottom: 18 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 18 }}>
               سيتم وضع اسم قسمك ونوع اللجنة المختار تلقائياً في رأس الوثيقة.
             </div>
 
@@ -301,7 +309,7 @@ export default function HodGradesSummary() {
                   height: 32,
                   border: 'none',
                   borderRadius: 7,
-                  background: '#eef2ff',
+                  background: 'var(--primary-light)',
                   cursor: 'pointer',
                   fontSize: 18,
                 }}
@@ -318,7 +326,7 @@ export default function HodGradesSummary() {
                 style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
               />
             </div>
-            <div style={{ color: '#64748b', fontSize: 12, marginBottom: 18 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 18 }}>
               يمكنك كتابة التاريخ يدويًا أو اختياره من أيقونة التقويم.
             </div>
 
@@ -331,7 +339,7 @@ export default function HodGradesSummary() {
               ].map((option) => (
                 <label key={option.value} style={{
                   display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-                  border: exportProjectType === option.value ? '2px solid #4F46E5' : '1px solid #cbd5e1',
+                  border: exportProjectType === option.value ? '2px solid var(--primary)' : '1px solid var(--border)',
                   borderRadius: 9, padding: '10px 12px',
                 }}>
                   <input
@@ -351,7 +359,7 @@ export default function HodGradesSummary() {
                 {exporting ? 'جاري إنشاء الوثيقة...' : 'تصدير الوثيقة'}
               </button>
               <button
-                style={{ ...S.btn, background: '#f1f5f9', color: '#334155' }}
+                style={{ ...S.btn, background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
                 onClick={() => setShowExportDialog(false)}
                 disabled={exporting}
               >
@@ -363,7 +371,7 @@ export default function HodGradesSummary() {
       )}
 
       {!loading && projects.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--shadow-sm)' }}>
           <table style={S.table}>
             <thead>
               <tr>
@@ -377,7 +385,7 @@ export default function HodGradesSummary() {
                 const isEven = idx % 2 === 0;
                 const Score = ({ val, max }) =>
                   val != null
-                    ? <span style={S.scoreCell}>{val}<span style={{ color: '#999', fontWeight: 400 }}>{max != null ? `/${max}` : ''}</span></span>
+                    ? <span style={S.scoreCell}>{val}<span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>{max != null ? `/${max}` : ''}</span></span>
                     : <span style={S.nullCell}>—</span>;
 
                 return (
@@ -404,6 +412,7 @@ export default function HodGradesSummary() {
           </table>
         </div>
       )}
-    </div>
+      </div>
+    </PageShell>
   );
 }

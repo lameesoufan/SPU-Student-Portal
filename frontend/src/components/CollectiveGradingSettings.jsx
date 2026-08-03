@@ -2,130 +2,135 @@
  * CollectiveGradingSettings
  * رئيس القسم يُفعّل/يُعطّل وضع التقييم الجماعي لكل لجنة
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Settings2, UsersRound } from 'lucide-react';
 import { fetchGradingModes, setGradingMode } from '../api';
+import {
+  EmptyState,
+  LoadingState,
+  PageAlert,
+  PageCard,
+  PageHeader,
+  PageShell,
+} from './ui/PagePrimitives';
 
-const S = {
-  wrap:    { padding: 24, maxWidth: 820, margin: '0 auto', direction: 'rtl' },
-  title:   { fontSize: '1.25rem', fontWeight: 700, marginBottom: 6 },
-  sub:     { fontSize: '0.85rem', color: '#666', marginBottom: 20 },
-  card:    { background: 'var(--card-bg,#fff)', border: '1px solid var(--border,#e5e7eb)', borderRadius: 10, marginBottom: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
-  info:    { flex: 1, minWidth: 180 },
-  name:    { fontWeight: 600, fontSize: '0.93rem' },
-  meta:    { fontSize: '0.78rem', color: '#888', marginTop: 2 },
-  toggle:  { position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none' },
-  track:   (on) => ({
-    width: 44, height: 24, borderRadius: 12, background: on ? '#667eea' : '#d1d5db',
-    transition: 'background .2s', position: 'relative',
-  }),
-  thumb:   (on) => ({
-    position: 'absolute', top: 2, left: on ? 22 : 2,
-    width: 20, height: 20, borderRadius: '50%', background: '#fff',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left .2s',
-  }),
-  label:   (on) => ({ marginRight: 10, fontSize: '0.82rem', fontWeight: 600, color: on ? '#667eea' : '#999' }),
-  msg:     { padding: '8px 14px', borderRadius: 8, fontSize: '0.82rem' },
-  ok:      { background: '#f0fdf4', color: '#166534' },
-  err:     { background: '#fff5f5', color: '#c0392b' },
-  badge:   (on) => ({
-    display: 'inline-block', padding: '2px 10px', borderRadius: 20,
-    fontSize: '0.73rem', fontWeight: 600,
-    background: on ? '#ede9fe' : '#f3f4f6',
-    color: on ? '#6d28d9' : '#6b7280',
-  }),
-};
-
-const DEPT_AR = {
-  software_engineering:'برمجيات', artificial_intelligence:'ذكاء اصطناعي',
-  information_security:'أمن سيبراني', communications:'اتصالات', control_robotics:'تحكم وروبوتات',
-};
-
-export default function CollectiveGradingSettings({ user }) {
+export default function CollectiveGradingSettings() {
   const [committees, setCommittees] = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState('');
-  const [msg,        setMsg]        = useState('');
-  const [msgType,    setMsgType]    = useState('');
-  const [toggling,   setToggling]   = useState(null); // committee_id being toggled
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('success');
+  const [toggling, setToggling] = useState(null);
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError('');
     try {
-      const r = await fetchGradingModes();
-      setCommittees(r.data.committees || []);
-    } catch (e) { setError(e.response?.data?.detail || 'تعذّر التحميل.'); }
-    finally { setLoading(false); }
+      const response = await fetchGradingModes();
+      setCommittees(response.data.committees || []);
+    } catch (requestError) {
+      setError(requestError.response?.data?.detail || 'تعذّر تحميل إعدادات التقييم.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const handleToggle = async (c) => {
-    setToggling(c.committee_id);
-    setMsg(''); setMsgType('');
+  const handleToggle = async (committee) => {
+    if (toggling) return;
+    setToggling(committee.committee_id);
+    setMessage('');
+    setError('');
+
     try {
-      const r = await setGradingMode(c.committee_id, !c.collective);
-      setMsg(r.data.message); setMsgType('ok');
-      setCommittees((prev) =>
-        prev.map((x) =>
-          x.committee_id === c.committee_id ? { ...x, collective: r.data.collective } : x
-        )
-      );
-    } catch (e) {
-      setMsg(e.response?.data?.detail || 'فشل التحديث.'); setMsgType('err');
-    } finally { setToggling(null); }
+      const response = await setGradingMode(committee.committee_id, !committee.collective);
+      setCommittees((current) => current.map((item) => (
+        item.committee_id === committee.committee_id
+          ? { ...item, collective: response.data.collective }
+          : item
+      )));
+      setMessage(response.data.message || 'تم تحديث وضع التقييم بنجاح.');
+      setMessageType('success');
+    } catch (requestError) {
+      setMessage(requestError.response?.data?.detail || 'فشل تحديث وضع التقييم.');
+      setMessageType('error');
+    } finally {
+      setToggling(null);
+    }
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>جاري التحميل...</div>;
+  if (loading) return <LoadingState label="جاري تحميل إعدادات التقييم..." />;
 
   return (
-    <div style={S.wrap}>
-      <div style={S.title}>إعدادات التقييم الجماعي</div>
-      <div style={S.sub}>
-        عند تفعيل الوضع الجماعي للجنة، يستطيع جميع أعضائها إدخال علاماتهم المستقلة
-        وتُحسب العلامة النهائية كمتوسط لما أدخلوه.
+    <PageShell maxWidth="max-w-5xl">
+      <PageHeader
+        icon={Settings2}
+        title="إعدادات التقييم الجماعي"
+        description="حدّد لكل لجنة ما إذا كانت العلامة تُدخل بصورة فردية أو تُحسب كمتوسط لعلامات جميع أعضاء اللجنة."
+        badge={`${committees.length} لجنة`}
+      />
+
+      <div className="space-y-4">
+        {error && <PageAlert>{error}</PageAlert>}
+        {message && <PageAlert type={messageType}>{message}</PageAlert>}
+
+        {!committees.length ? (
+          <EmptyState
+            icon={UsersRound}
+            title="لا توجد لجان متاحة"
+            description="ستظهر هنا اللجان بعد إنشائها وتوزيع المشاريع عليها."
+          />
+        ) : (
+          <PageCard className="overflow-hidden" padded={false}>
+            <div className="divide-y divide-[var(--border-light)]">
+              {committees.map((committee) => {
+                const busy = toggling === committee.committee_id;
+                return (
+                  <div
+                    key={committee.committee_id}
+                    className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="m-0 text-sm font-black text-[var(--text)] sm:text-base">
+                          {committee.committee_type_ar} — {committee.department_ar} — {committee.project_type_ar}
+                        </h2>
+                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                          committee.collective
+                            ? 'bg-[var(--primary-light)] text-[var(--primary)]'
+                            : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+                        }`}>
+                          {committee.collective ? 'تقييم جماعي' : 'تقييم فردي'}
+                        </span>
+                      </div>
+                      <p className="m-0 mt-1 text-xs text-[var(--text-muted)]">
+                        {committee.semester || 'الفصل غير محدد'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={committee.collective}
+                      disabled={busy}
+                      onClick={() => handleToggle(committee)}
+                      className="inline-flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2.5 transition hover:border-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                    >
+                      <span className={`text-xs font-bold ${committee.collective ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'}`}>
+                        {busy ? 'جاري التحديث...' : committee.collective ? 'مُفعّل' : 'مُعطّل'}
+                      </span>
+                      <span className={`relative h-6 w-11 rounded-full transition ${committee.collective ? 'bg-[var(--primary)]' : 'bg-[var(--bg-quaternary)]'}`}>
+                        <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition ${committee.collective ? 'left-1' : 'left-6'}`} />
+                      </span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </PageCard>
+        )}
       </div>
-
-      {error && <div style={{ ...S.msg, ...S.err, marginBottom: 16 }}>{error}</div>}
-      {msg   && <div style={{ ...S.msg, ...(msgType === 'ok' ? S.ok : S.err), marginBottom: 16 }}>{msg}</div>}
-
-      {committees.length === 0 && (
-        <div style={{ textAlign: 'center', color: '#888', padding: 40 }}>لا توجد لجان.</div>
-      )}
-
-      {committees.map((c) => (
-        <div key={c.committee_id} style={S.card}>
-          <div style={S.info}>
-            <div style={S.name}>
-              {c.committee_type_ar} — {c.department_ar} — {c.project_type_ar}
-            </div>
-            <div style={S.meta}>
-              {c.semester && <span>{c.semester} · </span>}
-              <span style={S.badge(c.collective)}>
-                {c.collective ? 'جماعي' : 'فردي'}
-              </span>
-            </div>
-          </div>
-
-          {/* Toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={S.label(c.collective)}>
-              {c.collective ? 'مُفعَّل' : 'معطَّل'}
-            </span>
-            <div
-              style={S.toggle}
-              onClick={() => toggling !== c.committee_id && handleToggle(c)}
-              role="switch"
-              aria-checked={c.collective}
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && handleToggle(c)}
-            >
-              <div style={S.track(c.collective)}>
-                <div style={S.thumb(c.collective)} />
-              </div>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
+    </PageShell>
   );
 }

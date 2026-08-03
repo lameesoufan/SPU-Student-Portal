@@ -93,7 +93,7 @@ export default function ImportUsers({ onBack }) {
                   className="h-11 px-4 text-sm border-[1.5px] border-[var(--border,#e2e8f0)] rounded-xl bg-[var(--input-bg,#fff)] text-[var(--text,#1e293b)] outline-none focus:border-[var(--primary,#6366f1)] transition-colors"
                 >
                   <option value="student">دفعة الطلاب</option>
-                  <option value="doctor">Faculty / Doctor Batch</option>
+                  <option value="doctor">دفعة الهيئة التدريسية / الدكاترة</option>
                 </select>
               </div>
 

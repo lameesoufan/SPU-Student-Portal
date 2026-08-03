@@ -957,7 +957,7 @@ const handleTeamSizeChange = (size) => {
                             {form.member_ids.map((val, idx) => (
                 <div key={idx} className="flex flex-col gap-1.5">
                   <label htmlFor={`p-member-${idx}`} className="text-sm font-semibold text-[var(--text)]">
-                    Team Member {idx + 2}
+                    عضو الفريق {idx + 2}
                     <span className="text-xs text-[var(--text-muted)] font-normal ml-2">ابحث بالاسم أو الرقم الجامعي</span>
                   </label>
                   <StudentSearch
@@ -1003,7 +1003,7 @@ const handleTeamSizeChange = (size) => {
                   <Clipboard size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-[var(--text)]">Review & Submit</h2>
+                  <h2 className="text-lg font-bold text-[var(--text)]">المراجعة والإرسال</h2>
                   <p className="text-sm text-[var(--text-muted)]">راجع تفاصيل المقترح قبل التقديم</p>
                 </div>
               </div>

@@ -75,7 +75,7 @@ export default function HodIdeaReview({ onBack }) {
       {loading && (
         <div className="flex flex-col items-center gap-3 py-16 px-6 text-gray-500 dark:text-gray-400 text-sm font-medium">
           <Loader2 size={32} className="animate-spin text-violet-600" />
-          Loading ideas…
+          جاري تحميل الأفكار...
         </div>
       )}
 

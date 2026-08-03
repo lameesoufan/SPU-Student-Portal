@@ -289,7 +289,7 @@ export default function ProjectsAssignment({ onBack }) {
                 disabled={saving || Object.keys(editedProjects).length === 0}
               >
                 <Save size={16} />
-                {saving ? 'جارٍ الحفظ...' : `Save Changes (${Object.keys(editedProjects).length})`}
+                {saving ? 'جارٍ الحفظ...' : `حفظ التغييرات (${Object.keys(editedProjects).length})`}
               </button>
               <button 
                 className="pa-btn pa-btn-secondary" 
@@ -323,7 +323,7 @@ export default function ProjectsAssignment({ onBack }) {
           </button>
           <div className="pa-stat-badge">
             <FileText size={16} />
-            <span>{data?.total_projects || 0} distributed projects</span>
+            <span>{data?.total_projects || 0} مشروع موزّع</span>
           </div>
         </div>
       </div>
@@ -345,7 +345,7 @@ export default function ProjectsAssignment({ onBack }) {
             className={`pa-tab ${filterType === 'all' ? 'active' : ''}`}
             onClick={() => setFilterType('all')}
           >
-            All ({data?.total_projects || 0})
+            الكل ({data?.total_projects || 0})
           </button>
           <button
             className={`pa-tab ${filterType === 'seminar_1' ? 'active' : ''}`}
@@ -526,7 +526,7 @@ export default function ProjectsAssignment({ onBack }) {
                         ) : '—'
                       )}
                     </td>
-                    <td style={{ backgroundColor: '#f0f9ff', fontWeight: 500, color: '#0369a1' }}>
+                    <td className="pa-schedule-cell">
                       {editMode ? (
                         <input
                           type="time"
@@ -536,7 +536,7 @@ export default function ProjectsAssignment({ onBack }) {
                         />
                       ) : (project.scheduled_start || project.scheduled_start_time || '—')}
                     </td>
-                    <td style={{ backgroundColor: '#f0f9ff', fontWeight: 500, color: '#0369a1' }}>
+                    <td className="pa-schedule-cell">
                       {project.scheduled_end || project.scheduled_end_time || '—'}
                     </td>
                     <td>
@@ -553,7 +553,7 @@ export default function ProjectsAssignment({ onBack }) {
                         </select>
                       ) : (
                         project.room_name ? (
-                          <div className="pa-location-cell" style={{ color: '#0369a1', fontWeight: 600 }}>
+                          <div className="pa-location-cell" >
                             <MapPin size={13} />
                             <span>🚪 {project.room_name}</span>
                           </div>
@@ -614,7 +614,7 @@ export default function ProjectsAssignment({ onBack }) {
                       <div className="pa-committee-card-header">
                         <h5>{committee.name}</h5>
                         <span className="pa-projects-badge">
-                          {committee.projects_count} projects
+                          {committee.projects_count} مشاريع
                         </span>
                       </div>
                       
@@ -673,7 +673,7 @@ export default function ProjectsAssignment({ onBack }) {
             
             <div className="pa-modal-body">
               <p className="pa-modal-description">
-                تطبيق التغييرات التالية على <strong>{selectedRows.size}</strong> selected project{selectedRows.size > 1 ? 's' : ''}:
+                تطبيق التغييرات التالية على <strong>{selectedRows.size}</strong> مشروع محدد:
               </p>
 
               <div className="pa-form-group">
@@ -732,7 +732,7 @@ export default function ProjectsAssignment({ onBack }) {
                   disabled={!bulkValues.date && !bulkValues.start_time && !bulkValues.room_id}
                 >
                   <Check size={16} />
-                  Apply to {selectedRows.size} Project{selectedRows.size > 1 ? 's' : ''}
+                  تطبيق على {selectedRows.size} مشروع
                 </button>
               </div>
             </div>

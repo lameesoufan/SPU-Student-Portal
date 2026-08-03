@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { fetchSolverSettings, createSolverSettings, updateSolverSettings, deleteSolverSettings } from '../../api';
 import { COMMITTEE_TYPES } from './constants';
+import { EmptyState, LoadingState, PageAlert, PageHeader, PageShell, secondaryButtonClass } from '../ui/PagePrimitives';
 
 const WEEKDAYS_OPTIONS = [
   { value: 0, label: 'الإثنين' },
@@ -136,31 +137,27 @@ export default function SolverSettingsPage({ onBack }) {
   };
 
   return (
-    <div className="solver-settings-page" dir="rtl" style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 700, marginBottom: 4, display: 'flex', gap: 10, alignItems: 'center' }}>
-            <SettingsIcon size={26} color="#667eea" /> إعدادات الـ Solver
-          </h1>
-          <p style={{ color: '#888', fontSize: '0.9rem' }}>
-            إعدادات الجدولة لكل (نوع لجنة × فصل دراسي). كل نوع له نطاق تواريخ مستقل.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={load} disabled={loading} style={btnSecondary}>
-            <RefreshCw size={14} /> تحديث
-          </button>
-          <button onClick={startCreate} disabled={creating} style={btnPrimary}>
-            <Plus size={14} /> إعدادات جديدة
-          </button>
-        </div>
-      </div>
+    <PageShell maxWidth="max-w-6xl">
+      <PageHeader
+        icon={SettingsIcon}
+        title="إعدادات المجدول"
+        description="إدارة إعدادات الجدولة لكل نوع لجنة وفصل دراسي بصورة مستقلة."
+        badge={`${settings.length} إعدادات`}
+        actions={(
+          <>
+            {onBack && <button type="button" onClick={onBack} className={secondaryButtonClass}>رجوع</button>}
+            <button onClick={load} disabled={loading} style={btnSecondary}>
+              <RefreshCw size={14} /> تحديث
+            </button>
+            <button onClick={startCreate} disabled={creating} style={btnPrimary}>
+              <Plus size={14} /> إعدادات جديدة
+            </button>
+          </>
+        )}
+      />
+      <div className="solver-settings-page" dir="rtl">
 
-      {error && (
-        <div style={{ ...alertStyle, background: '#fee2e2', color: '#991b1b', marginBottom: 16 }}>
-          <AlertTriangle size={16} /> {error}
-        </div>
-      )}
+      {error && <PageAlert className="mb-4">{error}</PageAlert>}
 
       {creating && (
         <div style={cardStyle}>
@@ -176,13 +173,9 @@ export default function SolverSettingsPage({ onBack }) {
       )}
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>جاري التحميل...</div>
+        <LoadingState label="جاري تحميل إعدادات المجدول..." />
       ) : settings.length === 0 ? (
-        <div style={emptyStateStyle}>
-          <SettingsIcon size={48} color="#ccc" />
-          <h3>لا توجد إعدادات</h3>
-          <p>ابدأ بإنشاء إعدادات لكل نوع لجنة</p>
-        </div>
+        <EmptyState icon={SettingsIcon} title="لا توجد إعدادات" description="ابدأ بإنشاء إعدادات لكل نوع لجنة وفصل دراسي." />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 16 }}>
           {settings.map((s) => (
@@ -202,7 +195,7 @@ export default function SolverSettingsPage({ onBack }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                     <div>
                       <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{s.name}</h3>
-                      <div style={{ fontSize: '0.78rem', color: '#888', marginTop: 4 }}>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>
                         {s.committee_type_ar} · {s.semester}
                       </div>
                     </div>
@@ -226,8 +219,8 @@ export default function SolverSettingsPage({ onBack }) {
                   <div style={{ marginTop: 12 }}>
                     <span style={{
                       ...badgeStyle,
-                      background: s.is_active ? '#dcfce7' : '#fee2e2',
-                      color: s.is_active ? '#166534' : '#991b1b',
+                      background: s.is_active ? 'var(--success-bg)' : 'var(--danger-bg)',
+                      color: s.is_active ? 'var(--success-text)' : 'var(--danger-text)',
                     }}>
                       {s.is_active ? 'فعّالة' : 'معطّلة'}
                     </span>
@@ -247,7 +240,8 @@ export default function SolverSettingsPage({ onBack }) {
           color: '#fff', fontSize: 14, fontWeight: 600, zIndex: 9999,
         }}>{toast.msg}</div>
       )}
-    </div>
+      </div>
+    </PageShell>
   );
 }
 
@@ -300,7 +294,7 @@ function SettingsForm({ draft, setDraft, toggleWorkday }) {
               padding: '4px 8px', borderRadius: 6, fontSize: '0.78rem', cursor: 'pointer',
               background: draft.workdays.includes(w.value) ? '#ede9fe' : '#f1f5f9',
               color: draft.workdays.includes(w.value) ? '#7c3aed' : '#475569',
-              border: `1px solid ${draft.workdays.includes(w.value) ? '#c4b5fd' : '#cbd5e1'}`,
+              border: `1px solid ${draft.workdays.includes(w.value) ? 'var(--primary-border)' : 'var(--border)'}`,
             }}>
               <input type="checkbox" checked={draft.workdays.includes(w.value)} onChange={() => toggleWorkday(w.value)} style={{ margin: 0 }} />
               {w.label}
@@ -315,8 +309,8 @@ function SettingsForm({ draft, setDraft, toggleWorkday }) {
 function Field({ label, value }) {
   return (
     <div>
-      <div style={{ fontSize: '0.72rem', color: '#888', marginBottom: 2 }}>{label}</div>
-      <div style={{ fontWeight: 600, color: '#1e293b' }}>{value}</div>
+      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontWeight: 600, color: 'var(--text)' }}>{value}</div>
     </div>
   );
 }
@@ -324,18 +318,18 @@ function Field({ label, value }) {
 function FormField({ label, children }) {
   return (
     <div>
-      <label style={{ display: 'block', fontSize: '0.78rem', color: '#475569', marginBottom: 4, fontWeight: 600 }}>{label}</label>
+      <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 4, fontWeight: 600 }}>{label}</label>
       {children}
     </div>
   );
 }
 
 // ── Styles ──────────────────────────────────────────────────────────────────
-const btnPrimary = { padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#667eea', color: '#fff', fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 };
-const btnSecondary = { padding: '8px 16px', borderRadius: 8, border: '1px solid #cbd5e1', cursor: 'pointer', background: '#fff', color: '#475569', fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 };
-const btnIconSm = { padding: 6, borderRadius: 6, border: '1px solid #cbd5e1', cursor: 'pointer', background: '#fff', color: '#475569', display: 'inline-flex', alignItems: 'center' };
-const cardStyle = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20 };
-const alertStyle = { padding: '10px 14px', borderRadius: 8, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 8 };
-const badgeStyle = { padding: '2px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 600 };
-const inputStyle = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' };
-const emptyStateStyle = { textAlign: 'center', padding: 60, color: '#94a3b8' };
+const btnPrimary = { padding: '9px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--primary)', color: '#fff', fontSize: '0.85rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 };
+const btnSecondary = { padding: '9px 16px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--card)', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 };
+const btnIconSm = { padding: 7, borderRadius: 9, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--card)', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center' };
+const cardStyle = { background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)' };
+const alertStyle = { padding: '10px 14px', borderRadius: 10, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 8 };
+const badgeStyle = { padding: '2px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700 };
+const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text)', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' };
+const emptyStateStyle = { textAlign: 'center', padding: 60, color: 'var(--text-muted)' };

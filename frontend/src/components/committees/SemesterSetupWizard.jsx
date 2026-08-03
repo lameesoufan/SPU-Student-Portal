@@ -21,6 +21,7 @@ import {
   fetchRooms, fetchDoctors, semesterSetup, scheduleAll, scheduleApplyAll, scheduleRejectAll,
 } from '../../api';
 import { COMMITTEE_TYPES, COMMITTEE_TYPE_COLORS } from './constants';
+import { PageHeader, PageShell, secondaryButtonClass } from '../ui/PagePrimitives';
 
 const WEEKDAYS = [
   { value: 0, label: 'الإثنين' },
@@ -196,16 +197,15 @@ export default function SemesterSetupWizard({ onBack }) {
   };
 
   return (
-    <div className="wizard-page" dir="rtl" style={{ padding: 24, maxWidth: 1300, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: '1.7rem', fontWeight: 700, marginBottom: 4, display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Sparkles size={28} color="#667eea" /> معالج إعداد الفصل
-        </h1>
-        <p style={{ color: '#888', fontSize: '0.9rem' }}>
-          إعداد كامل للفصل الدراسي في تدفّق واحد — إعدادات + توزيع + جدولة + تطبيق
-        </p>
-      </div>
+    <PageShell maxWidth="max-w-[1300px]">
+      <PageHeader
+        icon={Sparkles}
+        title="معالج إعداد الفصل"
+        description="أكمل إعداد الفصل والقاعات والتوزيع والجدولة ضمن خطوات واضحة ومتتابعة."
+        badge={`الخطوة ${step} من ${STEPS.length}`}
+        actions={onBack ? <button type="button" onClick={onBack} className={secondaryButtonClass}>رجوع</button> : null}
+      />
+      <div className="wizard-page" dir="rtl">
 
       {/* Stepper */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 30, padding: '0 20px' }}>
@@ -222,23 +222,23 @@ export default function SemesterSetupWizard({ onBack }) {
                 <div style={{
                   width: 44, height: 44, borderRadius: '50%',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: isActive ? '#667eea' : isComplete ? '#10b981' : '#f1f5f9',
-                  color: isActive || isComplete ? '#fff' : '#94a3b8',
-                  border: `2px solid ${isActive ? '#667eea' : isComplete ? '#10b981' : '#cbd5e1'}`,
+                  background: isActive ? 'var(--primary)' : isComplete ? 'var(--success)' : 'var(--bg-tertiary)',
+                  color: isActive || isComplete ? '#fff' : 'var(--text-faint)',
+                  border: `2px solid ${isActive ? 'var(--primary)' : isComplete ? 'var(--success)' : 'var(--border)'}`,
                   transition: 'all 0.2s',
                 }}>
                   {isComplete ? <Check size={18} /> : <Icon size={18} />}
                 </div>
                 <span style={{
                   fontSize: '0.78rem', fontWeight: 600,
-                  color: isActive ? '#667eea' : isComplete ? '#10b981' : '#94a3b8',
+                  color: isActive ? 'var(--primary)' : isComplete ? 'var(--success-text)' : 'var(--text-faint)',
                   textAlign: 'center', maxWidth: 100,
                 }}>{s.label}</span>
               </div>
               {i < STEPS.length - 1 && (
                 <div style={{
                   flex: 1, height: 2, marginTop: 22, marginLeft: 8, marginRight: 8,
-                  background: step > s.id ? '#10b981' : '#e2e8f0',
+                  background: step > s.id ? 'var(--success)' : 'var(--border)',
                 }} />
               )}
             </React.Fragment>
@@ -247,7 +247,7 @@ export default function SemesterSetupWizard({ onBack }) {
       </div>
 
       {/* Step content */}
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 28, minHeight: 400 }}>
+      <div style={{ background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, minHeight: 400, boxShadow: 'var(--shadow-sm)' }}>
 
         {/* ── Step 1: Semester + Rooms ── */}
         {step === 1 && (
@@ -326,7 +326,8 @@ export default function SemesterSetupWizard({ onBack }) {
           boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
         }}>{toast.msg}</div>
       )}
-    </div>
+      </div>
+    </PageShell>
   );
 }
 
@@ -337,7 +338,7 @@ function Step1SemesterRooms({ form, setField, rooms, toggleRoom }) {
   return (
     <div>
       <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Calendar size={20} color="#667eea" /> بيانات الفصل + القاعات
+        <Calendar size={20} color="var(--primary)" /> بيانات الفصل + القاعات
       </h2>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
@@ -359,7 +360,7 @@ function Step1SemesterRooms({ form, setField, rooms, toggleRoom }) {
       </div>
 
       <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <DoorClosed size={18} color="#667eea" /> القاعات ({form.room_ids.length} مختارة)
+        <DoorClosed size={18} color="var(--primary)" /> القاعات ({form.room_ids.length} مختارة)
       </h3>
       {rooms.length === 0 ? (
         <div style={emptyStyle}>
@@ -373,9 +374,9 @@ function Step1SemesterRooms({ form, setField, rooms, toggleRoom }) {
             return (
               <button key={r.id} onClick={() => toggleRoom(r.id)} style={{
                 padding: '14px 16px', borderRadius: 10, cursor: 'pointer',
-                border: `1.5px solid ${selected ? '#667eea' : '#cbd5e1'}`,
-                background: selected ? '#ede9fe' : '#fff',
-                color: selected ? '#667eea' : '#475569',
+                border: `1.5px solid ${selected ? 'var(--primary)' : 'var(--border)'}`,
+                background: selected ? 'var(--primary-light)' : 'var(--bg-input)',
+                color: selected ? 'var(--primary)' : 'var(--text-secondary)',
                 fontSize: '0.88rem', fontWeight: 600,
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 transition: 'all 0.2s',
@@ -391,9 +392,9 @@ function Step1SemesterRooms({ form, setField, rooms, toggleRoom }) {
       {/* Scheduling Mode Selection */}
       <div style={{ marginTop: 24 }}>
         <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Layers size={18} color="#667eea" /> طريقة التوزيع
+          <Layers size={18} color="var(--primary)" /> طريقة التوزيع
         </h3>
-        <p style={{ fontSize: '0.82rem', color: '#888', marginBottom: 12 }}>
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: 12 }}>
           هل نفس اللجنة تقيّم المشروع في كل الأنواع الأربعة، أم لجان مختلفة لكل نوع؟
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -401,9 +402,9 @@ function Step1SemesterRooms({ form, setField, rooms, toggleRoom }) {
             onClick={() => setField('scheduling_mode', 'single')}
             style={{
               padding: 14, borderRadius: 10, cursor: 'pointer',
-              border: `2px solid ${form.scheduling_mode === 'single' ? '#667eea' : '#cbd5e1'}`,
-              background: form.scheduling_mode === 'single' ? '#ede9fe' : '#fff',
-              color: form.scheduling_mode === 'single' ? '#667eea' : '#475569',
+              border: `2px solid ${form.scheduling_mode === 'single' ? 'var(--primary)' : 'var(--border)'}`,
+              background: form.scheduling_mode === 'single' ? 'var(--primary-light)' : 'var(--bg-input)',
+              color: form.scheduling_mode === 'single' ? 'var(--primary)' : 'var(--text-secondary)',
               fontSize: '0.85rem', fontWeight: 600, textAlign: 'right',
             }}
           >
@@ -416,9 +417,9 @@ function Step1SemesterRooms({ form, setField, rooms, toggleRoom }) {
             onClick={() => setField('scheduling_mode', 'multi')}
             style={{
               padding: 14, borderRadius: 10, cursor: 'pointer',
-              border: `2px solid ${form.scheduling_mode === 'multi' ? '#667eea' : '#cbd5e1'}`,
-              background: form.scheduling_mode === 'multi' ? '#ede9fe' : '#fff',
-              color: form.scheduling_mode === 'multi' ? '#667eea' : '#475569',
+              border: `2px solid ${form.scheduling_mode === 'multi' ? 'var(--primary)' : 'var(--border)'}`,
+              background: form.scheduling_mode === 'multi' ? 'var(--primary-light)' : 'var(--bg-input)',
+              color: form.scheduling_mode === 'multi' ? 'var(--primary)' : 'var(--text-secondary)',
               fontSize: '0.85rem', fontWeight: 600, textAlign: 'right',
             }}
           >
@@ -442,7 +443,7 @@ function Step2DateRange({ form, setField, toggleWorkday, WEEKDAYS }) {
   return (
     <div>
       <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Clock size={20} color="#667eea" /> نطاق التواريخ وأيام العمل
+        <Clock size={20} color="var(--primary)" /> نطاق التواريخ وأيام العمل
       </h2>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
@@ -457,7 +458,7 @@ function Step2DateRange({ form, setField, toggleWorkday, WEEKDAYS }) {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="time" value={form.daily_start}
               onChange={(e) => setField('daily_start', e.target.value)} style={inputStyle} />
-            <span style={{ color: '#888' }}>-</span>
+            <span style={{ color: 'var(--text-muted)' }}>-</span>
             <input type="time" value={form.daily_end}
               onChange={(e) => setField('daily_end', e.target.value)} style={inputStyle} />
           </div>
@@ -497,9 +498,9 @@ function Step2DateRange({ form, setField, toggleWorkday, WEEKDAYS }) {
             return (
               <button key={w.value} onClick={() => toggleWorkday(w.value)} style={{
                 padding: '10px 18px', borderRadius: 8, cursor: 'pointer',
-                border: `1.5px solid ${selected ? '#667eea' : '#cbd5e1'}`,
-                background: selected ? '#667eea' : '#fff',
-                color: selected ? '#fff' : '#475569',
+                border: `1.5px solid ${selected ? 'var(--primary)' : 'var(--border)'}`,
+                background: selected ? 'var(--primary)' : 'var(--bg-input)',
+                color: selected ? '#fff' : 'var(--text-secondary)',
                 fontSize: '0.85rem', fontWeight: 600,
               }}>
                 {selected ? '✓ ' : ''}{w.label}
@@ -536,9 +537,9 @@ function Step2DateRange({ form, setField, toggleWorkday, WEEKDAYS }) {
 function Step3Setup({ form, setupResult, busy, onRun }) {
   return (
     <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-      <SettingsIcon size={56} color="#667eea" style={{ marginBottom: 16 }} />
+      <SettingsIcon size={56} color="var(--primary)" style={{ marginBottom: 16 }} />
       <h2 style={{ marginTop: 0, marginBottom: 8 }}>جاهز للإعداد</h2>
-      <p style={{ color: '#888', marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
+      <p style={{ color: 'var(--text-muted)', marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
         سيتم إنشاء 4 SolverSettings (أسابيع متتالية) + توزيع المشاريع على التشكيلات الموجودة.
       </p>
 
@@ -548,11 +549,11 @@ function Step3Setup({ form, setupResult, busy, onRun }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: '0.88rem' }}>
             <Stat label="إعدادات منشأة" value={setupResult.settings_created} color="#10b981" />
             <Stat label="إعدادات محدّثة" value={setupResult.settings_updated} color="#3b82f6" />
-            <Stat label="قاعات مختارة" value={setupResult.rooms_selected} color="#667eea" />
+            <Stat label="قاعات مختارة" value={setupResult.rooms_selected} color="var(--primary)" />
             <Stat label="إجمالي اللجان" value={setupResult.committees_total} color="#f59e0b" />
           </div>
           {setupResult.distribution && (
-            <div style={{ marginTop: 12, fontSize: '0.82rem', color: '#475569' }}>
+            <div style={{ marginTop: 12, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
               <strong>توزيع:</strong> {setupResult.distribution.distributed_projects} مشروع موزَّع
               {setupResult.distribution.single_mode_committees_created > 0 && (
                 <span> · {setupResult.distribution.single_mode_committees_created} لجنة من وضع single</span>
@@ -575,9 +576,9 @@ function Step3Setup({ form, setupResult, busy, onRun }) {
 function Step4ScheduleAll({ form, setupResult, scheduleResult, busy, onRun }) {
   return (
     <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-      <Layers size={56} color="#667eea" style={{ marginBottom: 16 }} />
+      <Layers size={56} color="var(--primary)" style={{ marginBottom: 16 }} />
       <h2 style={{ marginTop: 0, marginBottom: 8 }}>جدولة كل الأنواع دفعة واحدة</h2>
-      <p style={{ color: '#888', marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
+      <p style={{ color: 'var(--text-muted)', marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
         سيتم تشغيل CP-SAT لكل من الأنواع الأربعة بالتسلسل.
         قد يستغرق هذا عدة ثوانٍ إلى دقائق حسب حجم البيانات.
       </p>
@@ -587,7 +588,7 @@ function Step4ScheduleAll({ form, setupResult, scheduleResult, busy, onRun }) {
           <h4 style={{ marginTop: 0, marginBottom: 10 }}>اللجان الجاهزة للجدولة:</h4>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: '0.85rem' }}>
             {Object.entries(setupResult.committees_per_type || {}).map(([type, count]) => (
-              <div key={type} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: '#f8fafc', borderRadius: 6 }}>
+              <div key={type} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--bg-tertiary)', borderRadius: 6 }}>
                 <span>{COMMITTEE_TYPE_COLORS[type] ? type.replace('_', ' ') : type}</span>
                 <strong>{count} لجنة</strong>
               </div>
@@ -617,7 +618,7 @@ function Step5PreviewApply({ scheduleResult, busy, onApplyAll, onRejectAll, onBa
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
         <StatBox icon={<Calendar size={16} />} label="اللجان المجدولة" value={summary.scheduled_committees || 0} color="#10b981" />
-        <StatBox icon={<Layers size={16} />} label="أنواع ناجحة" value={`${summary.types_succeeded || 0}/${(summary.types_succeeded || 0) + (summary.types_failed || 0)}`} color="#667eea" />
+        <StatBox icon={<Layers size={16} />} label="أنواع ناجحة" value={`${summary.types_succeeded || 0}/${(summary.types_succeeded || 0) + (summary.types_failed || 0)}`} color="var(--primary)" />
         <StatBox icon={<Clock size={16} />} label="زمن الحل الكلي" value={`${(summary.total_wall_time || 0).toFixed(2)}ث`} color="#f59e0b" />
         <StatBox icon={<DoorClosed size={16} />} label="أيام/قاعات" value={`${summary.days_used || 0}ي / ${summary.rooms_used || 0}ق`} color="#8b5cf6" />
       </div>
@@ -642,7 +643,7 @@ function Step5PreviewApply({ scheduleResult, busy, onApplyAll, onRejectAll, onBa
                   <span style={{ marginRight: 8, color: '#ef4444', fontSize: '0.78rem' }}>❌ فشل</span>
                 )}
               </div>
-              <span style={{ fontSize: '0.78rem', color: '#888' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                 {r.committees_count !== undefined ? `${r.committees_count} لجنة متاحة` : ''}
               </span>
             </div>
@@ -700,7 +701,7 @@ function Step5PreviewApply({ scheduleResult, busy, onApplyAll, onRejectAll, onBa
 // ═══════════════════════════════════════════════════════════════════════════
 function UnifiedGantt({ assignments }) {
   if (!assignments || assignments.length === 0) {
-    return <div style={{ textAlign: 'center', padding: 20, color: '#888' }}>لا توجد لجان مُجدوَلة</div>;
+    return <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>لا توجد لجان مُجدوَلة</div>;
   }
 
   // Group by date, then by room
@@ -739,15 +740,15 @@ function UnifiedGantt({ assignments }) {
         const d = new Date(date);
         const dateLabel = d.toLocaleDateString('ar-IQ', { weekday: 'long', day: 'numeric', month: 'short' });
         return (
-          <div key={date} style={{ marginBottom: 16, border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ background: '#f1f5f9', padding: '8px 14px', fontWeight: 700, fontSize: '0.88rem' }}>
+          <div key={date} style={{ marginBottom: 16, border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ background: 'var(--bg-tertiary)', padding: '8px 14px', fontWeight: 700, fontSize: '0.88rem' }}>
               📅 {dateLabel}
             </div>
             {allRooms.map((roomName) => {
               const roomAssignments = (roomsData[roomName] || []).sort((a, b) => a.start_time.localeCompare(b.start_time));
               return (
                 <div key={roomName} style={{ display: 'flex', borderBottom: '1px solid #f1f5f9' }}>
-                  <div style={{ width: 120, padding: '10px 14px', fontSize: '0.82rem', fontWeight: 600, color: '#475569', background: '#fafbfc' }}>
+                  <div style={{ width: 120, padding: '10px 14px', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', background: '#fafbfc' }}>
                     🚪 {roomName}
                   </div>
                   <div style={{ flex: 1, position: 'relative', height: 50, background: '#fafbfc' }}>
@@ -798,8 +799,8 @@ function UnifiedGantt({ assignments }) {
 // ═══════════════════════════════════════════════════════════════════════════
 function Stat({ label, value, color = '#475569' }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: '#f8fafc', borderRadius: 6 }}>
-      <span style={{ color: '#475569' }}>{label}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--bg-tertiary)', borderRadius: 6 }}>
+      <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
       <strong style={{ color }}>{value}</strong>
     </div>
   );
@@ -807,24 +808,24 @@ function Stat({ label, value, color = '#475569' }) {
 
 function StatBox({ icon, label, value, color }) {
   return (
-    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
       <div style={{ width: 36, height: 36, borderRadius: 8, background: `${color}20`, color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {icon}
       </div>
       <div>
-        <div style={{ fontSize: '0.72rem', color: '#888' }}>{label}</div>
-        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>{value}</div>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{label}</div>
+        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text)' }}>{value}</div>
       </div>
     </div>
   );
 }
 
 // ── Styles ──────────────────────────────────────────────────────────────────
-const btnPrimary = { padding: '10px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#667eea', color: '#fff', fontSize: '0.9rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 };
-const btnSecondary = { padding: '10px 18px', borderRadius: 8, border: '1px solid #cbd5e1', cursor: 'pointer', background: '#fff', color: '#475569', fontSize: '0.9rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 };
-const btnSuccess = { padding: '10px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#10b981', color: '#fff', fontSize: '0.9rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 };
-const labelStyle = { display: 'block', fontSize: '0.82rem', color: '#475569', marginBottom: 4, fontWeight: 600 };
-const inputStyle = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' };
-const hintStyle = { display: 'block', fontSize: '0.75rem', color: '#888', marginTop: 4 };
-const cardStyle = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 16 };
-const emptyStyle = { textAlign: 'center', padding: 40, color: '#94a3b8' };
+const btnPrimary = { padding: '10px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--primary)', color: '#fff', fontSize: '0.9rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 };
+const btnSecondary = { padding: '10px 18px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--card)', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 };
+const btnSuccess = { padding: '10px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--success)', color: '#fff', fontSize: '0.9rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 };
+const labelStyle = { display: 'block', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 700 };
+const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text)', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' };
+const hintStyle = { display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 };
+const cardStyle = { background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, boxShadow: 'var(--shadow-sm)' };
+const emptyStyle = { textAlign: 'center', padding: 40, color: 'var(--text-muted)' };

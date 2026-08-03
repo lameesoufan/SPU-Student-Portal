@@ -19,6 +19,7 @@ import {
   schedulePreview, scheduleApply, scheduleReject, fetchSchedulingRuns,
 } from '../../api';
 import { COMMITTEE_TYPES, COMMITTEE_TYPE_COLORS } from './constants';
+import { PageHeader, PageShell, secondaryButtonClass } from '../ui/PagePrimitives';
 
 const WEEKDAYS = [
   { value: 0, label: 'الإثنين' },
@@ -151,16 +152,15 @@ export default function SchedulePage({ onBack }) {
   };
 
   return (
-    <div className="schedule-page" dir="rtl" style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 700, marginBottom: 4, display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Calendar size={26} color="#667eea" /> جدولة اللجان
-        </h1>
-        <p style={{ color: '#888', fontSize: '0.9rem' }}>
-          اختر نوع اللجنة + حدد النطاق + اضغط معاينة — الخوارزمية تحسب الأيام والقاعات تلقائياً
-        </p>
-      </div>
+    <PageShell maxWidth="max-w-[1400px]">
+      <PageHeader
+        icon={Calendar}
+        title="جدولة اللجان"
+        description="اختر نوع اللجنة والفصل والنطاق الزمني، ثم أنشئ معاينة قبل تطبيق الجدول."
+        badge={`${runs.length} عمليات`}
+        actions={onBack ? <button type="button" onClick={onBack} className={secondaryButtonClass}>رجوع</button> : null}
+      />
+      <div className="schedule-page" dir="rtl">
 
       {/* Simplified form */}
       <div style={{ ...cardStyle, marginBottom: 20 }}>
@@ -218,9 +218,9 @@ export default function SchedulePage({ onBack }) {
               return (
                 <button key={w.value} onClick={() => toggleWorkday(w.value)} style={{
                   padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
-                  border: `1.5px solid ${selected ? '#667eea' : '#cbd5e1'}`,
-                  background: selected ? '#667eea' : '#fff',
-                  color: selected ? '#fff' : '#475569',
+                  border: `1.5px solid ${selected ? 'var(--primary)' : 'var(--border)'}`,
+                  background: selected ? 'var(--primary)' : 'var(--bg-input)',
+                  color: selected ? '#fff' : 'var(--text-secondary)',
                   fontSize: '0.82rem', fontWeight: 600,
                 }}>
                   {selected ? '✓ ' : ''}{w.label}
@@ -244,7 +244,7 @@ export default function SchedulePage({ onBack }) {
         </div>
 
         {/* Hint */}
-        <div style={{ marginTop: 16, padding: 12, background: '#eff6ff', borderRadius: 8, fontSize: '0.82rem', color: '#1e40af', display: 'flex', gap: 8 }}>
+        <div style={{ marginTop: 16, padding: 12, background: 'var(--info-bg)', borderRadius: 8, fontSize: '0.82rem', color: 'var(--info-text)', display: 'flex', gap: 8 }}>
           <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
             <strong>ملاحظة:</strong> كل القاعات المدخلة في النظام تُستخدم تلقائياً. الخوارزمية تحاول تقليل عدد القاعات المستخدمة (مثلاً 5 لجان → 5 قاعات). مدة كل لجنة = (عدد مشاريعها × مدة المناقشة) + الفاصل.
@@ -261,7 +261,7 @@ export default function SchedulePage({ onBack }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>✅ معاينة جاهزة</h3>
-                  <div style={{ fontSize: '0.82rem', color: '#888', marginTop: 4 }}>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 4 }}>
                     {previewResult.solver_status} · {previewResult.wall_time?.toFixed(2)} ثانية · run #{previewResult.run_id}
                   </div>
                 </div>
@@ -275,8 +275,8 @@ export default function SchedulePage({ onBack }) {
 
               {/* Stats */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
-                <StatBox icon={<Calendar size={16} />} label="اللجان المجدولة" value={previewResult.summary_stats?.scheduled_committees || 0} color="#667eea" />
-                <StatBox icon={<Calendar size={16} />} label="الأيام المستخدمة" value={`${previewResult.summary_stats?.days_used || 0}/${previewResult.summary_stats?.total_days_available || 0}`} color="#10b981" />
+                <StatBox icon={<Calendar size={16} />} label="اللجان المجدولة" value={previewResult.summary_stats?.scheduled_committees || 0} color="var(--primary)" />
+                <StatBox icon={<Calendar size={16} />} label="الأيام المستخدمة" value={`${previewResult.summary_stats?.days_used || 0}/${previewResult.summary_stats?.total_days_available || 0}`} color="var(--success)" />
                 <StatBox icon={<DoorClosed size={16} />} label="القاعات المستخدمة" value={`${previewResult.summary_stats?.rooms_used || 0}/${previewResult.summary_stats?.total_rooms_available || 0}`} color="#f59e0b" />
                 <StatBox icon={<Clock size={16} />} label="زمن الحل" value={`${(previewResult.wall_time || 0).toFixed(2)}ث`} color="#8b5cf6" />
               </div>
@@ -285,7 +285,7 @@ export default function SchedulePage({ onBack }) {
               {previewResult.warnings?.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   {previewResult.warnings.map((w, i) => (
-                    <div key={i} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', marginBottom: 6, fontSize: '0.82rem', color: '#1e40af', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                    <div key={i} style={{ background: 'var(--info-bg)', border: '1px solid var(--info-border)', borderRadius: 8, padding: '8px 12px', marginBottom: 6, fontSize: '0.82rem', color: 'var(--info-text)', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
                       <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
                       <span>{w.message_ar}</span>
                     </div>
@@ -319,9 +319,9 @@ export default function SchedulePage({ onBack }) {
           <button onClick={loadRuns} disabled={loadingRuns} style={btnSecondary}><RefreshCw size={13} /> تحديث</button>
         </div>
         {loadingRuns ? (
-          <div style={{ textAlign: 'center', padding: 20, color: '#888' }}>جاري التحميل...</div>
+          <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>جاري التحميل...</div>
         ) : runs.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 20, color: '#888', fontSize: '0.85rem' }}>لا توجد عمليات سابقة</div>
+          <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد عمليات سابقة</div>
         ) : (
           <table style={tableStyle}>
             <thead>
@@ -351,12 +351,12 @@ export default function SchedulePage({ onBack }) {
                   </tr>
                   {expandedRunId === r.id && (
                     <tr>
-                      <td colSpan={9} style={{ padding: 16, background: '#f8fafc' }}>
+                      <td colSpan={9} style={{ padding: 16, background: 'var(--bg-tertiary)' }}>
                         {r.status === 'failed' && r.infeasibility_report?.length > 0 ? (
                           <InfeasibilityReport report={r.infeasibility_report} />
                         ) : r.plan_json?.assignments?.length ? (
                           <>
-                            <div style={{ marginBottom: 12, fontSize: '0.85rem', color: '#475569' }}>
+                            <div style={{ marginBottom: 12, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                               <strong>{r.plan_json.assignments.length}</strong> لجنة مُجدوَلة ·
                               أيام: {r.summary_stats?.days_used}/{r.summary_stats?.total_days_available} ·
                               قاعات: {r.summary_stats?.rooms_used}/{r.summary_stats?.total_rooms_available}
@@ -364,7 +364,7 @@ export default function SchedulePage({ onBack }) {
                             <AssignmentsTable assignments={r.plan_json.assignments} />
                           </>
                         ) : (
-                          <div style={{ fontSize: '0.85rem', color: '#888' }}>لا توجد تفاصيل</div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>لا توجد تفاصيل</div>
                         )}
                       </td>
                     </tr>
@@ -386,14 +386,15 @@ export default function SchedulePage({ onBack }) {
           boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
         }}>{toast.msg}</div>
       )}
-    </div>
+      </div>
+    </PageShell>
   );
 }
 
 // ── Gantt Chart ──────────────────────────────────────────────────────────────
 function GanttChart({ plan }) {
   const assignments = plan?.assignments || [];
-  if (assignments.length === 0) return <div style={{ textAlign: 'center', padding: 20, color: '#888' }}>لا توجد لجان مُجدوَلة</div>;
+  if (assignments.length === 0) return <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>لا توجد لجان مُجدوَلة</div>;
 
   const byDate = {};
   assignments.forEach((a) => {
@@ -414,13 +415,13 @@ function GanttChart({ plan }) {
         const d = new Date(date);
         const dateLabel = d.toLocaleDateString('ar-IQ', { weekday: 'long', day: 'numeric', month: 'short' });
         return (
-          <div key={date} style={{ marginBottom: 20, border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ background: '#f1f5f9', padding: '8px 14px', fontWeight: 700, fontSize: '0.88rem' }}>📅 {dateLabel}</div>
+          <div key={date} style={{ marginBottom: 20, border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ background: 'var(--bg-tertiary)', padding: '8px 14px', fontWeight: 700, fontSize: '0.88rem' }}>📅 {dateLabel}</div>
             {allRooms.map((roomName) => {
               const roomAssignments = (roomsData[roomName] || []).sort((a, b) => a.start_time.localeCompare(b.start_time));
               return (
-                <div key={roomName} style={{ display: 'flex', borderBottom: '1px solid #f1f5f9' }}>
-                  <div style={{ width: 120, padding: '10px 14px', fontSize: '0.82rem', fontWeight: 600, color: '#475569', background: '#fafbfc' }}>🚪 {roomName}</div>
+                <div key={roomName} style={{ display: 'flex', borderBottom: '1px solid var(--border-light)' }}>
+                  <div style={{ width: 120, padding: '10px 14px', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', background: '#fafbfc' }}>🚪 {roomName}</div>
                   <div style={{ flex: 1, position: 'relative', height: 50, background: '#fafbfc' }}>
                     {Array.from({ length: Math.ceil(daySpan / 60) + 1 }).map((_, i) => {
                       const hour = Math.floor(minMin / 60) + i;
@@ -497,7 +498,7 @@ function AssignmentsTable({ assignments }) {
 
 // ── Infeasibility Report ─────────────────────────────────────────────────────
 function InfeasibilityReport({ report }) {
-  if (!report || report.length === 0) return <div style={{ padding: 14, color: '#888', fontSize: '0.85rem' }}>لا توجد تفاصيل عن سبب الفشل</div>;
+  if (!report || report.length === 0) return <div style={{ padding: 14, color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد تفاصيل عن سبب الفشل</div>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {report.map((r, i) => {
@@ -517,11 +518,11 @@ function InfeasibilityReport({ report }) {
             {/* Render conflict details as cards if available */}
             {r.conflict_details && r.conflict_details.length > 0 ? (
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: '0.85rem', color: '#1e293b', marginBottom: 8 }}>{r.message_ar.split('\n')[0]}</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text)', marginBottom: 8 }}>{r.message_ar.split('\n')[0]}</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {r.conflict_details.map((cd, j) => (
-                    <div key={j} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: 10 }}>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e293b', marginBottom: 6 }}>
+                    <div key={j} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, padding: 10 }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
                         لجنة #{cd.committee_id}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -533,7 +534,7 @@ function InfeasibilityReport({ report }) {
                           const isUnavailable = days === 'لا يوجد' || days === '';
                           return (
                             <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem' }}>
-                              <span style={{ fontWeight: 500, color: '#475569', minWidth: 120 }}>{name}</span>
+                              <span style={{ fontWeight: 500, color: 'var(--text-secondary)', minWidth: 120 }}>{name}</span>
                               <span style={{ color: isUnavailable ? '#dc2626' : '#0369a1' }}>
                                 {isUnavailable ? 'غير متاح إطلاقاً' : `متاح: ${days}`}
                               </span>
@@ -546,10 +547,10 @@ function InfeasibilityReport({ report }) {
                 </div>
               </div>
             ) : (
-              <div style={{ fontSize: '0.85rem', color: '#1e293b', marginBottom: r.suggestions_ar?.length ? 8 : 0, whiteSpace: 'pre-line' }}>{r.message_ar}</div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text)', marginBottom: r.suggestions_ar?.length ? 8 : 0, whiteSpace: 'pre-line' }}>{r.message_ar}</div>
             )}
             {r.suggestions_ar?.length > 0 && (
-              <div style={{ fontSize: '0.78rem', color: '#475569' }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                 <strong>اقتراحات:</strong>
                 <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
                   {r.suggestions_ar.map((s, j) => <li key={j}>{s}</li>)}
@@ -565,8 +566,8 @@ function InfeasibilityReport({ report }) {
 
 function StatusBadge({ status }) {
   const map = {
-    pending: { bg: '#f1f5f9', color: '#475569', label: 'معلّق' },
-    preview: { bg: '#dbeafe', color: '#1e40af', label: 'معاينة' },
+    pending: { bg: '#f1f5f9', color: 'var(--text-secondary)', label: 'معلّق' },
+    preview: { bg: '#dbeafe', color: 'var(--info-text)', label: 'معاينة' },
     applied: { bg: '#dcfce7', color: '#166534', label: 'مُطبَّق' },
     rejected: { bg: '#fee2e2', color: '#991b1b', label: 'مرفوض' },
     failed: { bg: '#fef2f2', color: '#991b1b', label: 'فشل' },
@@ -577,24 +578,24 @@ function StatusBadge({ status }) {
 
 function StatBox({ icon, label, value, color }) {
   return (
-    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
       <div style={{ width: 36, height: 36, borderRadius: 8, background: `${color}20`, color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
       <div>
-        <div style={{ fontSize: '0.72rem', color: '#888' }}>{label}</div>
-        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>{value}</div>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{label}</div>
+        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text)' }}>{value}</div>
       </div>
     </div>
   );
 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────
-const cardStyle = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20 };
-const btnPrimary = { padding: '10px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#667eea', color: '#fff', fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 };
-const btnSecondary = { padding: '10px 18px', borderRadius: 8, border: '1px solid #cbd5e1', cursor: 'pointer', background: '#fff', color: '#475569', fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 };
-const btnSuccess = { padding: '10px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#10b981', color: '#fff', fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 };
-const btnIconSm = { padding: 6, borderRadius: 6, border: '1px solid #cbd5e1', cursor: 'pointer', background: '#fff', color: '#475569', display: 'inline-flex', alignItems: 'center' };
-const labelStyle = { display: 'block', fontSize: '0.78rem', color: '#475569', marginBottom: 4, fontWeight: 600 };
-const inputStyle = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' };
-const tableStyle = { width: '100%', borderCollapse: 'collapse', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', fontSize: '0.85rem' };
-const thStyle = { padding: '10px 12px', textAlign: 'right', fontSize: '0.75rem', fontWeight: 700, color: '#475569', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' };
-const tdStyle = { padding: '10px 12px', fontSize: '0.83rem', color: '#1e293b', borderBottom: '1px solid #f1f5f9' };
+const cardStyle = { background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)' };
+const btnPrimary = { padding: '10px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--primary)', color: '#fff', fontSize: '0.85rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 };
+const btnSecondary = { padding: '10px 18px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--card)', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 };
+const btnSuccess = { padding: '10px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--success)', color: '#fff', fontSize: '0.85rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 };
+const btnIconSm = { padding: 7, borderRadius: 9, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--card)', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center' };
+const labelStyle = { display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 700 };
+const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text)', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' };
+const tableStyle = { width: '100%', borderCollapse: 'collapse', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', fontSize: '0.85rem' };
+const thStyle = { padding: '10px 12px', textAlign: 'right', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border)' };
+const tdStyle = { padding: '10px 12px', fontSize: '0.83rem', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-light)' };

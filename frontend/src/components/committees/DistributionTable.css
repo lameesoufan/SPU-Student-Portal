@@ -548,3 +548,25 @@
 }
 .cdt-toast.is-success { background: rgba(16, 185, 129, 0.95); }
 .cdt-toast.is-error   { background: rgba(239, 68, 68, 0.95); }
+
+/* Visual alignment with the shared dashboard pages */
+.cdt-header {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.cdt-stats { gap: 12px; }
+.cdt-stat { border-radius: 14px; padding: 14px; }
+.cdt-toolbar,
+.cdt-filters,
+.cdt-table-wrap { border-radius: 16px; }
+.cdt-btn-success {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+.cdt-btn-success:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: 0 6px 16px var(--primary-shadow);
+}

@@ -419,7 +419,7 @@ usePolling(async () => {
             </div>
             <div className="std-stat-info">
               <span className="std-stat-title">الدور</span>
-              <span className="std-stat-value std-text-green">Head of Dept</span>
+              <span className="std-stat-value std-text-green">رئيس القسم</span>
             </div>
           </div>
           <div className="std-stat-card">
@@ -537,7 +537,7 @@ usePolling(async () => {
       onMarkRead={handleMarkRead}
       user={user}
       onLogout={handleLogout}
-      roleLabel="Head of Dept"
+      roleLabel="رئيس القسم"
     >
       {renderContent()}
     </DashboardLayout>
