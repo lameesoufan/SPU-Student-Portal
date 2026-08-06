@@ -1,4 +1,4 @@
-# ═══ Python ═══
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
@@ -9,7 +9,7 @@ dist/
 build/
 *.egg
 
-# ═══ Django ═══
+# Django
 *.sqlite3
 *.log
 local_settings.py
@@ -17,46 +17,49 @@ media/
 db.sqlite3
 db.sqlite3-journal
 
-# ═══ Virtual Environment ═══
+# Virtual environments
 venv/
 env/
 .venv/
 ENV/
 
-# ═══ Node / React / Frontend ═══
-# ═══ Node / React / Frontend ═══
+# Node / React
 frontend/node_modules/
 frontend/build/
 frontend/dist/
 frontend/.cache/
 frontend/coverage/
+node_modules/
 
-# ═══ npm / yarn ═══
-package-lock.json
-yarn.lock
-.yarn/
+# Package-manager logs and generated locks
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# ═══ Environment Variables ═══
+# Environment variables and secrets
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.production
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
 
-# ═══ Testing & Coverage ═══
+# Testing and coverage
+.coverage
 coverage/
+htmlcov/
 *.lcov
 .nyc_output/
+.pytest_cache/
 
-# ═══ OS Files ═══
+# OS files
 .DS_Store
-.DS_Store?
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# ═══ IDE / Editor ═══
+# IDE / editor
 .vscode/
 .idea/
 *.swp
@@ -66,14 +69,10 @@ Desktop.ini
 .classpath
 .settings/
 
-# ═══ GitLab / GitHub ═══
+# CI local metadata
 .gitlab/
 
-# ═══ Misc ═══
+# Miscellaneous
 *.bak
 *.tmp
 *.temp
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*.env

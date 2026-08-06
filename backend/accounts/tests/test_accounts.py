@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import requests
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import check_password
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
@@ -11,8 +12,9 @@ from django.test import TestCase
 from openpyxl import Workbook
 from rest_framework.test import APIClient
 
-from .services import assign_hod, lookup_student_in_reference
-from .throttles import LoginRateThrottle, RegisterRateThrottle
+from accounts.models import StudentReference
+from accounts.services import assign_hod, lookup_student_in_reference
+from accounts.throttles import LoginRateThrottle, RegisterRateThrottle
 
 User = get_user_model()
 
@@ -49,6 +51,22 @@ class AccountsImportTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['users'][0]['username'], '20240001')
         self.assertNotIn('password', response.data['users'][0])
+
+    def test_reference_upload_hashes_default_university_id_password(self):
+        upload = SimpleUploadedFile(
+            'students.csv',
+            b'university_id,full_name,email,password\n20245555,Student Five,student5@example.com,\n',
+            content_type='text/csv',
+        )
+
+        response = self.client.post(
+            '/api/upload-reference/', {'file': upload}, format='multipart'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        reference = StudentReference.objects.get(university_id='20245555')
+        self.assertNotEqual(reference.password, '20245555')
+        self.assertTrue(check_password('20245555', reference.password))
 
     def test_import_rejects_invalid_file_extension(self):
         upload = SimpleUploadedFile('students.txt', b'not-an-excel', content_type='text/plain')

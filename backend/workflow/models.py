@@ -71,9 +71,18 @@ class WorkflowStage(models.Model):
     trigger_type = models.CharField(max_length=20, choices=TRIGGER_TYPES)
     trigger_days = models.PositiveIntegerField(null=True, blank=True, help_text='Days after project start')
     trigger_date = models.DateField(null=True, blank=True, help_text='Specific date')
+    end_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text='Optional date when the stage closes automatically',
+    )
     notify_before_days = models.PositiveIntegerField(default=3, help_text='Notify students X days before due')
-    end_date = models.DateField(null=True, blank=True, help_text='Optional date when the stage closes automatically')
-    close_notify_before_days = models.PositiveIntegerField(null=True, blank=True, default=1, help_text='Notify before automatic closing')
+    close_notify_before_days = models.PositiveIntegerField(
+        default=1,
+        null=True,
+        blank=True,
+        help_text='Notify before automatic closing',
+    )
     is_required = models.BooleanField(default=True)
     is_recurring = models.BooleanField(default=False)
     recurrence_unit = models.CharField(max_length=20, choices=RECURRENCE_UNITS, null=True, blank=True)

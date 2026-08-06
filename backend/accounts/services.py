@@ -283,7 +283,9 @@ def generate_otp(*, university_id: str, ip_address: str = None) -> dict:
             ).update(is_used=True)
             
             # Create new OTP
-            otp = OTPCode.create_otp(university_id=university_id, ip_address=ip_address)
+            otp, raw_code = OTPCode.create_otp(
+                university_id=university_id, ip_address=ip_address
+            )
             
             logger.info('OTP generated for %s from IP %s', university_id, ip_address or 'unknown')
             
@@ -293,11 +295,11 @@ def generate_otp(*, university_id: str, ip_address: str = None) -> dict:
                 'expires_in_seconds': 600,  # 10 minutes
                 # SECURITY: callers may use otp_code to send email, but must not
                 # include it in any API response body.
-                'otp_code': otp.code,
+                'otp_code': raw_code,
             }
-    except Exception as e:
+    except Exception:
         logger.exception('Failed to generate OTP for %s', university_id)
-        return {'ok': False, 'error': f'Failed to generate OTP: {str(e)}'}
+        return {'ok': False, 'error': 'Failed to generate OTP. Please try again later.'}
 
 
 def verify_otp(*, session_token: str, code: str, ip_address: str = None) -> dict:
@@ -318,7 +320,7 @@ def verify_otp(*, session_token: str, code: str, ip_address: str = None) -> dict
     or:
         {'ok': False, 'error': str, 'attempts_remaining': int}
     """
-    from .models import OTPCode, StudentReference
+    from .models import OTPCode
     from django.db import transaction
     
     try:
@@ -346,11 +348,18 @@ def verify_otp(*, session_token: str, code: str, ip_address: str = None) -> dict
                 return {'ok': False, 'error': 'Too many failed attempts. Please request a new OTP'}
             
             # Verify the code
-            if otp.code != code:
+            if not otp.check_code(code):
                 otp.failed_attempts += 1
-                otp.save(update_fields=['failed_attempts'])
-                attempts_remaining = 5 - otp.failed_attempts
-                logger.warning('Invalid OTP attempt for session %s (attempt %d/5)', session_token, otp.failed_attempts)
+                attempts_remaining = max(0, 5 - otp.failed_attempts)
+                update_fields = ['failed_attempts']
+                if attempts_remaining == 0:
+                    otp.is_used = True
+                    update_fields.append('is_used')
+                otp.save(update_fields=update_fields)
+                logger.warning(
+                    'Invalid OTP attempt for student %s (attempt %d/5)',
+                    otp.university_id, otp.failed_attempts,
+                )
                 return {
                     'ok': False,
                     'error': f'Invalid OTP code. {attempts_remaining} attempts remaining',
@@ -369,9 +378,9 @@ def verify_otp(*, session_token: str, code: str, ip_address: str = None) -> dict
                 'university_id': otp.university_id,
             }
             
-    except Exception as e:
-        logger.exception('Failed to verify OTP for session %s', session_token)
-        return {'ok': False, 'error': f'Failed to verify OTP: {str(e)}'}
+    except Exception:
+        logger.exception('Unexpected failure while verifying an OTP')
+        return {'ok': False, 'error': 'Failed to verify OTP. Please try again later.'}
 
 
 def cleanup_expired_otps() -> int:

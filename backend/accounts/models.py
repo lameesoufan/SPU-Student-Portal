@@ -1,3 +1,4 @@
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models import Q
@@ -84,7 +85,7 @@ class OTPCode(models.Model):
     Each code is valid for 10 minutes and can be used only once.
     """
     university_id = models.CharField(max_length=50, db_index=True)
-    code = models.CharField(max_length=6)
+    code_hash = models.CharField(max_length=128)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
@@ -104,7 +105,7 @@ class OTPCode(models.Model):
         ]
 
     def __str__(self):
-        return f'OTP for {self.university_id} - {self.code}'
+        return f'OTP for {self.university_id}'
 
     def is_expired(self):
         """Check if the OTP has expired."""
@@ -115,27 +116,34 @@ class OTPCode(models.Model):
         """Check if the OTP is valid (not used and not expired)."""
         return not self.is_used and not self.is_expired()
 
+    def check_code(self, raw_code: str) -> bool:
+        """Compare a submitted OTP with the stored one-way hash."""
+        return check_password(str(raw_code), self.code_hash)
+
     @staticmethod
     def create_otp(university_id: str, ip_address: str = None):
         """
-        Helper method to create a new OTP with proper expiration.
-        Generates a random 6-digit code and a secure session token.
+        Create an OTP record without persisting the plain-text code.
+
+        Returns a tuple of ``(otp_record, raw_code)``. The raw code exists only
+        in memory so the caller can send it by email.
         """
         import secrets
         from django.utils import timezone
         from datetime import timedelta
-        
-        code = f'{secrets.randbelow(1000000):06d}'
+
+        raw_code = f'{secrets.randbelow(1000000):06d}'
         session_token = secrets.token_urlsafe(48)
         expires_at = timezone.now() + timedelta(minutes=10)
-        
-        return OTPCode.objects.create(
+
+        otp = OTPCode.objects.create(
             university_id=university_id,
-            code=code,
+            code_hash=make_password(raw_code),
             session_token=session_token,
             expires_at=expires_at,
             ip_address=ip_address,
         )
+        return otp, raw_code
 
 
 class PasswordResetCode(models.Model):
