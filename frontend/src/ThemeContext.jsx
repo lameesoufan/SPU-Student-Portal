@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-const THEME_KEY = 'spu-theme-v2';
+export const THEME_KEY = 'spu-theme-v2';
 
 const getInitialTheme = () => {
   try {
@@ -12,10 +12,7 @@ const getInitialTheme = () => {
   return 'light';
 };
 
-const ThemeContext = createContext({
-  theme: 'dark',
-  toggleTheme: () => {},
-});
+const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(getInitialTheme);

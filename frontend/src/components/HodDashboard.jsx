@@ -177,7 +177,7 @@ const MODULE_CARDS = [
   {
     IconComp: Icon.CheckCircle,
     label: 'إدخال العلامات',
-    desc: 'أدخل علامات المشاريع للجان التي أنت عضو فيها',
+    desc: 'في الفردي: رئيس اللجنة فقط. في الجماعي: جميع أعضاء اللجنة يرسلون تقييماتهم',
     page: 'grade-entry',
     gradient: 'linear-gradient(135deg, #10b981, #34d399)',
   },

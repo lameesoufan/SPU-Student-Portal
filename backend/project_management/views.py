@@ -3,6 +3,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 import os
 
+from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from django.db.models import Count, Q
 from .models import ProjectBoard, Task, TaskComment, TaskAttachment, ActivityLog
 from .serializers import (
@@ -19,16 +21,23 @@ MAX_BOARD_LIST_SIZE = 100
 MAX_COMMENT_LIST_SIZE = 100
 MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
 ALLOWED_ATTACHMENT_EXTENSIONS = {'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.png', '.jpg', '.jpeg', '.gif', '.txt'}
-MIME_WHITELIST = {
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'image/png',
-    'image/jpeg',
-    'image/gif',
-    'text/plain',
+ALLOWED_ATTACHMENT_MIME_TYPES = {
+    '.pdf': {'application/pdf'},
+    '.doc': {'application/msword'},
+    '.docx': {
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/zip',
+    },
+    '.xls': {'application/vnd.ms-excel'},
+    '.xlsx': {
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/zip',
+    },
+    '.png': {'image/png'},
+    '.jpg': {'image/jpeg'},
+    '.jpeg': {'image/jpeg'},
+    '.gif': {'image/gif'},
+    '.txt': {'text/plain'},
 }
 
 
@@ -192,9 +201,19 @@ def update_board(request, board_id):
         return Response({'error': 'Not found or not a member.'}, status=404)
         
     if 'github_repo' in request.data:
-        board.github_repo = request.data['github_repo']
-        board.save()
-        
+        repository = request.data.get('github_repo')
+        if repository in (None, ''):
+            board.github_repo = None
+        else:
+            if not isinstance(repository, str):
+                return Response({'error': 'Invalid repository URL.'}, status=400)
+            try:
+                URLValidator(schemes=['http', 'https'])(repository)
+            except ValidationError:
+                return Response({'error': 'Invalid repository URL.'}, status=400)
+            board.github_repo = repository
+        board.save(update_fields=['github_repo'])
+
     return Response(ProjectBoardSerializer(board).data)
 
 
@@ -220,7 +239,9 @@ def supervisor_boards(request):
         boards.append(board)
 
     for application in IdeaApplication.objects.filter(
-        idea__doctor=request.user, status='registered'
+        idea__doctor=request.user,
+        status='registered',
+        operational_status__in=active_project_statuses,
     ).select_related('idea')[:MAX_BOARD_LIST_SIZE]:
         if len(boards) >= MAX_BOARD_LIST_SIZE:
             break
@@ -374,21 +395,35 @@ def upload_attachment(request, board_id, task_id):
 
     if file.size > MAX_ATTACHMENT_SIZE:
         return Response({'error': 'File too large. Max 10 MB.'}, status=400)
-    extension = os.path.splitext(file.name or '')[1].lower()
+
+    # Normalize both POSIX and Windows path separators before persisting the
+    # original display name. Uploaded filenames are untrusted client input.
+    safe_name = os.path.basename((file.name or '').replace('\\', '/'))
+    if not safe_name:
+        return Response({'error': 'Invalid file name.'}, status=400)
+    file.name = safe_name
+
+    extension = os.path.splitext(safe_name)[1].lower()
     if extension not in ALLOWED_ATTACHMENT_EXTENSIONS:
         return Response({'error': 'Unsupported file type.'}, status=400)
-    mime_type, _ = mimetypes.guess_type(file.name or '')
-    content_type = file.content_type if hasattr(file, 'content_type') else mime_type
-    if content_type and content_type not in MIME_WHITELIST:
+    guessed_mime_type, _ = mimetypes.guess_type(safe_name)
+    declared_content_type = getattr(file, 'content_type', None)
+    normalized_content_type = (declared_content_type or guessed_mime_type or '').split(';', 1)[0].strip().lower()
+    allowed_mime_types = ALLOWED_ATTACHMENT_MIME_TYPES.get(extension, set())
+
+    # The extension and declared MIME type must describe the same kind of file.
+    # A global MIME whitelist is insufficient because, for example, text/plain
+    # is valid for .txt but must never make a .pdf upload pass validation.
+    if not normalized_content_type or normalized_content_type not in allowed_mime_types:
         return Response({'error': 'Unsupported file type (MIME mismatch).'}, status=400)
     attachment = TaskAttachment.objects.create(
         task=task,
         uploaded_by=request.user,
         file=file,
-        filename=file.name,
+        filename=safe_name,
         file_size=file.size,
     )
-    _log(board, request.user, 'attachment_added', file.name, task=task)
+    _log(board, request.user, 'attachment_added', safe_name, task=task)
     return Response(
         TaskAttachmentSerializer(attachment, context={'request': request}).data,
         status=201,

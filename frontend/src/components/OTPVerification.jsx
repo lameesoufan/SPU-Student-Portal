@@ -17,6 +17,16 @@ export default function OTPVerification({
   const [resending, setResending] = useState(false);
   const [attemptsRemaining, setAttemptsRemaining] = useState(null);
   const inputRefs = useRef([]);
+  const refocusOtpAfterVerify = useRef(false);
+
+  // Restore focus only after verification loading has finished.
+  // Focusing while `loading` is true does not work because the OTP inputs are disabled.
+  useEffect(() => {
+    if (!loading && refocusOtpAfterVerify.current) {
+      refocusOtpAfterVerify.current = false;
+      inputRefs.current[0]?.focus();
+    }
+  }, [loading]);
 
   // Countdown timer
   useEffect(() => {
@@ -99,9 +109,9 @@ export default function OTPVerification({
       if (errorData?.attempts_remaining !== undefined) {
         setAttemptsRemaining(errorData.attempts_remaining);
       }
-      // Clear OTP on error
+      // Clear OTP on error and refocus after the disabled/loading state is removed.
       setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
+      refocusOtpAfterVerify.current = true;
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,7 @@
 import csv
 import logging
 import os
+import secrets
 import time
 import uuid
 from collections import defaultdict
@@ -32,6 +33,13 @@ from .validators import FileValidator, ImportValidationError, RowValidator, Vali
 logger = logging.getLogger('project_imports')
 User = get_user_model()
 
+def _csv_safe_text(value):
+    """Neutralize spreadsheet-formula prefixes in exported credential cells."""
+    text = str(value or '')
+    if text.startswith(('=', '+', '-', '@')):
+        return "'" + text
+    return text
+
 
 class UserMapper:
     def __init__(self):
@@ -42,12 +50,21 @@ class UserMapper:
         self._supervisor_identity_cache = self._build_supervisor_identity_cache()
 
     def generate_password(self, identifier):
-        """Generate a temporary password for import. User must change on first login."""
+        """Generate an unpredictable temporary password for first-login accounts.
+
+        Existing deployments may still configure a legacy pattern containing only
+        ``{identifier}``.  A cryptographically random suffix is appended in that
+        case so imported credentials are never predictable from public identifiers.
+        New patterns may use ``{random}`` explicitly.
+        """
         fmt = getattr(settings, 'IMPORT_TEMP_PASSWORD_FORMAT', None) or os.getenv(
             'IMPORT_TEMP_PASSWORD_FORMAT',
             DEFAULT_TEMP_PASSWORD_FORMAT,
         )
-        return fmt.format(identifier=identifier)
+        random_token = secrets.token_urlsafe(12)
+        if '{random}' in fmt:
+            return fmt.format(identifier=identifier, random=random_token)
+        return f"{fmt.format(identifier=identifier)}-{random_token}"
 
     def parse_supervisor_name(self, name):
         return parse_person_name(strip_person_titles(name))
@@ -504,7 +521,9 @@ class ImportService:
         except Exception as exc:
             if session:
                 session.status = ImportSession.STATUS_FAILED
-                session.error_summary = str(exc)[:1000]
+                # Keep internal exception details out of the audit/history API.
+                # The full exception is recorded only in server logs below.
+                session.error_summary = 'Import failed during execution.'
                 session.completed_at = timezone.now()
                 session.save(update_fields=['status', 'error_summary', 'completed_at'])
             logger.error('Project import transaction failed: session=%s error=%s', session.id if session else None, exc, exc_info=True)
@@ -637,6 +656,10 @@ class ImportService:
     def _validate_preview(self, file_hash, preview_result_id):
         if not preview_result_id:
             return
+        try:
+            preview_result_id = str(uuid.UUID(str(preview_result_id)))
+        except (TypeError, ValueError, AttributeError):
+            raise ImportValidationError('Invalid preview reference. Please preview the file again.')
         cached = cache.get(self._preview_key(preview_result_id))
         if not cached or cached.get('user_id') != self.super_admin.id:
             raise ImportValidationError('Preview has expired. Please preview the file again.')
@@ -878,7 +901,7 @@ class ImportService:
             else:
                 role_in_project = 'primary'
 
-            rows_data.append({
+            row_data = {
                 'full_name': supervisor.get_full_name() or cred.get('full_name', ''),
                 'username': supervisor.username,
                 'generated_password': cred.get('password', '') if is_created else '',
@@ -887,7 +910,8 @@ class ImportService:
                 'department': '; '.join(sorted(info['departments'])) if info['departments'] else '',
                 'created_or_reused': 'created' if is_created else 'reused_existing_no_password_exported',
                 'notes': 'Must change password and username on first login' if is_created else 'Already existed in system',
-            })
+            }
+            rows_data.append({key: _csv_safe_text(value) for key, value in row_data.items()})
 
         if not rows_data:
             return None
@@ -934,7 +958,7 @@ class ImportService:
                 if r.get('university_id') == university_id and r.get('title')
             ]
 
-            rows_data.append({
+            row_data = {
                 'university_id': university_id,
                 'email': student.email or row.get('email', ''),
                 'project_title': '; '.join(student_projects),
@@ -944,7 +968,8 @@ class ImportService:
                 'generated_password': cred.get('password', '') if is_created else '(existing user)',
                 'created_or_reused': 'created' if is_created else 'reused',
                 'notes': 'Must change password on first login' if is_created else 'Already existed in system',
-            })
+            }
+            rows_data.append({key: _csv_safe_text(value) for key, value in row_data.items()})
 
         if not rows_data:
             return None

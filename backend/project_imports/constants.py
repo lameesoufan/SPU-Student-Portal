@@ -6,7 +6,7 @@ from projects.models import PROJECT_TYPES
 
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 MAX_ROWS = 1000
-DEFAULT_TEMP_PASSWORD_FORMAT = 'SPU{identifier}@2025-2026'
+DEFAULT_TEMP_PASSWORD_FORMAT = 'SPU{identifier}@{random}'
 
 HEADER_STUDENT_NAME = 'اسم الطالب'
 HEADER_UNIVERSITY_ID = 'الرقم الجامعي'

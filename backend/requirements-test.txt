@@ -1,0 +1,11 @@
+-r requirements.txt
+
+# Test runner and Django integration
+pytest
+pytest-django
+pytest-cov
+coverage[toml]
+
+# Reusable test data and deterministic time
+factory-boy
+freezegun

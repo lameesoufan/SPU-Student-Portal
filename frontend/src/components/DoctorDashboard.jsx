@@ -87,7 +87,7 @@ const MODULE_CARDS = [
   { IconComp: Icon.BarChart, label: 'منشئ سير العمل', desc: 'إنشاء قوالب سير عمل ديناميكية للمشاريع بمراحل وحقول', page: 'workflow', gradient: 'linear-gradient(135deg, #ec4899, #f472b6)' },
   { IconComp: Icon.ClipboardList, label: 'تطبيق سير العمل', desc: 'تطبيق قوالب سير العمل على مشاريع الطلاب', page: 'applyworkflow', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
   { IconComp: Icon.Calendar, label: 'جدول المناقشات', desc: 'اعرض اللجان المسندة إليك ومناقشاتها وأوقاتها', page: 'committee-schedule', gradient: 'linear-gradient(135deg, #667eea, #764ba2)' },
-  { IconComp: Icon.CheckCircle, label: 'إدخال العلامات', desc: 'أدخل علامات المشاريع للجان التي أنت رئيسها', page: 'grade-entry', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
+  { IconComp: Icon.CheckCircle, label: 'إدخال العلامات', desc: 'في الفردي: رئيس اللجنة فقط. في الجماعي: جميع أعضاء اللجنة يرسلون تقييماتهم', page: 'grade-entry', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
 ];
 
 

@@ -88,9 +88,12 @@ REST_FRAMEWORK = {
         'user': os.getenv('DRF_USER_THROTTLE_RATE', '600/minute'),
         'student_login_request': '12/hour',  # 3 requests per 15 min = 12 per hour
         'student_login_verify': '10/hour',   # 5 requests per 30 min = 10 per hour
+        'email_change': '10/hour',
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': int(os.getenv('DRF_PAGE_SIZE', '50')),
+    # Reserve ?format= for application endpoints such as committee exports.
+    'URL_FORMAT_OVERRIDE': None,
     'EXCEPTION_HANDLER': 'backend.error_handling_middleware.custom_exception_handler',
 }
 
@@ -140,9 +143,14 @@ if DATABASE_ENGINE in ('postgres', 'postgresql') or os.getenv('DB_NAME'):
             'PASSWORD': os.getenv('DB_PASSWORD'),
             'HOST': os.getenv('DB_HOST', 'localhost'),
             'PORT': os.getenv('DB_PORT', '5432'),
-            'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '60')),
+            "CONN_MAX_AGE": 0,
             'OPTIONS': {
                 'sslmode': os.getenv('DB_SSLMODE', 'prefer'),
+                            "pool": {
+                "min_size": 2,
+                "max_size": 20,
+                "timeout": 30,
+            },
             },
         }
     }
@@ -293,7 +301,7 @@ GITLAB_WEBHOOK_BASE_URL = os.getenv('GITLAB_WEBHOOK_BASE_URL', 'http://localhost
 GITLAB_EXTERNAL_URL = os.getenv('GITLAB_EXTERNAL_URL', 'http://localhost:8080')
 
 # Project import settings
-IMPORT_TEMP_PASSWORD_FORMAT = os.getenv('IMPORT_TEMP_PASSWORD_FORMAT', 'SPU{identifier}@2025-2026')
+IMPORT_TEMP_PASSWORD_FORMAT = os.getenv('IMPORT_TEMP_PASSWORD_FORMAT', 'SPU{identifier}@{random}')
 
 # Send workflow notifications by email to students only, in addition to in-app notifications.
 WORKFLOW_NOTIFICATION_EMAILS = os.getenv('WORKFLOW_NOTIFICATION_EMAILS', 'false').lower() == 'true'

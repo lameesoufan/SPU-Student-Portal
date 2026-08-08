@@ -96,7 +96,7 @@ class GitLabWebhookView(views.APIView):
             # Project not found in our database - not an error, just ignore
             logger.warning(f"Webhook for unregistered project: {e}")
             return Response(
-                {'message': str(e)},
+                {'message': 'تم تجاهل webhook لمستودع غير مسجل'},
                 status=status.HTTP_200_OK
             )
         except Exception as e:

@@ -33,15 +33,20 @@ export default function ChangeUsername({ user, onSuccess }) {
     e.preventDefault();
     setError('');
 
-    if (!newUsername.trim()) {
+    const normalizedUsername = newUsername.trim();
+    if (!normalizedUsername) {
       setError('Please enter a username.');
+      return;
+    }
+    if (!/^[A-Za-z0-9_]{3,30}$/.test(normalizedUsername)) {
+      setError('Username must be 3-30 characters using only English letters, numbers, and underscores.');
       return;
     }
 
     setLoading(true);
     try {
-      await changeUsername(newUsername.trim());
-      onSuccess(newUsername.trim());
+      await changeUsername(normalizedUsername);
+      onSuccess(normalizedUsername);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to change username.');
     } finally {
@@ -49,7 +54,7 @@ export default function ChangeUsername({ user, onSuccess }) {
     }
   };
 
-  const isValid = /^[A-Za-z0-9_]{3,30}$/.test(newUsername);
+  const isValid = /^[A-Za-z0-9_]{3,30}$/.test(newUsername.trim());
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-6">

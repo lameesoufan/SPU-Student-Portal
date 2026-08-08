@@ -19,7 +19,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from datetime import timedelta
 import secrets
-from .models import User, DEPARTMENTS, StudentReference, PasswordResetCode, EmailChangeCode
+from .models import User, DEPARTMENTS, StudentReference, OTPCode, PasswordResetCode, EmailChangeCode
 from .permissions import IsDeanOrAdmin
 from .selectors import get_doctors
 from .throttles import (
@@ -27,6 +27,7 @@ from .throttles import (
     PasswordResetThrottle,
     StudentLoginRequestThrottle,
     StudentLoginVerifyThrottle,
+    EmailChangeThrottle,
 )
 from .services import (
     create_user_from_import, change_user_password, assign_hod,
@@ -45,6 +46,26 @@ MAX_IMPORT_ROWS = 5000
 ALLOWED_REFERENCE_EXTENSIONS = ('.xlsx', '.xls', '.csv')
 MAX_REFERENCE_FILE_SIZE = 10 * 1024 * 1024
 MAX_REFERENCE_ROWS = 10000
+
+
+def _hash_reference_password(raw_password, university_id):
+    """Return a Django hash for an imported reference password.
+
+    A blank spreadsheet password intentionally falls back to the university ID,
+    but the fallback must never be stored as plaintext.
+    """
+    normalized_password = str(raw_password or '').strip() or str(university_id).strip()
+    return make_password(normalized_password)
+
+
+def _invalidate_otp_session(session_token):
+    """Consume any active OTP associated with a delivery session."""
+    if not session_token:
+        return 0
+    return OTPCode.objects.filter(
+        session_token=session_token,
+        is_used=False,
+    ).update(is_used=True)
 
 
 def _set_cookie(response, name, value, max_age, secure=False):
@@ -96,6 +117,7 @@ def request_password_reset(request):
         )
     except Exception:
         logger.exception('Password reset email failed for user %s', user.pk)
+        PasswordResetCode.objects.filter(session_token=session_token).update(is_used=True)
         return Response({'error': 'تعذر إرسال البريد الإلكتروني حاليًا. تحقق من إعدادات البريد وحاول لاحقًا.'}, status=503)
 
     return Response({**generic, 'session_token': session_token, 'email_hint': _mask_email(user.email), 'expires_in_seconds': 600})
@@ -126,7 +148,14 @@ def verify_password_reset_code(request):
         reset.is_used = True; reset.save(update_fields=['is_used'])
         return Response({'error': 'تم تجاوز عدد المحاولات المسموح. اطلب رمزًا جديدًا.'}, status=429)
     if not check_password(code, reset.code_hash):
-        reset.failed_attempts += 1; reset.save(update_fields=['failed_attempts'])
+        reset.failed_attempts += 1
+        update_fields = ['failed_attempts']
+        if reset.failed_attempts >= 5:
+            reset.is_used = True
+            update_fields.append('is_used')
+        reset.save(update_fields=update_fields)
+        if reset.is_used:
+            return Response({'error': 'تم تجاوز عدد المحاولات المسموح. اطلب رمزًا جديدًا.'}, status=429)
         return Response({'error': 'رمز التحقق غير صحيح.'}, status=400)
     return Response({'message': 'تم التحقق من الرمز بنجاح.', 'verified': True})
 
@@ -145,7 +174,23 @@ def reset_password_with_code(request):
         reset = PasswordResetCode.objects.select_related('user').get(session_token=session_token, is_used=False)
     except PasswordResetCode.DoesNotExist:
         return Response({'error': 'جلسة الاستعادة غير صالحة أو منتهية.'}, status=400)
-    if reset.is_expired() or not check_password(code, reset.code_hash):
+    if reset.is_expired():
+        reset.is_used = True
+        reset.save(update_fields=['is_used'])
+        return Response({'error': 'رمز التحقق غير صحيح أو منتهي الصلاحية.'}, status=400)
+    if reset.failed_attempts >= 5:
+        reset.is_used = True
+        reset.save(update_fields=['is_used'])
+        return Response({'error': 'تم تجاوز عدد المحاولات المسموح. اطلب رمزًا جديدًا.'}, status=429)
+    if not check_password(code, reset.code_hash):
+        reset.failed_attempts += 1
+        update_fields = ['failed_attempts']
+        if reset.failed_attempts >= 5:
+            reset.is_used = True
+            update_fields.append('is_used')
+        reset.save(update_fields=update_fields)
+        if reset.is_used:
+            return Response({'error': 'تم تجاوز عدد المحاولات المسموح. اطلب رمزًا جديدًا.'}, status=429)
         return Response({'error': 'رمز التحقق غير صحيح أو منتهي الصلاحية.'}, status=400)
     result = change_user_password(user=reset.user, new_password=new_password)
     if not result['ok']:
@@ -176,6 +221,7 @@ def change_password(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([EmailChangeThrottle])
 def request_email_change(request):
     """Send a verification code to the requested new email address."""
     new_email = str(request.data.get('new_email', '')).strip().lower()
@@ -225,6 +271,7 @@ def request_email_change(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([EmailChangeThrottle])
 def confirm_email_change(request):
     """Verify the code and replace the authenticated user's email."""
     session_token = str(request.data.get('session_token', '')).strip()
@@ -251,7 +298,13 @@ def confirm_email_change(request):
         return Response({'error': 'تم تجاوز عدد المحاولات المسموح. اطلب رمزًا جديدًا.'}, status=429)
     if not check_password(code, change.code_hash):
         change.failed_attempts += 1
-        change.save(update_fields=['failed_attempts'])
+        update_fields = ['failed_attempts']
+        if change.failed_attempts >= 5:
+            change.is_used = True
+            update_fields.append('is_used')
+        change.save(update_fields=update_fields)
+        if change.is_used:
+            return Response({'error': 'تم تجاوز عدد المحاولات المسموح. اطلب رمزًا جديدًا.'}, status=429)
         return Response({'error': 'رمز التحقق غير صحيح.'}, status=400)
     if User.objects.filter(email__iexact=change.new_email).exclude(pk=request.user.pk).exists():
         change.is_used = True
@@ -527,9 +580,6 @@ def upload_reference(request):
     
     ملاحظة: إذا كانت password فارغة، سيستخدم النظام university_id كـ password افتراضي
     """
-    logger.info("DEBUG UPLOAD: Function called by user %s", request.user.username)
-    logger.info("DEBUG UPLOAD: FILES keys: %s", list(request.FILES.keys()))
-    
     if 'file' not in request.FILES:
         return Response({'error': 'File is required.'}, status=400)
 
@@ -550,9 +600,6 @@ def upload_reference(request):
     else:
         records, parse_errors = _parse_excel_reference(upload)
 
-    logger.info(f"DEBUG UPLOAD: Parsed {len(records)} records, {len(parse_errors)} parse errors")
-    logger.info(f"DEBUG UPLOAD: First record: {records[0] if records else 'NONE'}")
-
     if parse_errors and not records:
         return Response({
             'error': 'Failed to parse file.',
@@ -563,8 +610,6 @@ def upload_reference(request):
         return Response({
             'error': f'File has too many rows. Maximum allowed is {MAX_REFERENCE_ROWS}.'
         }, status=400)
-
-    logger.info(f"DEBUG UPLOAD: Starting to save {len(records)} records...")
 
     # إدخال البيانات بشكل جماعي (update_or_create)
     created_count = 0
@@ -578,14 +623,11 @@ def upload_reference(request):
             continue
 
         # إذا كلمة المرور فارغة، استخدم الرقم الجامعي كـ password افتراضي
-        raw_password = str(record.get('password', '')).strip()
-        # SECURITY: hash on write; never store plain text.
-        from django.contrib.auth.hashers import make_password
-        password = make_password(raw_password) if raw_password else ''
-        if not password:
-            password = university_id
-
-        logger.info(f"DEBUG: Processing row {idx}, university_id={university_id}, password={password}")
+        raw_password = str(record.get('password') or '').strip()
+        # SECURITY: always hash the imported password. When the spreadsheet
+        # leaves it blank, the legacy default remains the university ID, but
+        # only its one-way Django hash is persisted.
+        password = _hash_reference_password(raw_password, university_id)
 
         try:
             obj, created = StudentReference.objects.update_or_create(
@@ -598,17 +640,16 @@ def upload_reference(request):
                     'uploaded_by': request.user,
                 },
             )
-            logger.info(f"DEBUG: Saved {university_id}, created={created}, obj.id={obj.id}")
             if created:
                 created_count += 1
             else:
                 updated_count += 1
-        except Exception as e:
-            logger.exception(f"DEBUG: Error saving {university_id}")
+        except Exception:
+            logger.exception('Failed to save student reference %s', university_id)
             row_errors.append({
                 'row': idx,
                 'university_id': university_id,
-                'error': str(e),
+                'error': 'Could not save this record.',
             })
 
     logger.info(
@@ -727,7 +768,7 @@ def _detect_columns(header):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-# @throttle_classes([StudentLoginRequestThrottle])  # تعطيل مؤقت للتطوير
+@throttle_classes([StudentLoginRequestThrottle])
 def student_login_request(request):
     """
     Step 1 of 2FA: Verify credentials and send OTP.
@@ -821,6 +862,8 @@ def student_login_request(request):
     )
     
     if not email_sent:
+        # Do not leave an active code behind when delivery failed.
+        _invalidate_otp_session(otp_result.get('session_token'))
         logger.error('Failed to send OTP email for %s', university_id)
         return Response({'error': 'Failed to send OTP email. Please try again later.'}, status=500)
     
@@ -831,7 +874,7 @@ def student_login_request(request):
     else:
         email_hint = 'xxx...@student.spu.edu'
     
-    logger.info('OTP sent for student %s to email %s', university_id, email)
+    logger.info('OTP sent for student %s', university_id)
     
     return Response({
         'message': 'OTP sent to your email',
@@ -843,7 +886,7 @@ def student_login_request(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-# @throttle_classes([StudentLoginVerifyThrottle])  # تعطيل مؤقت للتطوير
+@throttle_classes([StudentLoginVerifyThrottle])
 def student_login_verify(request):
     """
     Step 2 of 2FA: Verify OTP and complete login.

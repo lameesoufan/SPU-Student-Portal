@@ -10,7 +10,9 @@ build/
 *.egg
 
 # Django
+*.sqlite
 *.sqlite3
+*.db
 *.log
 local_settings.py
 media/
@@ -47,11 +49,15 @@ pnpm-debug.log*
 
 # Testing and coverage
 .coverage
+.coverage.*
 coverage/
 htmlcov/
+coverage.xml
 *.lcov
 .nyc_output/
 .pytest_cache/
+.test-artifacts/
+.test-media/
 
 # OS files
 .DS_Store
@@ -76,3 +82,12 @@ Desktop.ini
 *.bak
 *.tmp
 *.temp
+
+# Celery runtime files
+celerybeat-schedule
+celerybeat-schedule.*
+
+# Load testing secrets and generated reports
+load-tests/users.json
+load-tests/results/*
+!load-tests/results/.gitkeep

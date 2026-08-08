@@ -26,6 +26,15 @@ class ImportProjectsView(APIView):
     throttle_classes = [ImportRateThrottle]
     parser_classes = [MultiPartParser, FormParser]
 
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        # Successful imports may contain one-time plaintext credentials for newly
+        # created accounts. Never allow browsers or intermediary caches to retain
+        # the response.
+        response['Cache-Control'] = 'no-store, private'
+        response['Pragma'] = 'no-cache'
+        return response
+
     def post(self, request):
         upload = request.FILES.get('file')
         if not upload:

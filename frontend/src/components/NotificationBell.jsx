@@ -90,17 +90,25 @@ export default function NotificationBell() {
   };
 
   const handleRead = async (id) => {
-    await markNotifRead(id).catch(() => {});
-    setNotifs((previous) => previous.map((notification) => (
-      notification.id === id ? { ...notification, is_read: true } : notification
-    )));
-    setCount((current) => Math.max(0, current - 1));
+    try {
+      await markNotifRead(id);
+      setNotifs((previous) => previous.map((notification) => (
+        notification.id === id ? { ...notification, is_read: true } : notification
+      )));
+      setCount((current) => Math.max(0, current - 1));
+    } catch {
+      // Keep the notification unread locally when the backend update fails.
+    }
   };
 
   const handleMarkAll = async () => {
-    await markAllNotifsRead().catch(() => {});
-    setNotifs((previous) => previous.map((notification) => ({ ...notification, is_read: true })));
-    setCount(0);
+    try {
+      await markAllNotifsRead();
+      setNotifs((previous) => previous.map((notification) => ({ ...notification, is_read: true })));
+      setCount(0);
+    } catch {
+      // Keep local unread state in sync with the backend on failure.
+    }
   };
 
   return (

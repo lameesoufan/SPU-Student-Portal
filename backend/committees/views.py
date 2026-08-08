@@ -534,10 +534,15 @@ class ExportView(APIView):
             content = export_committees_excel(semester=semester)
             ctype   = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             ext     = 'xlsx'
-        else:
+        elif fmt == 'pdf':
             content = export_committees_pdf(semester=semester)
             ctype   = 'application/pdf'
             ext     = 'pdf'
+        else:
+            return Response(
+                {'detail': 'صيغة التصدير غير مدعومة. استخدم pdf أو xlsx.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         resp = HttpResponse(content, content_type=ctype)
         filename = f'committees_{timezone.now():%Y%m%d_%H%M}.{ext}'

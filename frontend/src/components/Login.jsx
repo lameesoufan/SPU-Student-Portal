@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { login, setAccessToken, studentLoginRequest, studentLoginVerify } from '../api';
-import { useTheme } from '../ThemeContext';
 import campusBg from '../assets/campus-bg.png';
 import { GraduationCap, Eye, EyeOff, ArrowRight, User, Lock, XCircle, LayoutGrid, Settings, GitBranch } from 'lucide-react';
 import OTPVerification from './OTPVerification';
@@ -15,7 +14,6 @@ const PARTICLES = [
 ];
 
 export default function Login({ onLogin, onRegister, onForgotPassword }) {
-  const { theme } = useTheme();
   const [form, setForm] = useState({ username: '', password: '' });
   const [errors, setErrors] = useState({ username: '', password: '' });
   const [serverError, setServerError] = useState('');
@@ -32,16 +30,6 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 100);
     return () => clearTimeout(t);
-  }, []);
-
-  // Force dark theme on the login page (regardless of app theme).
-  // Restores the user's chosen theme when leaving the login page.
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    return () => {
-      document.documentElement.setAttribute('data-theme', theme);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async (e) => {
@@ -73,7 +61,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
       
       if (isStudent) {
         // Student login - use OTP flow
-        const res = await studentLoginRequest(form.username, form.password);
+        const res = await studentLoginRequest(form.username.trim(), form.password);
         const data = res.data;
 
         // First login still uses OTP. Later logins can return a direct JWT response.
@@ -82,7 +70,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
             sessionToken: data.session_token,
             emailHint: data.email_hint,
             expiresIn: data.expires_in_seconds,
-            universityId: form.username,
+            universityId: form.username.trim(),
           });
           setShowOTP(true);
           return;
@@ -91,7 +79,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
         if (data.access) {
           setAccessToken(data.access);
           onLogin({
-            username: data.username || form.username,
+            username: data.username || form.username.trim(),
             role: data.role,
             must_change_password: data.must_change_password,
             must_change_username: data.must_change_username ?? true,
@@ -103,7 +91,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
         throw new Error('Unexpected student login response.');
       } else {
         // Doctor/Admin/HOD login - use regular login
-        const res = await login(form.username, form.password);
+        const res = await login(form.username.trim(), form.password);
         const data = res.data;
 
         // حفظ الـ access token بالإضافة للكوكيز
@@ -112,7 +100,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
         }
 
         onLogin({
-          username: data.username || form.username,
+          username: data.username || form.username.trim(),
           role: data.role,
           must_change_password: data.must_change_password,
           must_change_username: data.must_change_username ?? true,
@@ -138,7 +126,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
     }
 
     onLogin({
-      username: data.username || form.username,
+      username: data.username || form.username.trim(),
       role: data.role,
       must_change_password: data.must_change_password,
       must_change_username: data.must_change_username ?? true,
@@ -180,7 +168,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
           }
         `}</style>
 
-        <div className="group relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[var(--bg-primary)]">
+        <div data-theme="dark" className="group relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[var(--bg-primary)]">
           {/* University campus background image */}
           <div
             className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat scale-105 transition-transform duration-[8000ms] ease-linear group-hover:scale-[1.08]"
@@ -256,7 +244,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
         }
       `}</style>
 
-      <div className="group relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[var(--bg-primary)]">
+      <div data-theme="dark" className="group relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[var(--bg-primary)]">
 
         {/* University campus background image */}
         <div

@@ -424,6 +424,9 @@ class RoomSerializer(serializers.ModelSerializer):
 
 class DoctorWeeklyAvailabilitySerializer(serializers.ModelSerializer):
     """CRUD serializer for weekly recurring availability."""
+    doctor = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(role__in=['doctor', 'hod'])
+    )
     weekday_display = serializers.SerializerMethodField()
 
     class Meta:
@@ -437,6 +440,9 @@ class DoctorWeeklyAvailabilitySerializer(serializers.ModelSerializer):
 
 class DoctorDateExceptionSerializer(serializers.ModelSerializer):
     """CRUD serializer for one-off date overrides."""
+    doctor = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(role__in=['doctor', 'hod'])
+    )
     doctor_name = serializers.CharField(source='doctor.username', read_only=True)
 
     class Meta:

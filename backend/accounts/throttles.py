@@ -78,3 +78,13 @@ class StudentLoginVerifyThrottle(SimpleRateThrottle):
             # Fallback to IP if no session_token provided
             return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
         return self.cache_format % {'scope': self.scope, 'ident': f'session_{session_token}'}
+
+
+class EmailChangeThrottle(SimpleRateThrottle):
+    """Rate limit email-change requests per authenticated user."""
+    scope = 'email_change'
+
+    def get_cache_key(self, request, view):
+        if request.user and request.user.is_authenticated:
+            return self.cache_format % {'scope': self.scope, 'ident': request.user.pk}
+        return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}

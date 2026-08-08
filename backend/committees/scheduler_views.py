@@ -46,12 +46,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db.models import Q
 from django.utils import timezone
+import logging
 
 from .models import (
     Room, DoctorWeeklyAvailability, DoctorDateException,
     SolverSettings, SchedulingRun,
     COMMITTEE_TYPE_AR,
 )
+logger = logging.getLogger(__name__)
+
 from .serializers import (
     RoomSerializer, DoctorWeeklyAvailabilitySerializer,
     DoctorDateExceptionSerializer,
@@ -355,35 +358,58 @@ class SchedulePreviewView(APIView):
             'discussion_duration': request.data.get('discussion_duration', 15),
             'workdays': request.data.get('workdays'),
         }
-        has_inline = any(v is not None for v in inline_params.values())
+        # Only treat the request as an inline configuration when the client
+        # actually supplied at least one inline settings field. Defaults for
+        # buffer/discussion must not silently override a provided settings_id.
+        inline_request_fields = {
+            'date_range_start', 'date_range_end', 'daily_start', 'daily_end',
+            'buffer_minutes', 'discussion_duration', 'workdays',
+        }
+        has_inline = any(field in request.data for field in inline_request_fields)
 
         if has_inline:
-            # Build an in-memory SolverSettings (not saved to DB)
-            # Convert strings to proper date/time objects
+            # Build an in-memory SolverSettings (not saved to DB). Parse every
+            # client-controlled value defensively so malformed scheduling input
+            # is a 400 response instead of an unhandled server error.
             from datetime import date as dt_date, time as dt_time
-            def _parse_date(s):
-                if not s: return None
-                if isinstance(s, dt_date): return s
-                return dt_date.fromisoformat(str(s))
-            def _parse_time(s):
-                if not s: return dt_time(9, 0)
-                if isinstance(s, dt_time): return s
-                parts = str(s).split(':')
+
+            def _parse_date(value):
+                if not value:
+                    return None
+                if isinstance(value, dt_date):
+                    return value
+                return dt_date.fromisoformat(str(value))
+
+            def _parse_time(value):
+                if not value:
+                    return dt_time(9, 0)
+                if isinstance(value, dt_time):
+                    return value
+                parts = str(value).split(':')
+                if len(parts) < 2:
+                    raise ValueError('invalid time')
                 return dt_time(int(parts[0]), int(parts[1]))
-            settings_obj = SolverSettings(
-                committee_type=committee_type,
-                semester=semester,
-                date_range_start=_parse_date(inline_params['date_range_start']),
-                date_range_end=_parse_date(inline_params['date_range_end']),
-                daily_start=_parse_time(inline_params['daily_start'] or '09:00'),
-                daily_end=_parse_time(inline_params['daily_end'] or '17:00'),
-                buffer_between_committees_minutes=int(inline_params['buffer_between_committees_minutes'] or 10),
-                workdays=inline_params['workdays'] or [5, 6],  # default Sat+Sun
-                solver_timeout_seconds=int(timeout_override or 30),
-                is_active=True,
-            )
-            # Set discussion_duration as a temporary attribute (not a DB field)
-            settings_obj.discussion_duration = int(inline_params['discussion_duration'] or 15)
+
+            try:
+                settings_obj = SolverSettings(
+                    committee_type=committee_type,
+                    semester=semester,
+                    date_range_start=_parse_date(inline_params['date_range_start']),
+                    date_range_end=_parse_date(inline_params['date_range_end']),
+                    daily_start=_parse_time(inline_params['daily_start'] or '09:00'),
+                    daily_end=_parse_time(inline_params['daily_end'] or '17:00'),
+                    buffer_between_committees_minutes=int(inline_params['buffer_between_committees_minutes'] or 10),
+                    workdays=inline_params['workdays'] or [5, 6],  # default Sat+Sun
+                    solver_timeout_seconds=int(timeout_override or 30),
+                    is_active=True,
+                )
+                # Set discussion_duration as a temporary attribute (not a DB field)
+                settings_obj.discussion_duration = int(inline_params['discussion_duration'] or 15)
+            except (TypeError, ValueError, OverflowError):
+                return Response(
+                    {'detail': 'معطيات الجدولة غير صالحة.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         elif settings_id:
             try:
                 settings_obj = SolverSettings.objects.get(
@@ -445,12 +471,15 @@ class SchedulePreviewView(APIView):
                 settings=settings_obj,
                 requested_by=request.user,
             )
-        except Exception as e:
-            import traceback
-            return Response({
-                'detail': f'فشل الـ Solver: {str(e)}',
-                'traceback': traceback.format_exc().split('\n'),
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception:
+            logger.exception('Scheduling solver failed for run_id=%s', run.id)
+            run.status = 'failed'
+            run.solver_status = 'ERROR'
+            run.save(update_fields=['status', 'solver_status'])
+            return Response(
+                {'detail': 'فشل محرك الجدولة أثناء معالجة الطلب.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         if not result.get('success'):
             # Mark run as failed

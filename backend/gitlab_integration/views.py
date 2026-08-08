@@ -30,6 +30,16 @@ def _relink_project_to_current_user_namespace(request, board, gitlab_project):
     projects visible to that user's token and selecting the best namespace/path
     match.  GitLab's response is always treated as the authoritative source.
     """
+    # Only the owning student may repair a legacy link. A supervisor or another
+    # project member must never be able to repoint the board to their namespace.
+    owner_id = None
+    if getattr(board, 'proposal', None):
+        owner_id = board.proposal.student_id
+    elif getattr(board, 'application', None):
+        owner_id = board.application.student_id
+    if request.user.id != owner_id:
+        return gitlab_project
+
     try:
         linked_user = GitLabUser.objects.get(user=request.user)
     except GitLabUser.DoesNotExist:
@@ -128,7 +138,10 @@ def _relink_project_to_current_user_namespace(request, board, gitlab_project):
 
         if visible_projects:
             best = max(visible_projects, key=score)
-            if score(best) >= 100:
+            # Namespace ownership alone is insufficient: require at least a
+            # path-prefix match as well, otherwise an unrelated repository in
+            # the student's namespace could hijack the local board mapping.
+            if score(best) >= 140:
                 project_data = best
 
     if not project_data:
@@ -158,9 +171,29 @@ def _handle_unexpected_error(view_name: str, err: Exception) -> Response:
     logger.error(f"Unexpected error in {view_name}: {error_type}: {error_detail}\n{traceback.format_exc()}")
     return Response({
         'success': False,
-        'message': f'خطأ غير متوقع: {error_detail}',
-        'error_type': error_type,
+        'message': 'حدث خطأ داخلي غير متوقع. يرجى المحاولة لاحقاً.',
     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _public_gitlab_error(error: services.GitLabAPIError) -> str:
+    """Return a stable client-safe GitLab error without upstream response details."""
+    if error.status_code in (401, 403):
+        return 'تعذر تنفيذ الطلب بسبب صلاحيات GitLab.'
+    if error.status_code == 404:
+        return 'المورد المطلوب غير موجود في GitLab.'
+    if error.status_code == 409:
+        return 'المورد موجود مسبقاً في GitLab.'
+    return 'تعذر تنفيذ الطلب على GitLab. يرجى المحاولة لاحقاً.'
+
+
+def _board_department(board):
+    """Resolve the academic department that owns a project board."""
+    proposal = getattr(board, 'proposal', None)
+    if proposal:
+        return getattr(proposal, 'department', None)
+    application = getattr(board, 'application', None)
+    idea = getattr(application, 'idea', None) if application else None
+    return getattr(idea, 'department', None) if idea else None
 
 
 # M-13 Fix: دالة مساعدة للتحقق من عضوية المستخدم في المشروع
@@ -172,8 +205,10 @@ def _assert_board_member(user, board):
     if user.is_staff or user.is_superuser:
         return board
     role = getattr(user, 'role', None)
-    if role in ['admin', 'hod', 'dean']:
+    if role in ['admin', 'dean']:
         return board
+    if role == 'hod':
+        return board if getattr(user, 'department', None) == _board_department(board) else None
     if role == 'doctor':
         if hasattr(board, 'proposal') and board.proposal and board.proposal.supervisor_id == user.id:
             return board
@@ -209,6 +244,19 @@ class IsSupervisorOrAdmin(permissions.BasePermission):
         user = request.user
         return (
             getattr(user, 'role', None) in ['doctor', 'supervisor', 'hod', 'dean', 'admin']
+            or user.is_staff
+            or user.is_superuser
+        )
+
+
+class IsHoDDeanOrAdmin(permissions.BasePermission):
+    """Allow aggregate dashboards only to HoD/Dean/admin users."""
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        user = request.user
+        return (
+            getattr(user, 'role', None) in ['hod', 'dean', 'admin']
             or user.is_staff
             or user.is_superuser
         )
@@ -292,7 +340,7 @@ class LinkGitLabAccountView(views.APIView):
         except services.GitLabAPIError as e:
             return Response({
                 'success': False,
-                'message': f'خطأ في GitLab: {e.message}',
+                'message': _public_gitlab_error(e),
             }, status=status.HTTP_400_BAD_REQUEST)
         except ValueError as e:
             return Response({
@@ -354,14 +402,12 @@ class VerifyGitLabTokenView(views.APIView):
         except services.GitLabAPIError as e:
             detail = {
                 'status_code': e.status_code,
-                'gitlab_url': settings.GITLAB_URL,
+                'gitlab_url': getattr(settings, 'GITLAB_EXTERNAL_URL', settings.GITLAB_URL),
             }
-            if settings.DEBUG and e.response:
-                detail['gitlab_response'] = e.response
             return Response({
                 'valid': False,
                 'message': (
-                    f'{e.message}. تأكد أن التوكن من نفس GitLab: {settings.GITLAB_URL} '
+                    f'{_public_gitlab_error(e)} تأكد أن التوكن من GitLab الخاص بالجامعة '
                     'وأن الـ scope يحتوي api أو read_user.'
                 ),
                 'detail': detail,
@@ -424,7 +470,6 @@ class CreateGitLabProjectView(views.APIView):
                 except Exception as e:
                     logger.warning(f"Failed to register webhook: {e}")
                     result['webhook_registered'] = False
-                    result['webhook_error'] = str(e)
 
             return Response({
                 'success': True,
@@ -438,29 +483,11 @@ class CreateGitLabProjectView(views.APIView):
                 'message': str(e),
             }, status=status.HTTP_400_BAD_REQUEST)
         except services.GitLabAPIError as e:
-            error_msg = e.message
-            # Include more detail from GitLab response
-            if e.response:
-                if isinstance(e.response, dict):
-                    gitlab_msg = e.response.get('message', '')
-                    if gitlab_msg:
-                        if isinstance(gitlab_msg, dict):
-                            detail_parts = []
-                            for field, errs in gitlab_msg.items():
-                                if isinstance(errs, list):
-                                    detail_parts.append(f"{field}: {', '.join(errs)}")
-                                else:
-                                    detail_parts.append(f"{field}: {errs}")
-                            error_msg = error_msg + ' - ' + '; '.join(detail_parts)
-                        else:
-                            error_msg = error_msg + ' - ' + str(gitlab_msg)
-                error_msg = error_msg + ' - ' + str(e.response)
-
-            logger.error(f"GitLab project creation failed: {error_msg}")
+            logger.error("GitLab project creation failed: %s", e.message)
             return Response({
                 'success': False,
-                'message': f'خطأ من GitLab: {error_msg}',
-                'detail': e.response if e.response else None,
+                'message': _public_gitlab_error(e),
+                'detail': {'status_code': e.status_code},
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -604,7 +631,7 @@ class BoardGitLabInfoView(views.APIView):
                         }, status=status.HTTP_404_NOT_FOUND)
                     return Response({
                         'success': False,
-                        'message': f'خطأ من GitLab: {e.message}',
+                        'message': _public_gitlab_error(e),
                     }, status=status.HTTP_400_BAD_REQUEST)
 
             # Fix URLs (replace Docker internal hostname with external URL)
@@ -703,7 +730,7 @@ class FixBoardGitLabAccessView(views.APIView):
             except services.GitLabAPIError as e:
                 return Response({
                     'success': False,
-                    'message': f'خطأ من GitLab: {e.message}',
+                    'message': _public_gitlab_error(e),
                 }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return _handle_unexpected_error('FixBoardGitLabAccessView', e)
@@ -734,15 +761,13 @@ class BoardGitLabMembersView(views.APIView):
             }, status=status.HTTP_403_FORBIDDEN)
 
         try:
-            errors = []  # Collect all errors for debugging
-
             # Try to get the user's personal GitLab token
             user_token = None
             try:
                 gitlab_user = GitLabUser.objects.get(user=request.user)
                 user_token = gitlab_user.access_token
             except GitLabUser.DoesNotExist:
-                errors.append('no_gitlab_user: المستخدم ليس مرتبط بحساب GitLab')
+                pass
 
             # Try with user token first, then admin token
             if user_token:
@@ -753,7 +778,7 @@ class BoardGitLabMembersView(views.APIView):
                         'data': members,
                     })
                 except (services.GitLabAPIError, ValueError) as e:
-                    errors.append(f'user_token_failed: {e}')
+                    logger.warning("Member listing failed with user token for board %s: %s", board_id, e)
 
             # Try to ensure admin access before using admin token
             try:
@@ -763,12 +788,11 @@ class BoardGitLabMembersView(views.APIView):
                     try:
                         services.ensure_admin_access(gitlab_project.gitlab_project_id, owner_token=user_token)
                     except Exception as e:
-                        errors.append(f'ensure_admin_access_failed: {e}')
+                        logger.warning("Could not ensure admin access for board %s: %s", board_id, e)
             except GitLabProject.DoesNotExist:
                 return Response({
                     'success': False,
                     'message': 'هذا المشروع غير مرتبط بمستودع GitLab',
-                    'debug': errors,
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             # Fallback: try with admin token
@@ -782,15 +806,12 @@ class BoardGitLabMembersView(views.APIView):
                 return Response({
                     'success': False,
                     'message': str(e),
-                    'debug': errors,
                 }, status=status.HTTP_400_BAD_REQUEST)
             except services.GitLabAPIError as e:
-                errors.append(f'admin_token_failed: {e.message} (status={e.status_code})')
+                logger.warning("Member listing failed with admin token for board %s: %s", board_id, e.message)
                 return Response({
                     'success': False,
-                    'message': f'خطأ من GitLab: {e.message}',
-                    'debug': errors,
-                    'hint': 'قد يكون الـ admin token لا يملك صلاحية الوصول للمشروع. تأكد أن المستخدم المرتبط بـ GITLAB_TOKEN عضو في المشروع.',
+                    'message': _public_gitlab_error(e),
                 }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return _handle_unexpected_error('BoardGitLabMembersView', e)
@@ -825,6 +846,24 @@ class AddBoardMemberView(views.APIView):
         serializer = AddMemberSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        target_username = serializer.validated_data['gitlab_username']
+        target_links = GitLabUser.objects.select_related('user').filter(gitlab_username=target_username)
+        if target_links.count() != 1:
+            return Response({
+                'success': False,
+                'message': 'يجب أن يكون المستخدم مربوطاً بحساب محلي ومشاركاً في المشروع.',
+            }, status=status.HTTP_400_BAD_REQUEST)
+        target_link = target_links.first()
+
+        target_user = target_link.user
+        is_project_member = board.members.filter(pk=target_user.pk).exists()
+        is_supervisor = _user_is_project_supervisor(target_user, board)
+        if not (is_project_member or is_supervisor):
+            return Response({
+                'success': False,
+                'message': 'لا يمكن إضافة مستخدم غير مشارك في هذا المشروع.',
+            }, status=status.HTTP_403_FORBIDDEN)
+
         # Try to get the user's personal GitLab token
         user_token = None
         try:
@@ -838,7 +877,7 @@ class AddBoardMemberView(views.APIView):
             try:
                 result = services.add_project_member(
                     board=board,
-                    gitlab_username=serializer.validated_data['gitlab_username'],
+                    gitlab_username=target_username,
                     access_level=serializer.validated_data.get('access_level', 30),
                     user_token=user_token,
                 )
@@ -853,7 +892,7 @@ class AddBoardMemberView(views.APIView):
         try:
             result = services.add_project_member(
                 board=board,
-                gitlab_username=serializer.validated_data['gitlab_username'],
+                gitlab_username=target_username,
                 access_level=serializer.validated_data.get('access_level', 30),
                 user_token=None,
             )
@@ -870,7 +909,7 @@ class AddBoardMemberView(views.APIView):
         except services.GitLabAPIError as e:
             return Response({
                 'success': False,
-                'message': f'خطأ من GitLab: {e.message}',
+                'message': _public_gitlab_error(e),
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -903,6 +942,22 @@ class RemoveBoardMemberView(views.APIView):
         serializer = RemoveMemberSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        target_gitlab_user_id = serializer.validated_data['gitlab_user_id']
+        target_links = GitLabUser.objects.select_related('user').filter(gitlab_user_id=target_gitlab_user_id)
+        if target_links.count() != 1:
+            return Response({
+                'success': False,
+                'message': 'لا يمكن حذف مستخدم GitLab غير مرتبط بحساب محلي معروف.',
+            }, status=status.HTTP_400_BAD_REQUEST)
+        target_link = target_links.first()
+
+        target_user = target_link.user
+        if not board.members.filter(pk=target_user.pk).exists():
+            return Response({
+                'success': False,
+                'message': 'لا يمكن حذف مستخدم غير مشارك كطالب في هذا المشروع.',
+            }, status=status.HTTP_403_FORBIDDEN)
+
         # Try to get the user's personal GitLab token
         user_token = None
         try:
@@ -916,7 +971,7 @@ class RemoveBoardMemberView(views.APIView):
             try:
                 services.remove_project_member(
                     board=board,
-                    gitlab_user_id=serializer.validated_data['gitlab_user_id'],
+                    gitlab_user_id=target_gitlab_user_id,
                     user_token=user_token,
                 )
                 return Response({
@@ -929,7 +984,7 @@ class RemoveBoardMemberView(views.APIView):
         try:
             services.remove_project_member(
                 board=board,
-                gitlab_user_id=serializer.validated_data['gitlab_user_id'],
+                gitlab_user_id=target_gitlab_user_id,
                 user_token=None,
             )
             return Response({
@@ -944,7 +999,7 @@ class RemoveBoardMemberView(views.APIView):
         except services.GitLabAPIError as e:
             return Response({
                 'success': False,
-                'message': f'خطأ من GitLab: {e.message}',
+                'message': _public_gitlab_error(e),
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -1141,7 +1196,6 @@ class SyncCommitsView(views.APIView):
 
             # Try syncing with user token first, then fall back to admin token
             last_error = None
-            tried_methods = []
 
             # Attempt 1: User's personal token
             if user_token:
@@ -1154,7 +1208,6 @@ class SyncCommitsView(views.APIView):
                         'data': result,
                     })
                 except (services.GitLabAPIError, ValueError) as e:
-                    tried_methods.append(f'user_token: {e.message if hasattr(e, "message") else str(e)}')
                     last_error = e
                     logger.warning(f"Sync failed with user token for board {board_id}: {e}")
 
@@ -1173,17 +1226,11 @@ class SyncCommitsView(views.APIView):
                 return Response({
                     'success': False,
                     'message': str(e),
-                    'tried_methods': tried_methods,
                 }, status=status.HTTP_400_BAD_REQUEST)
             except services.GitLabAPIError as e:
-                error_msg = f'خطأ من GitLab: {e.message}'
-                if not user_token:
-                    error_msg += '\nنصيحة: اربط حسابك بـ GitLab من خلال لوحة التحكم لتحسين الصلاحيات'
                 return Response({
                     'success': False,
-                    'message': error_msg,
-                    'tried_methods': tried_methods,
-                    'detail': e.response if e.response else None,
+                    'message': _public_gitlab_error(e),
                 }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return _handle_unexpected_error('SyncCommitsView', e)
@@ -1194,10 +1241,17 @@ class SyncCommitsView(views.APIView):
 # ==========================================
 
 class AllBoardsStatsView(views.APIView):
-    permission_classes = [IsAuthenticated, IsSupervisorOrAdmin]
+    permission_classes = [IsAuthenticated, IsHoDDeanOrAdmin]
 
     def get(self, request):
         gitlab_projects = GitLabProject.objects.select_related('board').all()
+
+        if getattr(request.user, 'role', None) == 'hod' and not request.user.is_superuser:
+            department = getattr(request.user, 'department', None)
+            gitlab_projects = [
+                gp for gp in gitlab_projects
+                if _board_department(gp.board) == department
+            ]
 
         boards_stats = []
         for gp in gitlab_projects:

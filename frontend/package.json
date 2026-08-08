@@ -21,7 +21,10 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:run": "vitest run",
+    "test:api": "vitest run src/__tests__/api.auth.test.js src/__tests__/api.contracts.test.js src/__tests__/api.payloads.test.js src/__tests__/gitlabApi.test.js src/lib/__tests__/constants.test.js src/lib/__tests__/utils.test.js",
+    "test:role-ui": "vitest run --config vitest.ui.config.js src/components/__tests__/DashboardLayout.role-ui.test.jsx src/components/__tests__/Navbar.role-ui.test.jsx src/components/__tests__/NotificationBell.ui.test.jsx src/__tests__/App.role-ui.test.jsx"
   },
   "browserslist": {
     "production": [
@@ -37,15 +40,20 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "^4.1.10",
     "autoprefixer": "^10.5.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^17.6.0",
+    "jsdom": "^27.4.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "vitest": "^4.1.10"
   }
 }

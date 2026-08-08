@@ -254,8 +254,8 @@ class GradeAuditLog(models.Model):
     )
     changed_at       = models.DateTimeField(auto_now_add=True)
     field_changed    = models.CharField(max_length=30)   # 'score_main' | 'score_report'
-    old_value        = models.CharField(max_length=20, null=True, blank=True)
-    new_value        = models.CharField(max_length=20, null=True, blank=True)
+    old_value        = EncryptedScoreField(null=True, blank=True)
+    new_value        = EncryptedScoreField(null=True, blank=True)
 
     class Meta:
         ordering = ['-changed_at']

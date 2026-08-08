@@ -35,6 +35,7 @@ from .serializers import (
 )
 from .services import (
     get_doctor_drafts as get_doctor_drafts_service,
+    resolve_grade_committee,
     submit_doctor_drafts as submit_doctor_drafts_service,
 )
 
@@ -45,6 +46,86 @@ def _is_student(user): return getattr(user, 'role', None) == 'student'
 def _is_doctor(user):  return getattr(user, 'role', None) in ('doctor', 'dean', 'hod')
 def _is_dean(user):    return getattr(user, 'role', None) == 'dean'
 def _is_hod(user):     return getattr(user, 'role', None) in ('hod', 'dean')
+
+
+VALID_GRADE_PROJECT_SOURCES = {'IdeaApplication', 'StudentIdeaProposal'}
+ALLOWED_REPORT_MIME_TYPES = {
+    '.pdf': {'application/pdf'},
+    '.doc': {'application/msword'},
+    '.docx': {'application/vnd.openxmlformats-officedocument.wordprocessingml.document'},
+    '.zip': {'application/zip', 'application/x-zip-compressed'},
+    '.rar': {'application/vnd.rar', 'application/x-rar-compressed', 'application/x-rar'},
+}
+
+
+def _safe_uploaded_filename(filename):
+    """Strip Windows and POSIX path components from an uploaded filename."""
+    raw = str(filename or '').replace('\\', '/')
+    safe = raw.rsplit('/', 1)[-1].strip()
+    return safe[:255] or 'report'
+
+
+def _validate_report_upload(file):
+    safe_name = _safe_uploaded_filename(getattr(file, 'name', ''))
+    ext = os.path.splitext(safe_name)[1].lower()
+    if ext not in ALLOWED_REPORT_MIME_TYPES:
+        return None, 'نوع الملف غير مسموح.'
+
+    content_type = (getattr(file, 'content_type', '') or '').lower().split(';', 1)[0].strip()
+    if content_type not in ALLOWED_REPORT_MIME_TYPES[ext]:
+        return None, 'نوع محتوى الملف لا يطابق امتداده.'
+
+    return safe_name, None
+
+
+def _committee_contains_project(committee, source, pid):
+    if source == 'IdeaApplication':
+        return committee.applications.filter(pk=pid).exists()
+    if source == 'StudentIdeaProposal':
+        return committee.proposals.filter(pk=pid).exists()
+    return False
+
+
+def _active_project_student_ids(source, pid):
+    from .services import active_project_student_ids
+    return active_project_student_ids(source, pid)
+
+
+def _validate_committee_binding(committee_id, source, pid, committee_type, semester=''):
+    if not committee_id:
+        return None, None
+    try:
+        committee = Committee.objects.prefetch_related('members').get(pk=committee_id)
+    except (Committee.DoesNotExist, TypeError, ValueError):
+        return None, 'اللجنة المحددة غير موجودة.'
+    if committee.committee_type != committee_type:
+        return None, 'نوع اللجنة لا يطابق اللجنة المحددة.'
+    if semester and committee.semester and committee.semester != semester:
+        return None, 'الفصل الدراسي لا يطابق فصل اللجنة المحددة.'
+    if not _committee_contains_project(committee, source, pid):
+        return None, 'المشروع لا يتبع اللجنة المحددة.'
+    return committee, None
+
+
+def _doctor_can_view_project_grades(user, source, pid):
+    if _is_dean(user):
+        return True
+
+    from django.db.models import Q
+    committee_qs = Committee.objects.filter(models_Q_for_project(source, pid)).filter(
+        Q(chair=user) | Q(members=user)
+    )
+    if committee_qs.exists():
+        return True
+
+    from projects.models import IdeaApplication, StudentIdeaProposal
+    if source == 'IdeaApplication':
+        return IdeaApplication.objects.filter(pk=pid, idea__doctor=user).exists()
+    if source == 'StudentIdeaProposal':
+        return StudentIdeaProposal.objects.filter(
+            Q(pk=pid, supervisor=user) | Q(pk=pid, co_supervisors=user)
+        ).exists()
+    return False
 
 
 def _get_project(source, pid):
@@ -123,6 +204,8 @@ class ReportUploadView(APIView):
                 {'detail': 'project_source, project_id, file مطلوبة.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if source not in VALID_GRADE_PROJECT_SOURCES:
+            return Response({'detail': 'مصدر المشروع غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             pid = int(pid)
@@ -136,14 +219,10 @@ class ReportUploadView(APIView):
         if file.size > 10 * 1024 * 1024:
             return Response({'detail': 'حجم الملف يتجاوز 10 MB.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # صنف الملف
-        allowed_exts = {'.pdf', '.doc', '.docx', '.zip', '.rar'}
-        ext = os.path.splitext(file.name)[1].lower()
-        if ext not in allowed_exts:
-            return Response(
-                {'detail': f'نوع الملف غير مسموح. المسموح: {", ".join(allowed_exts)}'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        safe_name, upload_error = _validate_report_upload(file)
+        if upload_error:
+            return Response({'detail': upload_error}, status=status.HTTP_400_BAD_REQUEST)
+        file.name = safe_name
 
         report, created = ProjectReport.objects.get_or_create(
             project_source=source,
@@ -158,7 +237,7 @@ class ReportUploadView(APIView):
                 pass
 
         report.file          = file
-        report.original_name = file.name
+        report.original_name = safe_name
         report.file_size     = file.size
         report.semester      = sem or report.semester
         report.uploaded_by   = user
@@ -175,6 +254,8 @@ class ReportDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, source, pid):
+        if source not in VALID_GRADE_PROJECT_SOURCES:
+            return Response({'detail': 'مصدر المشروع غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
         user = request.user
         pid  = int(pid)
 
@@ -201,6 +282,8 @@ class ReportDownloadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, source, pid):
+        if source not in VALID_GRADE_PROJECT_SOURCES:
+            return Response({'detail': 'مصدر المشروع غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
         user = request.user
         pid  = int(pid)
 
@@ -253,14 +336,44 @@ class EnterGradeView(APIView):
         committee_id = d.get('committee_id')
         semester     = d.get('semester', '')
 
-        if not _is_dean(user):
-            if not _doctor_is_chair_for(user, source, pid, ctype):
-                # رئيس القسم يُسمح له إذا كان عضواً في اللجنة
-                if not (_is_hod(user) and _doctor_is_member_for(user, source, pid, ctype)):
-                    return Response(
-                        {'detail': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.'},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
+        committee = None
+        if committee_id:
+            committee, committee_error = resolve_grade_committee(
+                source, pid, ctype, semester=semester, committee_id=committee_id
+            )
+            if committee_error:
+                return Response({'detail': committee_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Individual/direct grading is chair-only. HoD/Dean privileges do not
+        # replace the chair role here; committee members participate through
+        # the draft endpoint only when collective mode is enabled.
+        allowed_individual_grader = (
+            committee.chair_id == user.id
+            if committee is not None
+            else _doctor_is_chair_for(user, source, pid, ctype)
+        )
+        if not allowed_individual_grader:
+            return Response(
+                {'detail': 'التقييم الفردي متاح لرئيس اللجنة فقط.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if committee is None:
+            committee, committee_error = resolve_grade_committee(
+                source, pid, ctype, semester=semester, committee_id=None
+            )
+            if committee_error:
+                return Response({'detail': committee_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        mode = CommitteeGradingMode.objects.filter(committee=committee).first()
+        if mode and mode.collective:
+            return Response(
+                {'detail': 'التقييم الجماعي مُفعَّل لهذه اللجنة؛ استخدم مسار تقييم أعضاء اللجنة.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        committee_id = committee.id
+        semester = committee.semester or semester
 
         from django.contrib.auth import get_user_model
         User = get_user_model()
@@ -268,6 +381,12 @@ class EnterGradeView(APIView):
             student = User.objects.get(pk=student_id, role='student')
         except User.DoesNotExist:
             return Response({'detail': 'الطالب غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if student.id not in _active_project_student_ids(source, pid):
+            return Response(
+                {'detail': 'الطالب ليس عضواً نشطاً في المشروع المحدد.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         grade, created = ProjectGrade.objects.get_or_create(
             project_source=source,
@@ -296,8 +415,7 @@ class EnterGradeView(APIView):
         grade.entered_by   = user
         if not grade.semester:
             grade.semester = semester
-        if committee_id:
-            grade.committee_id = committee_id
+        grade.committee_id = committee_id
         grade.save()
 
         if old_main != grade.score_main:
@@ -342,14 +460,59 @@ class EnterBulkGradesView(APIView):
         semester     = d.get('semester', '')
         confirm_update = d.get('confirm_update', False)
 
-        if not _is_dean(user):
-            if not _doctor_is_chair_for(user, source, pid, ctype):
-                # رئيس القسم يُسمح له إذا كان عضواً في اللجنة
-                if not (_is_hod(user) and _doctor_is_member_for(user, source, pid, ctype)):
-                    return Response(
-                        {'detail': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.'},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
+        committee = None
+        if committee_id:
+            committee, committee_error = resolve_grade_committee(
+                source, pid, ctype, semester=semester, committee_id=committee_id
+            )
+            if committee_error:
+                return Response({'detail': committee_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        allowed_individual_grader = (
+            committee.chair_id == user.id
+            if committee is not None
+            else _doctor_is_chair_for(user, source, pid, ctype)
+        )
+        if not allowed_individual_grader:
+            return Response(
+                {'detail': 'التقييم الفردي متاح لرئيس اللجنة فقط.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if committee is None:
+            committee, committee_error = resolve_grade_committee(
+                source, pid, ctype, semester=semester, committee_id=None
+            )
+            if committee_error:
+                return Response({'detail': committee_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        mode = CommitteeGradingMode.objects.filter(committee=committee).first()
+        if mode and mode.collective:
+            return Response(
+                {'detail': 'التقييم الجماعي مُفعَّل لهذه اللجنة؛ استخدم مسار تقييم أعضاء اللجنة.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        committee_id = committee.id
+        semester = committee.semester or semester
+
+        requested_student_ids = [item['student_id'] for item in d['grades']]
+        if len(requested_student_ids) != len(set(requested_student_ids)):
+            return Response(
+                {'detail': 'لا يجوز تكرار الطالب نفسه في طلب العلامات الجماعي.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existing_students = User.objects.filter(
+            pk__in=requested_student_ids, role='student'
+        ).in_bulk()
+        active_student_ids = _active_project_student_ids(source, pid)
+        outside_project = set(existing_students).difference(active_student_ids)
+        if outside_project:
+            return Response(
+                {'detail': 'يتضمن الطلب طالباً غير نشط في المشروع المحدد.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # التحقق من وجود علامات سابقة - إذا كان هناك أي علامة موجودة ولم يؤكد المستخدم
         if not confirm_update:
@@ -390,8 +553,7 @@ class EnterBulkGradesView(APIView):
             grade.entered_by   = user
             if not grade.semester:
                 grade.semester = semester
-            if committee_id:
-                grade.committee_id = committee_id
+            grade.committee_id = committee_id
             grade.save()
 
             if old_main != grade.score_main:
@@ -420,6 +582,9 @@ class ProjectGradesView(APIView):
         user = request.user
         pid  = int(pid)
 
+        if source not in VALID_GRADE_PROJECT_SOURCES:
+            return Response({'detail': 'مصدر المشروع غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
+
         if _is_student(user):
             if not _student_belongs_to_project(user, source, pid):
                 return Response({'detail': 'ليس لديك صلاحية.'}, status=status.HTTP_403_FORBIDDEN)
@@ -428,6 +593,8 @@ class ProjectGradesView(APIView):
                 project_source=source, project_id=pid, student=user
             ).select_related('student')
         elif _is_doctor(user):
+            if not _doctor_can_view_project_grades(user, source, pid):
+                return Response({'detail': 'ليس لديك صلاحية.'}, status=status.HTTP_403_FORBIDDEN)
             grades = ProjectGrade.objects.filter(
                 project_source=source, project_id=pid
             ).select_related('student')
@@ -485,9 +652,9 @@ class MyCommitteeGradesView(APIView):
             mode         = CommitteeGradingMode.objects.filter(committee=c).first()
             collective   = mode.collective if mode else False
 
-            # إذا لم يكن رئيساً ووضع التقييم الجماعي غير مُفعَّل → لا تُظهر اللجنة
-            # استثناء: رئيس القسم يرى اللجان التي هو عضو فيها دائماً
-            if not is_chair and not collective and not _is_hod(user):
+            # الفردي لرئيس اللجنة فقط؛ الأعضاء يظهر لهم الإدخال فقط عند
+            # تفعيل الوضع الجماعي، بغض النظر عن كون العضو Doctor أو HoD.
+            if not is_chair and not collective:
                 continue
 
             projects_data = []
@@ -684,9 +851,14 @@ class HodGradesExportWordView(APIView):
         project_type = request.query_params.get('project_type')
         committee_type = request.query_params.get('committee_type')
         
-        # رئيس القسم يرى فقط قسمه
+        # رئيس القسم يرى فقط قسمه، بينما العميد يستطيع التصدير عبر الأقسام.
         department = getattr(request.user, 'department', None)
-        
+        if not department and not _is_dean(request.user):
+            return Response(
+                {'detail': 'حساب رئيس القسم غير مرتبط بقسم.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         content = _build_word_grades(semester, department, project_type, committee_type)
 
         resp = HttpResponse(
@@ -1216,6 +1388,11 @@ class CommitteeGradingModeView(APIView):
         if committee_id is None or collective is None:
             return Response(
                 {'detail': 'committee_id و collective مطلوبان.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(collective, bool):
+            return Response(
+                {'detail': 'collective يجب أن يكون قيمة منطقية.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

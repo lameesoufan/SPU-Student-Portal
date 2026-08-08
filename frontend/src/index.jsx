@@ -1,10 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { ThemeProvider } from './ThemeContext';
+import { ThemeProvider, THEME_KEY } from './ThemeContext';
 
 // Apply saved theme immediately to prevent flash
-const saved = (() => { try { return localStorage.getItem('spu-theme'); } catch { return null; } })();
+const saved = (() => { try { return localStorage.getItem(THEME_KEY); } catch { return null; } })();
 if (saved) document.documentElement.setAttribute('data-theme', saved);
 
 class ErrorBoundary extends React.Component {

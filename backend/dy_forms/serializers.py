@@ -1,12 +1,16 @@
+from django.urls import reverse
 from rest_framework import serializers
 
-from .models import DynamicForm, FormField, FormResponse, FieldResponse
+from .models import DynamicForm, FieldResponse, FormField, FormResponse
 from .validators import normalize_field_value, value_to_legacy_text
+
+
+REPORT_FORM_CONTEXTS = {'weekly_report', 'monthly_report', 'milestone', 'final_report'}
 
 
 class FormFieldSerializer(serializers.ModelSerializer):
     class Meta:
-        model  = FormField
+        model = FormField
         fields = ['id', 'label', 'field_type', 'required', 'options', 'order']
 
 
@@ -14,17 +18,18 @@ class DynamicFormSerializer(serializers.ModelSerializer):
     fields = FormFieldSerializer(many=True, read_only=True)
 
     class Meta:
-        model  = DynamicForm
+        model = DynamicForm
         fields = ['id', 'department', 'context', 'title', 'description', 'fields', 'updated_at']
 
 
 class FieldResponseSerializer(serializers.ModelSerializer):
     field_label = serializers.SerializerMethodField()
-    field_type  = serializers.SerializerMethodField()
-    value       = serializers.SerializerMethodField()
+    field_type = serializers.SerializerMethodField()
+    value = serializers.SerializerMethodField()
+    file = serializers.SerializerMethodField()
 
     class Meta:
-        model  = FieldResponse
+        model = FieldResponse
         fields = ['field', 'field_label', 'field_type', 'value', 'file']
 
     def get_field_label(self, obj):
@@ -33,15 +38,25 @@ class FieldResponseSerializer(serializers.ModelSerializer):
     def get_field_type(self, obj):
         return obj.field_type or (obj.field.field_type if obj.field else '')
 
+    def _protected_file_url(self, obj):
+        if not obj.file:
+            return None
+        url = reverse('dynamic_form_file_download', args=[obj.pk])
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(url)
+        return url
+
+    def get_file(self, obj):
+        return self._protected_file_url(obj)
+
     def get_value(self, obj):
-        # لو الحقل file وعندو ملف مرفوع → ارجع name + url
         field_type = self.get_field_type(obj)
         if field_type == 'file' and obj.file:
-            request = self.context.get('request')
-            url = obj.file.url
-            if request:
-                url = request.build_absolute_uri(url)
-            return {'name': obj.file.name.split('/')[-1], 'url': url}
+            return {
+                'name': obj.file.name.split('/')[-1],
+                'url': self._protected_file_url(obj),
+            }
 
         if obj.value_data is not None:
             return obj.value_data
@@ -55,7 +70,7 @@ class FormResponseSerializer(serializers.ModelSerializer):
     field_responses = serializers.ListField(child=serializers.DictField(), write_only=True)
 
     class Meta:
-        model  = FormResponse
+        model = FormResponse
         fields = [
             'id', 'form', 'student', 'proposal_id', 'application_id', 'project_board_id',
             'report_period_start', 'report_period_end', 'submitted_at', 'field_responses',
@@ -71,8 +86,26 @@ class FormResponseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'form': 'Form is required.'})
         if not isinstance(submitted, list):
             raise serializers.ValidationError({'field_responses': 'Field responses must be a list.'})
-        if not any(attrs.get(key) for key in ('proposal_id', 'application_id', 'project_board_id')):
+
+        link_fields = ('proposal_id', 'application_id', 'project_board_id')
+        supplied_links = [field_name for field_name in link_fields if attrs.get(field_name) is not None]
+        if not supplied_links:
             raise serializers.ValidationError({'link': 'A proposal, application, or project board link is required.'})
+        if len(supplied_links) != 1:
+            raise serializers.ValidationError({'link': 'Exactly one project link must be provided.'})
+
+        link_field = supplied_links[0]
+        if form.context == 'propose' and link_field != 'proposal_id':
+            raise serializers.ValidationError({'link': 'Proposal forms must be linked to a proposal.'})
+        if form.context == 'browse' and link_field != 'application_id':
+            raise serializers.ValidationError({'link': 'Browse forms must be linked to an application.'})
+        if form.context in REPORT_FORM_CONTEXTS and link_field != 'project_board_id':
+            raise serializers.ValidationError({'link': 'Report forms must be linked to a project board.'})
+
+        start = attrs.get('report_period_start')
+        end = attrs.get('report_period_end')
+        if start and end and start > end:
+            raise serializers.ValidationError({'report_period_end': 'Report period end must be on or after the start date.'})
 
         fields = {field.id: field for field in form.fields.all()}
         normalized = []
@@ -100,7 +133,6 @@ class FormResponseSerializer(serializers.ModelSerializer):
             except serializers.ValidationError as exc:
                 raise serializers.ValidationError({'field_responses': {index: exc.detail}})
 
-            # ملفات: القيمة الفعلية موجودة بـ request.FILES وليس بـ field_responses
             if field.field_type == 'file' and field.required and not has_uploaded_file(field):
                 raise serializers.ValidationError({'field_responses': {index: 'This field is required.'}})
 
@@ -112,11 +144,9 @@ class FormResponseSerializer(serializers.ModelSerializer):
                 continue
             if not field.required:
                 continue
-            if field.field_type == 'file':
-                if has_uploaded_file(field):
-                    # الحقل غير موجود بـ field_responses لكن الملف مرفوع فعلياً
-                    normalized.append({'field': field, 'value': ''})
-                    continue
+            if field.field_type == 'file' and has_uploaded_file(field):
+                normalized.append({'field': field, 'value': ''})
+                continue
             raise serializers.ValidationError({'field_responses': {field.id: 'This field is required.'}})
 
         attrs['_normalized_field_responses'] = normalized
@@ -131,7 +161,6 @@ class FormResponseSerializer(serializers.ModelSerializer):
             field = item['field']
             value = item['value']
 
-            # استخراج الملف الفعلي من request.FILES لحقل type=file
             file_obj = None
             if request and field.field_type == 'file':
                 file_obj = request.FILES.get(f'field_file_{field.id}')

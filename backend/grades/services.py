@@ -67,16 +67,22 @@ def committee_contains_project(committee, source, pid):
 
 
 def active_project_student_ids(source, pid):
-    """Return active team members, with a legacy fallback for older project rows."""
+    """Return active team members, with a legacy fallback only for projects
+    that have no participation rows at all.
+
+    Once ProjectParticipation rows exist, they are the source of truth even if
+    every participant is failed or withdrawn. Falling back in that case would
+    accidentally reactivate legacy leaders/invitees for grading.
+    """
     from projects.models import IdeaApplication, ProjectParticipation, StudentIdeaProposal
 
-    participations = ProjectParticipation.objects.filter(status='active')
     if source == 'IdeaApplication':
+        project_participations = ProjectParticipation.objects.filter(idea_application_id=pid)
         ids = set(
-            participations.filter(idea_application_id=pid)
+            project_participations.filter(status='active')
             .values_list('student_id', flat=True)
         )
-        if ids:
+        if project_participations.exists():
             return ids
         project = (
             IdeaApplication.objects.filter(pk=pid)
@@ -94,11 +100,12 @@ def active_project_student_ids(source, pid):
         return ids
 
     if source == 'StudentIdeaProposal':
+        project_participations = ProjectParticipation.objects.filter(student_proposal_id=pid)
         ids = set(
-            participations.filter(student_proposal_id=pid)
+            project_participations.filter(status='active')
             .values_list('student_id', flat=True)
         )
-        if ids:
+        if project_participations.exists():
             return ids
         project = (
             StudentIdeaProposal.objects.filter(pk=pid)
@@ -170,6 +177,53 @@ def doctor_is_member_for(user, source, pid, committee_type):
     return qs.filter(proposals__id=pid).exists()
 
 
+def resolve_grade_committee(source, pid, committee_type, semester='', committee_id=None):
+    """Resolve the exact committee responsible for a grade-entry request.
+
+    Direct grade entry must honor the grading mode of the *actual* committee.
+    Therefore callers are not allowed to bypass mode checks simply by omitting
+    ``committee_id``.  When the id is absent we resolve the committee from the
+    project/type (and semester when supplied); ambiguous matches require an
+    explicit id.
+    """
+    if source not in VALID_GRADE_PROJECT_SOURCES:
+        return None, 'مصدر المشروع غير صالح.'
+
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return None, 'project_id يجب أن يكون رقماً.'
+
+    if committee_id:
+        try:
+            committee = Committee.objects.prefetch_related('members').get(pk=committee_id)
+        except (Committee.DoesNotExist, TypeError, ValueError):
+            return None, 'اللجنة المحددة غير موجودة.'
+        _, error = _normalise_grade_request(
+            committee, source, pid, committee_type, semester
+        )
+        if error:
+            return None, error
+        return committee, None
+
+    qs = Committee.objects.prefetch_related('members').filter(
+        committee_type=committee_type,
+    )
+    if source == 'IdeaApplication':
+        qs = qs.filter(applications__id=pid)
+    else:
+        qs = qs.filter(proposals__id=pid)
+    if semester:
+        qs = qs.filter(semester=semester)
+
+    matches = list(qs.distinct()[:2])
+    if not matches:
+        return None, 'لا توجد لجنة مطابقة للمشروع ونوع التقييم المحددين.'
+    if len(matches) > 1:
+        return None, 'يوجد أكثر من لجنة مطابقة؛ يجب إرسال committee_id لتحديد اللجنة.'
+    return matches[0], None
+
+
 def project_q_filter(source, pid):
     if source == 'IdeaApplication':
         return Q(applications__id=pid)
@@ -186,7 +240,20 @@ def doctor_can_access_report(user, source, pid):
 # ── Report Upload / Retrieval ─────────────────────────────────────────────────
 
 ALLOWED_REPORT_EXTENSIONS = {'.pdf', '.doc', '.docx', '.zip', '.rar'}
+ALLOWED_REPORT_MIME_TYPES = {
+    '.pdf': {'application/pdf'},
+    '.doc': {'application/msword'},
+    '.docx': {'application/vnd.openxmlformats-officedocument.wordprocessingml.document'},
+    '.zip': {'application/zip', 'application/x-zip-compressed'},
+    '.rar': {'application/vnd.rar', 'application/x-rar-compressed', 'application/x-rar'},
+}
 MAX_REPORT_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+def safe_uploaded_filename(filename):
+    raw = str(filename or '').replace('\\', '/')
+    safe = raw.rsplit('/', 1)[-1].strip()
+    return safe[:255] or 'report'
 
 
 def upload_report(*, user, source, pid, semester, file):
@@ -198,6 +265,9 @@ def upload_report(*, user, source, pid, semester, file):
 
     if not (source and pid and file):
         return {'ok': False, 'error': 'project_source, project_id, file مطلوبة.',
+                'status': status.HTTP_400_BAD_REQUEST}
+    if source not in VALID_GRADE_PROJECT_SOURCES:
+        return {'ok': False, 'error': 'مصدر المشروع غير صالح.',
                 'status': status.HTTP_400_BAD_REQUEST}
 
     try:
@@ -212,13 +282,19 @@ def upload_report(*, user, source, pid, semester, file):
     if file.size > MAX_REPORT_FILE_SIZE:
         return {'ok': False, 'error': 'حجم الملف يتجاوز 10 MB.', 'status': status.HTTP_400_BAD_REQUEST}
 
-    ext = _os.path.splitext(file.name)[1].lower()
+    safe_name = safe_uploaded_filename(file.name)
+    ext = _os.path.splitext(safe_name)[1].lower()
     if ext not in ALLOWED_REPORT_EXTENSIONS:
         return {
             'ok': False,
             'error': f'نوع الملف غير مسموح. المسموح: {", ".join(ALLOWED_REPORT_EXTENSIONS)}',
             'status': status.HTTP_400_BAD_REQUEST,
         }
+    content_type = (getattr(file, 'content_type', '') or '').lower().split(';', 1)[0].strip()
+    if content_type not in ALLOWED_REPORT_MIME_TYPES[ext]:
+        return {'ok': False, 'error': 'نوع محتوى الملف لا يطابق امتداده.',
+                'status': status.HTTP_400_BAD_REQUEST}
+    file.name = safe_name
 
     report, created = ProjectReport.objects.get_or_create(
         project_source=source,
@@ -232,7 +308,7 @@ def upload_report(*, user, source, pid, semester, file):
             pass
 
     report.file          = file
-    report.original_name = file.name
+    report.original_name = safe_name
     report.file_size     = file.size
     report.semester       = semester or report.semester
     report.uploaded_by   = user
@@ -272,14 +348,8 @@ def get_report_with_access_check(*, user, source, pid):
 # ── Enter Grade (single) ──────────────────────────────────────────────────────
 
 def _check_grader_permission(user, source, pid, ctype):
-    """يتحقق أن المستخدم مسموحله يدخل علامة بهذا النوع لهذا المشروع."""
-    if is_dean(user):
-        return True
-    if doctor_is_chair_for(user, source, pid, ctype):
-        return True
-    if is_hod(user) and doctor_is_member_for(user, source, pid, ctype):
-        return True
-    return False
+    """Direct/individual grading is restricted to the committee chair only."""
+    return doctor_is_chair_for(user, source, pid, ctype)
 
 
 def enter_grade(*, user, validated_data):
@@ -294,14 +364,48 @@ def enter_grade(*, user, validated_data):
     committee_id = d.get('committee_id')
     semester     = d.get('semester', '')
 
-    if not _check_grader_permission(user, source, pid, ctype):
+    committee = None
+    if committee_id:
+        committee, error = resolve_grade_committee(
+            source, pid, ctype, semester=semester, committee_id=committee_id
+        )
+        if error:
+            return {'ok': False, 'error': error, 'status': status.HTTP_400_BAD_REQUEST}
+
+    if committee is not None:
+        allowed_individual_grader = committee.chair_id == user.id
+    else:
+        allowed_individual_grader = _check_grader_permission(user, source, pid, ctype)
+
+    if not allowed_individual_grader:
         return {'ok': False, 'error': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.',
                 'status': status.HTTP_403_FORBIDDEN}
+
+    if committee is None:
+        committee, error = resolve_grade_committee(
+            source, pid, ctype, semester=semester, committee_id=None
+        )
+        if error:
+            return {'ok': False, 'error': error, 'status': status.HTTP_400_BAD_REQUEST}
+
+    mode = CommitteeGradingMode.objects.filter(committee=committee).first()
+    if mode and mode.collective:
+        return {
+            'ok': False,
+            'error': 'التقييم الجماعي مُفعَّل لهذه اللجنة؛ يجب إدخال تقييم كل عضو عبر مسار التقييم الجماعي.',
+            'status': status.HTTP_409_CONFLICT,
+        }
+
+    committee_id = committee.id
+    semester = committee.semester or semester
 
     try:
         student = User.objects.get(pk=student_id, role='student')
     except User.DoesNotExist:
         return {'ok': False, 'error': 'الطالب غير موجود.', 'status': status.HTTP_404_NOT_FOUND}
+    if student.id not in active_project_student_ids(source, pid):
+        return {'ok': False, 'error': 'الطالب ليس عضواً نشطاً في المشروع المحدد.',
+                'status': status.HTTP_400_BAD_REQUEST}
 
     grade, created = ProjectGrade.objects.get_or_create(
         project_source=source, project_id=pid, committee_type=ctype, student=student,
@@ -324,8 +428,7 @@ def enter_grade(*, user, validated_data):
     grade.entered_by   = user
     if not grade.semester:
         grade.semester = semester
-    if committee_id:
-        grade.committee_id = committee_id
+    grade.committee_id = committee_id
     grade.save()
 
     _log_grade_changes(grade, user, ctype, old_main, old_report)
@@ -362,9 +465,50 @@ def enter_bulk_grades(*, user, validated_data):
     semester       = d.get('semester', '')
     confirm_update = d.get('confirm_update', False)
 
-    if not _check_grader_permission(user, source, pid, ctype):
+    committee = None
+    if committee_id:
+        committee, error = resolve_grade_committee(
+            source, pid, ctype, semester=semester, committee_id=committee_id
+        )
+        if error:
+            return {'ok': False, 'error': error, 'status': status.HTTP_400_BAD_REQUEST}
+
+    if committee is not None:
+        allowed_individual_grader = committee.chair_id == user.id
+    else:
+        allowed_individual_grader = _check_grader_permission(user, source, pid, ctype)
+
+    if not allowed_individual_grader:
         return {'ok': False, 'error': 'أنت لست رئيس اللجنة المسؤولة عن هذا المشروع.',
                 'status': status.HTTP_403_FORBIDDEN}
+
+    if committee is None:
+        committee, error = resolve_grade_committee(
+            source, pid, ctype, semester=semester, committee_id=None
+        )
+        if error:
+            return {'ok': False, 'error': error, 'status': status.HTTP_400_BAD_REQUEST}
+
+    mode = CommitteeGradingMode.objects.filter(committee=committee).first()
+    if mode and mode.collective:
+        return {
+            'ok': False,
+            'error': 'التقييم الجماعي مُفعَّل لهذه اللجنة؛ يجب إدخال تقييم كل عضو عبر مسار التقييم الجماعي.',
+            'status': status.HTTP_409_CONFLICT,
+        }
+
+    committee_id = committee.id
+    semester = committee.semester or semester
+
+    requested_student_ids = [item['student_id'] for item in d['grades']]
+    if len(requested_student_ids) != len(set(requested_student_ids)):
+        return {'ok': False, 'error': 'لا يجوز تكرار الطالب نفسه في الطلب.',
+                'status': status.HTTP_400_BAD_REQUEST}
+    existing_students = User.objects.filter(pk__in=requested_student_ids, role='student').in_bulk()
+    outside_project = set(existing_students).difference(active_project_student_ids(source, pid))
+    if outside_project:
+        return {'ok': False, 'error': 'يتضمن الطلب طالباً غير نشط في المشروع المحدد.',
+                'status': status.HTTP_400_BAD_REQUEST}
 
     if not confirm_update:
         existing = ProjectGrade.objects.filter(
@@ -397,8 +541,7 @@ def enter_bulk_grades(*, user, validated_data):
         grade.entered_by   = user
         if not grade.semester:
             grade.semester = semester
-        if committee_id:
-            grade.committee_id = committee_id
+        grade.committee_id = committee_id
         grade.save()
 
         _log_grade_changes(grade, user, ctype, old_main, old_report)
@@ -411,6 +554,8 @@ def enter_bulk_grades(*, user, validated_data):
 
 def get_project_grades(*, user, source, pid):
     pid = int(pid)
+    if source not in VALID_GRADE_PROJECT_SOURCES:
+        return {'ok': False, 'error': 'مصدر المشروع غير صالح.', 'status': status.HTTP_400_BAD_REQUEST}
 
     if is_student(user):
         if not student_belongs_to_project(user, source, pid):
@@ -419,6 +564,18 @@ def get_project_grades(*, user, source, pid):
             project_source=source, project_id=pid, student=user
         ).select_related('student')
     elif is_doctor(user):
+        from projects.models import IdeaApplication, StudentIdeaProposal
+        can_access = is_dean(user) or Committee.objects.filter(
+            project_q_filter(source, pid)
+        ).filter(Q(chair=user) | Q(members=user)).exists()
+        if source == 'IdeaApplication':
+            can_access = can_access or IdeaApplication.objects.filter(pk=pid, idea__doctor=user).exists()
+        else:
+            can_access = can_access or StudentIdeaProposal.objects.filter(
+                Q(pk=pid, supervisor=user) | Q(pk=pid, co_supervisors=user)
+            ).exists()
+        if not can_access:
+            return {'ok': False, 'error': 'ليس لديك صلاحية.', 'status': status.HTTP_403_FORBIDDEN}
         grades = ProjectGrade.objects.filter(
             project_source=source, project_id=pid
         ).select_related('student')
@@ -468,7 +625,9 @@ def get_my_committee_grades(*, user, semester=None):
         mode       = CommitteeGradingMode.objects.filter(committee=c).first()
         collective = mode.collective if mode else False
 
-        if not is_chair and not collective and not is_hod(user):
+        # Individual mode is chair-only.  Ordinary members (including HoD)
+        # participate only when collective grading is enabled.
+        if not is_chair and not collective:
             continue
 
         result.append(_build_committee_grades_entry(c, user, is_chair, collective))

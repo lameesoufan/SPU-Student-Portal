@@ -61,13 +61,30 @@ def _validation_error_response(errors):
 
 # helper to save dynamic form response inside an existing transaction
 def _save_form_response(student, form_id, field_responses, proposal_id=None, application_id=None):
-    """Save a FormResponse + FieldResponses if form_id and field_responses are provided."""
+    """Save a project-creation form response only when form/link scope matches."""
     if not form_id or not isinstance(field_responses, list):
         return
+
+    from dy_forms.models import DynamicForm
     from dy_forms.serializers import FormResponseSerializer
 
+    form = DynamicForm.objects.filter(pk=form_id).first()
+    if not form:
+        return
+
+    if proposal_id is not None:
+        project = StudentIdeaProposal.objects.filter(pk=proposal_id, student=student).first()
+        if not project or form.context != 'propose' or form.department != project.department:
+            return
+    elif application_id is not None:
+        project = IdeaApplication.objects.filter(pk=application_id, student=student).select_related('idea').first()
+        if not project or form.context != 'browse' or form.department != project.idea.department:
+            return
+    else:
+        return
+
     serializer = FormResponseSerializer(data={
-        'form': form_id,
+        'form': form.id,
         'proposal_id': proposal_id,
         'application_id': application_id,
         'field_responses': field_responses,

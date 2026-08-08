@@ -264,6 +264,7 @@ def verify_gitlab_token(gitlab_token: str) -> dict:
 
 def link_gitlab_user(user, gitlab_token: str, gitlab_username: str = None):
     from .models import GitLabUser
+    from django.db.models import Q
 
     gitlab_info = verify_gitlab_token(gitlab_token)
 
@@ -272,6 +273,15 @@ def link_gitlab_user(user, gitlab_token: str, gitlab_username: str = None):
             f"اسم المستخدم لا يتطابق. القيمة المدخلة: {gitlab_username}, "
             f"القيمة الفعلية في GitLab: {gitlab_info['username']}"
         )
+
+    # One remote GitLab identity must never be shared by multiple local users.
+    # This prevents account-linking confusion and authorization through a token
+    # that already belongs to another portal account.
+    conflict = GitLabUser.objects.exclude(user=user).filter(
+        Q(gitlab_user_id=gitlab_info['id']) | Q(gitlab_username=gitlab_info['username'])
+    ).exists()
+    if conflict:
+        raise ValueError("حساب GitLab هذا مرتبط مسبقاً بحساب آخر في النظام")
 
     gitlab_user, created = GitLabUser.objects.update_or_create(
         user=user,
@@ -633,7 +643,8 @@ def add_project_member(board, gitlab_username: str, access_level: int = 30, user
             token=user_token,
         )
     except GitLabAPIError as e:
-        raise ValueError(f"خطأ في البحث عن المستخدم: {e.message}")
+        logger.warning("GitLab user lookup failed for %s: %s", gitlab_username, e.message)
+        raise ValueError("تعذر البحث عن المستخدم في GitLab حالياً")
 
     if not user_data:
         raise ValueError(f"المستخدم '{gitlab_username}' غير موجود في GitLab. "
@@ -653,7 +664,8 @@ def add_project_member(board, gitlab_username: str, access_level: int = 30, user
     except GitLabAPIError as e:
         if e.status_code == 409:
             raise ValueError(f"المستخدم '{gitlab_username}' عضو في المشروع بالفعل")
-        raise ValueError(f"خطأ في إضافة العضو: {e.message}")
+        logger.warning("Could not add GitLab member %s: %s", gitlab_username, e.message)
+        raise ValueError("تعذر إضافة العضو إلى GitLab حالياً")
 
     logger.info(f"Added {gitlab_username} (ID: {gitlab_user_id}) to project {gitlab_project.project_name} "
                 f"with access level {access_level}")
@@ -763,7 +775,7 @@ def register_webhook(board, webhook_url: str) -> dict:
         'job_events': False,
         'deployment_events': False,
         'releases_events': False,
-        'enable_ssl_verification': False,
+        'enable_ssl_verification': True,
     }
 
     result = gitlab_api_post(
@@ -1116,10 +1128,11 @@ def check_gitlab_health() -> dict:
             'message': 'GitLab متصل ويعمل بشكل طبيعي',
         }
     except GitLabAPIError as e:
+        logger.warning("GitLab health check failed: %s", e.message)
         return {
             'status': False,
             'version': None,
-            'message': f'مشكلة في الاتصال: {e.message}',
+            'message': 'تعذر الاتصال بخدمة GitLab',
         }
     except Exception as e:
         return {
@@ -1155,7 +1168,7 @@ def check_gitlab_project_exists(board) -> dict:
             }
         return {
             'exists': False,
-            'reason': f'خطأ في الاتصال: {e.message}',
+            'reason': 'تعذر التحقق من المستودع في GitLab',
         }
     except Exception as e:
         return {

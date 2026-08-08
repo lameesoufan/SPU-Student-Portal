@@ -8,6 +8,7 @@ export default function StudentSearch({ value, onChange, placeholder = 'Search b
   const [open, setOpen]         = useState(false);
   const [loading, setLoading]   = useState(false);
   const [localError, setLocalError] = useState('');
+  const [searchError, setSearchError] = useState('');
   const debounce                = useRef(null);
   const requestSeq              = useRef(0);
   const wrapRef                 = useRef(null);
@@ -32,6 +33,7 @@ export default function StudentSearch({ value, onChange, placeholder = 'Search b
     const q = e.target.value;
     setQuery(q);
     setLocalError('');
+    setSearchError('');
     onChange('');
 
     clearTimeout(debounce.current);
@@ -54,7 +56,11 @@ export default function StudentSearch({ value, onChange, placeholder = 'Search b
           setOpen(true);
         }
       } catch {
-        if (seq === requestSeq.current) setResults([]);
+        if (seq === requestSeq.current) {
+          setResults([]);
+          setSearchError('تعذر البحث عن الطلاب. حاول مرة أخرى.');
+          setOpen(true);
+        }
       } finally {
         if (seq === requestSeq.current) setLoading(false);
       }
@@ -147,8 +153,13 @@ export default function StudentSearch({ value, onChange, placeholder = 'Search b
         </ul>
       )}
 
-      {/* No results */}
-      {open && results.length === 0 && !loading && query.trim() && (
+      {/* Search failure / no results */}
+      {open && searchError && !loading && (
+        <div className="absolute top-[calc(100%+4px)] left-0 right-0 bg-[var(--card)] border border-red-200 dark:border-red-900 rounded-[var(--radius-sm)] px-4 py-3 text-sm font-semibold text-red-600 dark:text-red-400 z-[200]" role="alert">
+          {searchError}
+        </div>
+      )}
+      {open && !searchError && results.length === 0 && !loading && query.trim() && (
         <div className="absolute top-[calc(100%+4px)] left-0 right-0 bg-[var(--card)] border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-3 text-sm text-[var(--text-muted)] z-[200]">
           No students found
         </div>

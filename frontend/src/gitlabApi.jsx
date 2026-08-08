@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { setAccessToken, getAccessToken } from './api';
+import { setAccessToken, getAccessToken, clearAccessToken } from './api';
 const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:8000') + '/api/gitlab';
 const ROOT_API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
@@ -42,6 +42,7 @@ api.interceptors.response.use(
       await refreshPromise;
       return api(original);
     } catch (refreshError) {
+      clearAccessToken();
       refreshError.isSessionExpired = true;
       return Promise.reject(refreshError);
     }
